@@ -1,0 +1,12 @@
+{
+  "git_closure": {
+    "dirty_paths": [],
+    "integration_status": "mainline",
+    "result_commit": "a1b2c3d4",
+    "result_kind": "result_commit"
+  },
+  "task": {
+    "status": "IN_PROGRESS",
+    "task_id": "task:demo"
+  }
+}

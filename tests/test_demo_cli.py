@@ -27,7 +27,14 @@ class DemoCliTests(unittest.TestCase):
         self.assertEqual("SAFE", payload["status"])
         self.assertEqual("synthetic", payload["data_source"])
         self.assertEqual(
-            ["asset_freeze", "candidate_promotion", "domain_route", "truth_compile"],
+            [
+                "asset_freeze",
+                "candidate_promotion",
+                "domain_route",
+                "git_closure",
+                "truth_compile",
+                "workflow_transition",
+            ],
             payload["checks"],
         )
 
