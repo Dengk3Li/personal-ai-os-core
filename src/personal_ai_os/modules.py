@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from pathlib import Path
 from typing import Any
+
+
+MODULE_CONTRACT_VERSION = "personal-ai-os.module/v1"
 
 
 _MODULES = [
     {
+        "contract_version": MODULE_CONTRACT_VERSION,
         "module_id": "workspace-intake",
         "name": "本地工作区摄取",
         "layer": "input",
@@ -13,8 +19,11 @@ _MODULES = [
         "provides": ["workspace.snapshot"],
         "requires": [],
         "availability": "READY",
+        "optional": False,
+        "entrypoint": "builtin://workspace-intake",
     },
     {
+        "contract_version": MODULE_CONTRACT_VERSION,
         "module_id": "cognitive-intake",
         "name": "认知摄取",
         "layer": "understanding",
@@ -22,8 +31,11 @@ _MODULES = [
         "provides": ["knowledge.candidates"],
         "requires": ["workspace.snapshot"],
         "availability": "READY",
+        "optional": True,
+        "entrypoint": "builtin://cognitive-intake",
     },
     {
+        "contract_version": MODULE_CONTRACT_VERSION,
         "module_id": "workflow-core",
         "name": "长期工作内核",
         "layer": "orchestration",
@@ -31,8 +43,11 @@ _MODULES = [
         "provides": ["work.plan", "work.task"],
         "requires": ["workspace.snapshot"],
         "availability": "READY",
+        "optional": False,
+        "entrypoint": "builtin://workflow-core",
     },
     {
+        "contract_version": MODULE_CONTRACT_VERSION,
         "module_id": "dynamic-router",
         "name": "动态路由",
         "layer": "orchestration",
@@ -40,8 +55,11 @@ _MODULES = [
         "provides": ["execution.route"],
         "requires": ["work.task"],
         "availability": "READY",
+        "optional": True,
+        "entrypoint": "builtin://dynamic-router",
     },
     {
+        "contract_version": MODULE_CONTRACT_VERSION,
         "module_id": "execution-adapter",
         "name": "执行适配器",
         "layer": "execution",
@@ -49,8 +67,11 @@ _MODULES = [
         "provides": ["execution.result"],
         "requires": ["execution.route"],
         "availability": "READY",
+        "optional": True,
+        "entrypoint": "builtin://execution-adapter",
     },
     {
+        "contract_version": MODULE_CONTRACT_VERSION,
         "module_id": "continuity",
         "name": "连续性与接续",
         "layer": "memory",
@@ -58,8 +79,11 @@ _MODULES = [
         "provides": ["workspace.resume"],
         "requires": ["work.task", "execution.result"],
         "availability": "READY",
+        "optional": True,
+        "entrypoint": "builtin://continuity",
     },
     {
+        "contract_version": MODULE_CONTRACT_VERSION,
         "module_id": "token-manager",
         "name": "Token Manager",
         "layer": "observability",
@@ -67,14 +91,67 @@ _MODULES = [
         "provides": ["token.budget"],
         "requires": ["work.task"],
         "availability": "PLANNED",
+        "optional": True,
+        "entrypoint": "builtin://token-manager",
     },
 ]
+
+
+_REQUIRED_MANIFEST_FIELDS = {
+    "contract_version",
+    "module_id",
+    "name",
+    "layer",
+    "provides",
+    "requires",
+    "availability",
+    "optional",
+    "entrypoint",
+}
 
 
 def module_catalog() -> list[dict[str, Any]]:
     """Return the reusable built-in module manifests."""
 
     return deepcopy(_MODULES)
+
+
+def discover_module_manifests(directory: str | Path) -> dict[str, list[dict[str, Any]]]:
+    """Read direct-child module manifests without importing or executing plug-in code."""
+
+    root = Path(directory)
+    modules: list[dict[str, Any]] = []
+    rejected: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    if not root.is_dir():
+        return {"modules": modules, "rejected": rejected}
+
+    for manifest_path in sorted(root.glob("*/module.json")):
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            rejected.append({"path": str(manifest_path), "reason": "INVALID_JSON"})
+            continue
+        if not isinstance(manifest, dict):
+            rejected.append({"path": str(manifest_path), "reason": "INVALID_MANIFEST"})
+            continue
+        if _REQUIRED_MANIFEST_FIELDS - manifest.keys():
+            rejected.append({"path": str(manifest_path), "reason": "MISSING_FIELDS"})
+            continue
+        if manifest["contract_version"] != MODULE_CONTRACT_VERSION:
+            rejected.append({"path": str(manifest_path), "reason": "UNSUPPORTED_CONTRACT"})
+            continue
+        if not isinstance(manifest["provides"], list) or not isinstance(manifest["requires"], list):
+            rejected.append({"path": str(manifest_path), "reason": "INVALID_CAPABILITIES"})
+            continue
+        module_id = manifest["module_id"]
+        if not isinstance(module_id, str) or not module_id or module_id in seen_ids:
+            rejected.append({"path": str(manifest_path), "reason": "INVALID_MODULE_ID"})
+            continue
+        seen_ids.add(module_id)
+        modules.append(deepcopy(manifest))
+
+    return {"modules": modules, "rejected": rejected}
 
 
 def build_module_graph(modules: list[dict[str, Any]]) -> dict[str, Any]:
@@ -109,11 +186,24 @@ def build_module_graph(modules: list[dict[str, Any]]) -> dict[str, Any]:
             else:
                 unresolved.append({"module_id": module_id, "capability": capability})
 
-    blocked = bool(unresolved or duplicate_providers)
+    module_ids = {module.get("module_id", "") for module in nodes}
+    direct_module_references = sum(
+        requirement in module_ids
+        for module in nodes
+        for requirement in module.get("requires", [])
+    )
+    capability_edges = sum(len(module.get("requires", [])) for module in nodes) - len(unresolved)
+    blocked = bool(unresolved or duplicate_providers or direct_module_references)
     return {
         "status": "BLOCKED" if blocked else "READY",
         "nodes": nodes,
         "edges": edges,
         "unresolved": unresolved,
         "duplicate_providers": duplicate_providers,
+        "interfaces": providers,
+        "coupling": {
+            "capability_edges": capability_edges,
+            "direct_module_references": direct_module_references,
+            "optional_modules": sum(bool(module.get("optional")) for module in nodes),
+        },
     }

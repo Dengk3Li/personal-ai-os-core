@@ -71,3 +71,57 @@ test("task cards expose the human action without injecting task text as markup",
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes('data-task-id="unsafe-id"'));
 });
+
+test("the public v0.6 showcase contains workflow structure but no private task copy", () => {
+  assert.equal(typeof workbench.createShowcaseState, "function");
+  const state = workbench.createShowcaseState();
+
+  assert.equal(state.privacy.taskDetails, "ANONYMIZED");
+  assert.ok(state.tasks.length >= 18);
+  state.tasks.forEach((task) => {
+    assert.equal(Object.hasOwn(task, "title"), false);
+    assert.equal(Object.hasOwn(task, "acceptance"), false);
+    assert.match(task.public_label, /^任务 [A-Z]-\d{2}$/);
+    assert.ok(task.stage);
+  });
+});
+
+test("workflow summary makes allocation, active runs, and repeated work explicit", () => {
+  assert.equal(typeof workbench.workflowSummary, "function");
+  const summary = workbench.workflowSummary(workbench.createShowcaseState());
+
+  assert.deepEqual(
+    {
+      total: summary.total,
+      assigned: summary.assigned,
+      running: summary.running,
+      review: summary.review,
+      completed: summary.completed,
+      repeatedRuns: summary.repeatedRuns,
+    },
+    { total: 18, assigned: 9, running: 3, review: 2, completed: 4, repeatedRuns: 4 },
+  );
+  assert.equal(summary.allocation.reduce((total, item) => total + item.tasks, 0), 9);
+});
+
+test("workflow projection preserves loops, parallel branches, and run receipts", () => {
+  assert.equal(typeof workbench.workflowProjection, "function");
+  const projection = workbench.workflowProjection(workbench.createShowcaseState(), "loop-validation");
+
+  assert.equal(projection.workflow_id, "loop-validation");
+  assert.deepEqual(projection.groups.map((group) => group.iteration), [1, 2, 3]);
+  assert.ok(projection.groups[1].nodes.some((node) => node.parallel_group === "branch-alpha"));
+  const repeated = projection.groups[1].nodes.find((node) => node.attempts === 2);
+  assert.ok(repeated.events.some((event) => event.kind === "heartbeat"));
+});
+
+test("every running showcase task has closed prerequisites", () => {
+  const state = workbench.createShowcaseState();
+  const closed = new Set(["CLOSED", "ARCHIVED", "COMPLETED"]);
+
+  state.tasks
+    .filter((task) => state.taskStates[task.task_id] === "IN_PROGRESS")
+    .forEach((task) => task.depends_on.forEach((dependency) => {
+      assert.ok(closed.has(state.taskStates[dependency]), `${task.task_id} cannot run before ${dependency} closes`);
+    }));
+});

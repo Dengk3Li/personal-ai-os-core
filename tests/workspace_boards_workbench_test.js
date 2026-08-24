@@ -21,6 +21,38 @@ test("the module map is composable and marks planned capabilities honestly", () 
   assert.equal(map.unresolved.length, 0);
 });
 
+test("module edges are resolved from versioned capability manifests", () => {
+  assert.equal(typeof workbench.buildModuleGraph, "function");
+  const graph = workbench.buildModuleGraph([
+    {
+      contract_version: "personal-ai-os.module/v1",
+      module_id: "source",
+      name: "Source",
+      layer: "input",
+      provides: ["task.input"],
+      requires: [],
+      availability: "READY",
+      optional: false,
+      entrypoint: "source:activate",
+    },
+    {
+      contract_version: "personal-ai-os.module/v1",
+      module_id: "viewer",
+      name: "Viewer",
+      layer: "output",
+      provides: ["task.view"],
+      requires: ["task.input"],
+      availability: "READY",
+      optional: true,
+      entrypoint: "viewer:activate",
+    },
+  ]);
+
+  assert.deepEqual(graph.edges, [["source", "viewer"]]);
+  assert.equal(graph.interfaces["task.input"], "source");
+  assert.equal(graph.coupling.directModuleReferences, 0);
+});
+
 test("workbench task states use the public operation contract", () => {
   const view = workbench.workspaceView(workbench.createDemoState());
   assert.deepEqual(Object.keys(view.work.lanes), [

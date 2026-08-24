@@ -5,25 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · Long Work</title>
-  <meta name="description" content="组合 AI 模块，把复杂工作区拆成可持续推进的业务线与短任务。">
+  <meta name="description" content="把长期目标拆成可分配、可重复运行、可由人类裁决的短任务。">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!--
-    THESIS: Long Work 是可组合的个人 AI 操作层，不是并列看板集合。
-    OWN-WORLD: 延续 Cognitive Intake 的纸面底色、墨绿结构、荧光信号与紧凑信息卡。
-    STORY: 用户先理解模块，再查看多业务线进度，只在必要时进入人工裁决。
-    FIRST VIEWPORT: 三入口导航、长期目标与业务线摘要直接建立系统结构。
-    FORM: established-world extension; dense operating workspace.
-  -->
   <header class="topbar">
     <a class="brand-block" href="https://github.com/Dengk3Li/personal-ai-os-core" aria-label="Personal AI OS GitHub 仓库">
-      <span class="eyebrow">PERSONAL AI OS · LOCAL FIRST</span>
       <h1>Long Work</h1>
-      <p>把长期目标变成可以持续推进的操作链。</p>
+      <p>Personal AI OS · Local first</p>
     </a>
     <div class="top-actions">
-      <button class="ghost-button" data-board="global" type="button">查看模块地图</button>
+      <button class="ghost-button" data-board="global" type="button">模块地图</button>
       <button class="primary-button" id="reset-demo" type="button">重置演示</button>
     </div>
   </header>
@@ -31,88 +23,89 @@
   <main>
     <section class="overview" aria-labelledby="overview-title">
       <div class="overview-copy">
-        <span class="section-kicker">LONG-RUNNING WORK</span>
-        <h2 id="overview-title">从工作区到<br>可执行系统</h2>
+        <h2 id="overview-title">让长任务真正<br>持续运转</h2>
         <p id="goal"></p>
+        <span class="privacy-marker">结构演示 · 任务内容已匿名</span>
       </div>
-      <div class="metric-grid" aria-label="长期任务摘要">
-        <article class="metric"><strong id="metric-lines">0</strong><span>业务线</span></article>
-        <article class="metric"><strong id="metric-active">0</strong><span>推进中</span></article>
-        <article class="metric"><strong id="metric-decisions">0</strong><span>待我决定</span></article>
-        <article class="metric"><strong id="metric-done">0</strong><span>已收口</span></article>
-      </div>
+      <dl class="run-summary" aria-label="长期任务运行摘要">
+        <div><dt>任务总量</dt><dd id="metric-total">0</dd></div>
+        <div><dt>已分配</dt><dd id="metric-assigned">0</dd></div>
+        <div><dt>运行中</dt><dd id="metric-running">0</dd></div>
+        <div><dt>重复运行</dt><dd id="metric-repeated">0</dd></div>
+      </dl>
     </section>
 
     <section class="workspace">
       <aside class="workspace-rail" aria-label="工作空间导航">
         <fieldset>
-          <legend>三个稳定入口</legend>
+          <legend>工作空间</legend>
           <nav class="board-switcher" id="board-tabs" role="tablist" aria-label="Long Work 主导航">
             <button id="tab-global" data-board="global" role="tab" aria-controls="panel-global" aria-selected="false" tabindex="-1" type="button">
-              <b>模块地图</b><span>组合能力与依赖</span>
+              <b>模块地图</b><span>能力接口与可替换插槽</span>
             </button>
             <button id="tab-work" data-board="work" class="active" role="tab" aria-controls="panel-work" aria-selected="true" tabindex="0" type="button">
-              <b>工作进度</b><span>业务线、阶段与任务</span>
+              <b>工作进度</b><span>分配、运行与重复轮次</span>
             </button>
             <button id="tab-decision" data-board="decision" role="tab" aria-controls="panel-decision" aria-selected="false" tabindex="-1" type="button">
-              <b>待我决定 <em data-board-count></em></b><span>计划、阻塞与 Human Gate</span>
+              <b>待我决定 <em data-board-count></em></b><span>阻塞与人工裁决</span>
             </button>
           </nav>
         </fieldset>
 
         <section class="plan-summary" aria-label="总体规划">
-          <span class="rail-label">总体规划</span>
-          <strong id="current-phase">工作地图待确认</strong>
+          <span class="rail-label">当前阶段</span>
+          <strong id="current-phase">运行与验收</strong>
           <div class="rail-heading"><span id="progress-copy">0 / 0 项已收口</span><b>整体进度</b></div>
           <div class="progress-track"><span id="progress-bar"></span></div>
         </section>
 
         <div class="privacy-note">
-          <strong>合成演示</strong>
-          <span>页面不会连接私人工作区。真实扫描请使用本地 CLI，默认只读。</span>
+          <strong>公开演示数据</strong>
+          <span>只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。</span>
         </div>
         <div class="cli-mini"><span>操作入口</span><code>personal-ai-os plan .</code></div>
       </aside>
 
-      <section class="feed" aria-live="polite">
+      <section class="feed">
+        <p class="sr-only" id="status-message" aria-live="polite"></p>
+
         <section class="board-panel" id="panel-global" data-panel="global" role="tabpanel" aria-labelledby="tab-global" hidden>
           <div class="feed-heading">
-            <div><span class="section-kicker">COMPOSABLE SYSTEM</span><h2>模块地图</h2></div>
-            <span class="count-chip">只读结构视图</span>
+            <div><h2>模块地图</h2><p>模块通过版本化 capability 接口装配，不直接引用彼此。</p></div>
+            <span class="count-chip">manifest 驱动</span>
           </div>
 
           <section class="first-run-card">
             <div>
-              <span>首次运行</span>
-              <h3>读取本地工作区，自动搭好第一版工作系统</h3>
+              <h3>读取本地工作区，生成第一版操作结构</h3>
               <p id="scan-status">首次运行先读取本地结构，再生成可编辑的模块图与工作计划。</p>
             </div>
             <button class="scan-button" type="button" data-run-scan>运行合成扫描</button>
           </section>
 
           <div class="template-strip" aria-label="模块组合模板">
-            <span>开箱模板</span>
-            <button type="button" data-template-line="research">科研长期任务</button>
-            <button type="button" data-template-line="writing">长文写作工作室</button>
-            <button type="button" data-template-line="product">产品构建流水线</button>
+            <span>工作流模板</span>
+            <button type="button" data-template-line="loop-validation">循环验证</button>
+            <button type="button" data-template-line="parallel-production">并行生产</button>
+            <button type="button" data-template-line="system-build">系统构建</button>
           </div>
 
           <div class="map-frame">
-            <div class="map-axis"><span>输入</span><span>理解</span><span>编排</span><span>执行</span><span>记忆与观测</span></div>
+            <div class="map-heading"><strong>核心与可选模块</strong><span>新增 module.json 后即可参与能力解析</span></div>
             <div class="module-grid" id="module-grid"></div>
-            <ol class="dependency-edge-list" id="dependency-edge-list" aria-label="模块依赖关系"></ol>
+            <ol class="dependency-edge-list" id="dependency-edge-list" aria-label="模块能力连接"></ol>
           </div>
 
           <section class="module-detail" aria-label="模块详情">
-            <div><span>当前积木</span><h3 id="module-detail-name"></h3><p id="module-detail-summary"></p></div>
+            <div><span>当前模块</span><h3 id="module-detail-name"></h3><p id="module-detail-summary"></p></div>
             <dl>
-              <div><dt>输出能力</dt><dd id="module-provides"></dd></div>
-              <div><dt>前置依赖</dt><dd id="module-requires"></dd></div>
+              <div><dt>提供的 capability</dt><dd id="module-provides"></dd></div>
+              <div><dt>需要的 capability</dt><dd id="module-requires"></dd></div>
             </dl>
           </section>
 
           <section class="operation-contract">
-            <div class="contract-copy"><span class="section-kicker">OS OPERATION CONTRACT</span><h3>下一位 AI 接手时，只走这一条操作链</h3><p>确认之前保持只读；执行只发生在已确认的任务边界内。</p></div>
+            <div class="contract-copy"><h3>所有执行者遵守同一条操作链</h3><p>确认之前保持只读；执行只发生在已确认的任务边界内。</p></div>
             <ol class="operation-rail">
               <li><b>01</b><span>INSPECT</span></li><li><b>02</b><span>MAP</span></li><li><b>03</b><span>PLAN</span></li><li class="human"><b>04</b><span>CONFIRM</span></li><li><b>05</b><span>ROUTE</span></li><li><b>06</b><span>EXECUTE</span></li><li><b>07</b><span>REVIEW</span></li><li><b>08</b><span>ARCHIVE</span></li>
             </ol>
@@ -125,40 +118,49 @@
 
         <section class="board-panel" id="panel-work" data-panel="work" role="tabpanel" aria-labelledby="tab-work">
           <div class="feed-heading">
-            <div><span class="section-kicker">PARALLEL WORK LINES</span><h2>工作进度</h2></div>
-            <span class="count-chip">一个状态源 · 多种业务视图</span>
+            <div><h2>工作进度</h2><p>选择一个工作流，查看任务如何分配、并行和重复执行。</p></div>
+            <span class="count-chip">任务内容已匿名</span>
           </div>
 
-          <form class="task-composer" id="task-prompt-form">
-            <label for="task-prompt"><span>直接告诉系统你想完成什么</span><small>自动判断业务线、任务类型和模型路由</small></label>
-            <div><input id="task-prompt" type="text" autocomplete="off" placeholder="例如：整理行业资料并写一份长文初稿"><button type="submit">生成任务</button></div>
-          </form>
-          <div id="proposal-zone"></div>
+          <nav class="line-tabs" id="line-tabs" aria-label="工作流"></nav>
 
-          <nav class="line-tabs" id="line-tabs" aria-label="业务线"></nav>
-
-          <section class="line-workspace">
-            <header class="line-heading">
-              <div><span id="active-line-caption"></span><h3 id="active-line-name"></h3></div>
-              <strong id="line-progress">0%</strong>
-            </header>
-            <div id="stage-rail"></div>
-            <aside class="open-decision-note" id="research-open-note">
-              <b>研究脉络暂不定义</b><span>科研线先使用通用阶段、任务和裁决机制；专用研究模型后续再决定。</span>
-            </aside>
-            <div class="task-table-head"><span>状态</span><span>短任务与验收条件</span><span>执行安排</span><span>下一动作</span></div>
-            <div class="item-list" id="work-task-list"></div>
+          <section class="execution-strip" aria-label="当前工作流运行摘要">
+            <div class="execution-copy"><strong id="active-line-name"></strong><span id="active-line-caption"></span></div>
+            <div class="execution-values">
+              <span><b id="workflow-total">0</b> 项任务</span>
+              <span><b id="workflow-assigned">0</b> 已分配</span>
+              <span><b id="workflow-running">0</b> 运行中</span>
+              <span><b id="workflow-repeated">0</b> 次重复</span>
+            </div>
+            <div class="execution-progress"><span id="workflow-progress-bar"></span></div>
           </section>
+
+          <div class="workflow-reader">
+            <section class="workflow-canvas" aria-label="非线性工作流">
+              <div class="canvas-heading"><strong>运行结构</strong><span id="line-progress">0%</span></div>
+              <div id="workflow-canvas"></div>
+            </section>
+            <aside class="run-detail" id="run-detail" aria-label="任务运行轨迹"></aside>
+          </div>
+
+          <details class="task-create-drawer">
+            <summary>创建新任务</summary>
+            <form class="task-composer" id="task-prompt-form">
+              <label for="task-prompt"><span>描述你想完成的事情</span><small>系统生成任务候选，不会立即执行。</small></label>
+              <div><input id="task-prompt" type="text" autocomplete="off" placeholder="输入一个目标或待处理事项"><button type="submit">生成候选</button></div>
+            </form>
+            <div id="proposal-zone"></div>
+          </details>
         </section>
 
         <section class="board-panel" id="panel-decision" data-panel="decision" role="tabpanel" aria-labelledby="tab-decision" hidden>
           <div class="feed-heading">
-            <div><span class="section-kicker">HUMAN DECISIONS</span><h2>待我决定</h2></div>
+            <div><h2>待我决定</h2><p>计划确认、阻塞处理和 Human Gate 统一进入这里。</p></div>
             <span class="count-chip" id="decision-visible-count"></span>
           </div>
           <div class="decision-intro">
             <strong>系统只在真正需要判断时停下来</strong>
-            <span>计划确认、阻塞处理和 Human Gate 统一进入这里，不散落在旧对话中。</span>
+            <span>裁决完成后，相关任务从当前状态继续运行。</span>
           </div>
           <div class="item-list" id="decision-list"></div>
         </section>
@@ -166,7 +168,7 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · Synthetic Long Work demo · v0.5.0</footer>
+  <footer>Personal AI OS · Synthetic workflow showcase · v0.6.0</footer>
   <script src="app.js"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>

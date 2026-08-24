@@ -9,7 +9,7 @@ from .dispatching import assign_task, select_execution_route
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
 from .intake import build_candidate_plan, inspect_workspace
-from .modules import build_module_graph, module_catalog
+from .modules import build_module_graph, discover_module_manifests, module_catalog
 from .operations import operation_spec
 from .planning import project_plan, ready_tasks, validate_plan
 from .promotion import promote_candidate
@@ -178,7 +178,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="personal-ai-os")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("demo", help="run the synthetic safety demo")
-    subparsers.add_parser("modules", help="print the composable module graph")
+    modules_parser = subparsers.add_parser(
+        "modules", help="print the composable module graph"
+    )
+    modules_parser.add_argument(
+        "--directory", help="discover direct-child module.json manifests"
+    )
     subparsers.add_parser("spec", help="print the operating protocol and task states")
     inspect_parser = subparsers.add_parser(
         "inspect", help="inspect a local workspace without writing to it"
@@ -192,7 +197,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "demo":
         payload = demo_payload()
     elif args.command == "modules":
-        payload = build_module_graph(module_catalog())
+        discovered = (
+            discover_module_manifests(args.directory)
+            if args.directory
+            else {"modules": [], "rejected": []}
+        )
+        payload = build_module_graph(module_catalog() + discovered["modules"])
+        payload["manifest_rejections"] = discovered["rejected"]
     elif args.command == "spec":
         payload = operation_spec()
     elif args.command == "inspect":

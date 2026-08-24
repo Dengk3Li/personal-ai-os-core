@@ -1,67 +1,88 @@
 # Personal AI OS
 
-An operating layer for long-running AI work: compose capabilities, turn messy workspaces into parallel work lines, and keep people in control of consequential decisions.
+Personal AI OS is a local-first operating layer for long-running AI work. It breaks a long goal into short executable tasks, assigns each task to a compatible model or tool, preserves shared state, and brings consequential decisions back to a person.
 
-Most AI conversations are good at finishing one bounded task. Long work breaks that model. A new conversation must reconstruct and verify earlier context, plans do not advance themselves, and progress becomes scattered across chats. Personal AI OS turns a long goal into short executable tasks, preserves their shared state, and gives people a clear place to inspect progress and intervene.
+AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md)
+[中文说明](README.zh-CN.md) · [v0.6 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.6.md)
 
-[v0.6 development taskbook (Chinese)](docs/DEVELOPMENT_TASKBOOK_V0.6.md)
+![Personal AI OS workflow reader](docs/assets/workbench.jpg)
 
-![Personal AI OS three-entry Long Work workspace](docs/assets/workbench.jpg)
+## v0.6 workflow showcase
 
-## What is different
+The public workbench uses an anonymous synthetic fixture. It keeps workflow structure, task counts, assignments, run attempts, and event traces while omitting task titles, acceptance copy, source material, and private paths.
 
-Personal AI OS is not another project-management dashboard. It defines a small operating system for AI work:
+The default fixture contains 18 tasks across three workflow shapes:
 
-- a **Module Map** shows reusable capabilities and their dependencies as composable building blocks;
-- **Work Progress** holds the overall plan and parallel research, product, writing, or custom work lines;
-- **Decisions** collects plan confirmation, blocked work, and Human Gates in one place;
-- a shared operation contract tells the next AI how to inspect, map, plan, route, execute, review, and archive work;
-- a local CLI exposes the same contract for scripts and advanced users.
+- an iterative validation flow with three loops and parallel branches;
+- a parallel production flow with fan-out and merge stages;
+- a modular system flow with interchangeable capability providers.
 
-Research is a work line inside Work Progress, not a second source of task truth. Its future research-trace model is deliberately left open until the product requirements are decided.
-
-## The operating loop
-
-```mermaid
-flowchart LR
-    I[Inspect workspace] --> M[Map modules]
-    M --> P[Propose work lines and tasks]
-    P --> H[Human confirms]
-    H --> R[Route and assign]
-    R --> E[Execute short task]
-    E --> V[Review result]
-    V --> D{Needs judgment?}
-    D -->|yes| G[Decision queue]
-    G --> R
-    D -->|no| A[Archive and resume]
-    A --> R
-```
-
-The invariant is simple: inspection and planning are read-only candidates. Workspace changes begin only after confirmation and stay inside the accepted task boundary.
-
-## Three-entry workspace
-
-Run the synthetic interactive demo:
+Nine tasks are assigned, three are running, two await review, four are closed, and four repeated runs remain visible. Select any node to inspect its model, execution adapter, attempt number, heartbeat, and artifact events.
 
 ```bash
 make workbench
 ```
 
-Open [http://127.0.0.1:8787](http://127.0.0.1:8787).
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787). The demo stays in browser memory and does not read a local workspace.
+
+## Operating model
+
+```mermaid
+flowchart LR
+    I[Inspect workspace] --> M[Map capabilities]
+    M --> P[Propose tasks]
+    P --> H[Human confirms]
+    H --> R[Route and assign]
+    R --> E[Execute short task]
+    E --> V[Review result]
+    V --> D{Decision needed?}
+    D -->|yes| G[Decision queue]
+    G --> R
+    D -->|no| A[Archive state]
+    A --> R
+```
+
+Inspection and planning produce read-only candidates. Workspace changes begin after confirmation and remain inside the accepted task boundary. A task is running only when its executor has returned a run identity and events; changing a label in the interface is not enough.
+
+## Three stable entrances
 
 | Entrance | Responsibility |
 |---|---|
-| Module Map | Shows modules, layers, provided capabilities, required capabilities, composition templates, and honest availability. Token Manager is marked as planned. |
-| Work Progress | Shows overall phase and progress, parallel business lines, line-specific layouts, universal task states, routing, assignment, and acceptance actions. |
-| Decisions | Centralizes plan approval, blocked work, and Human Gates so judgment does not disappear inside old conversations. |
+| Module Map | Shows core and optional modules, their capability interfaces, availability, and replaceable slots. |
+| Work Progress | Shows allocation totals, loops, parallel branches, repeated attempts, and the selected node's run trace. |
+| Decisions | Collects plan approval, blocked work, and Human Gates in one place. |
 
-The demo uses synthetic data and does not read a private workspace.
+This is an operating interface, not a management dashboard. The product proves execution through state transitions, run events, artifacts, and human acceptance. Feature count and presentation do not substitute for a working loop.
 
-## First-run workspace intake
+## Plug-in module contract
 
-The local intake is designed for a new or messy repository. It performs a bounded read-only scan, detects project and Git signals, suggests modules and work lines, and returns a candidate plan for human confirmation. A dirty repository gets an explicit preflight Human Gate for preserving and assigning existing changes.
+Modules connect through named capabilities instead of importing one another. A module declares a versioned manifest:
+
+```json
+{
+  "contract_version": "personal-ai-os.module/v1",
+  "module_id": "local-exporter",
+  "name": "Local Exporter",
+  "layer": "output",
+  "summary": "Exports an artifact reference.",
+  "provides": ["artifact.export"],
+  "requires": ["execution.result"],
+  "availability": "READY",
+  "optional": true,
+  "entrypoint": "local_exporter:activate"
+}
+```
+
+`discover_module_manifests()` reads direct-child `module.json` files without importing plug-in code. `build_module_graph()` resolves capability providers, reports missing or duplicate interfaces, and rejects direct module references. Adding or removing a valid manifest does not require a layout change in the workbench.
+
+```bash
+personal-ai-os modules --directory examples/modules
+```
+
+Built-in modules cover bounded workspace intake, Cognitive Intake, workflow state, dynamic routing, execution adaptation, continuity, and a planned Token Manager slot.
+
+## Local CLI
 
 ```bash
 personal-ai-os inspect ./workspace
@@ -70,88 +91,45 @@ personal-ai-os plan ./workspace
 personal-ai-os spec
 ```
 
-All commands emit machine-readable JSON. For example, `plan` returns candidate business lines, initial tasks, the resolved module graph, and the complete operation chain. It does not write into the inspected workspace.
+The commands emit machine-readable JSON. `inspect` and `plan` remain read-only; a dirty Git workspace becomes an explicit human boundary instead of being silently absorbed.
 
-## Composable modules
+## Kernel capabilities
 
-Every module declares a small manifest:
-
-```json
-{
-  "module_id": "dynamic-router",
-  "layer": "orchestration",
-  "provides": ["execution.route"],
-  "requires": ["work.task"],
-  "availability": "READY"
-}
-```
-
-The graph resolver connects requirements to providers and blocks a composition with unresolved or duplicate capabilities. The built-in catalog currently includes:
-
-- local workspace intake;
-- Cognitive Intake;
-- long-work workflow core;
-- dynamic routing;
-- execution adapter;
-- continuity and cross-conversation resume;
-- Token Manager as a planned extension.
-
-## Parallel work lines and task creation
-
-The same task state can be projected differently for different work:
-
-- research can use a left-to-right stage line and an unassigned task table;
-- product work can use milestones;
-- writing can use a material-to-draft pipeline.
-
-The workbench also accepts a plain-language request such as “organize industry material and draft a long report.” It proposes a task, business line, execution tier, and model route before adding the task to the unassigned queue. Manual creation and future dynamic dispatch use the same task contract.
-
-Universal user-facing states are: unassigned, in progress, review, blocked, closed, archived, and completed. The existing kernel keeps its validated execution-state compatibility while the operation spec exposes these product-level meanings.
-
-## Current kernel
-
-| Capability | Current behavior |
+| Capability | Behavior |
 |---|---|
 | Long-task planning | Validates hierarchy, dependencies, acceptance conditions, missing references, and cycles. |
-| Human plan approval | AI plans remain candidates until a person accepts them. |
+| Human confirmation | Keeps generated plans as candidates until a person accepts them. |
 | Dependency scheduling | Releases only tasks whose prerequisites and Human Gates are satisfied. |
-| Dynamic routing | Selects the smallest available tier that meets complexity, capability, and context requirements. |
-| Task assignment | Chooses a compatible executor with capacity. |
-| Operation protocol | Defines inspect → map → plan → confirm → route → execute → review → archive. |
-| Module composition | Resolves provided and required capabilities and fails closed on broken graphs. |
-| Read-only intake | Scans local structure and proposes a work map without writing to the target. |
-| Long-run continuity | Truth compilation, continuity capsules, Git closure, and asset freeze support recovery and verification. |
+| Dynamic routing | Chooses the smallest available tier that meets capability and context requirements. |
+| Task assignment | Selects a compatible executor with capacity. |
+| Module composition | Resolves versioned capability manifests and fails closed on broken graphs. |
+| Read-only intake | Inspects local structure and proposes a work map without modifying the target. |
+| Continuity | Preserves enough state to resume and verify a later run. |
 
-## Run and test
+## Install and test
 
 Python 3.10 or newer is required. Workbench behavior tests use Node.js.
 
 ```bash
+python3 -m pip install --no-deps -e .
 make demo
 make test
-```
-
-Install the CLI and Python API:
-
-```bash
-python3 -m pip install --no-deps -e .
-personal-ai-os spec
 ```
 
 ## Repository map
 
 ```text
 src/personal_ai_os/   planning, routing, module, intake, operation, state, and recovery contracts
-workbench/            interactive synthetic Long Work workspace
-tests/                Python and browser-workbench behavior tests
-examples/             synthetic truth and task records
-.github/workflows/    Python 3.10–3.12 install and test matrix
-PRODUCT.md            durable product boundaries and open decisions
-docs/DEVELOPMENT_TASKBOOK_V0.6.md  real-runtime, nonlinear-workflow, pet, and adapter plan
+workbench/            interactive anonymous workflow showcase
+tests/                Python and workbench behavior tests
+examples/             synthetic state records and an example module manifest
+.github/workflows/    Python 3.10-3.12 install and test matrix
+PRODUCT.md            durable product boundaries
+docs/DEVELOPMENT_TASKBOOK_V0.6.md  runtime, workflow, pet, and adapter specification
 ```
 
-## Publication boundary
+## Public boundary and license
 
-This repository contains the reusable product skeleton and synthetic demonstrations. Private memory, business material, research results, personal paths, run receipts, model accounts, and local adapters stay outside the repository.
+This repository contains a reusable product skeleton and synthetic demonstrations. Private memory, source material, personal paths, run receipts, model accounts, credentials, and local adapters stay outside the repository.
 
-Version `0.5.0` is a public source preview. The next implementation scope is tracked in the [v0.6 development taskbook](docs/DEVELOPMENT_TASKBOOK_V0.6.md). No open-source license has been selected, so the repository does not grant permission to copy, modify, or redistribute the code beyond rights provided by law.
+No reuse license is currently granted. The proposed dual-license model is documented in [Licensing options (Chinese)](docs/LICENSING_OPTIONS.zh-CN.md): free personal and noncommercial use plus a separate paid commercial license.

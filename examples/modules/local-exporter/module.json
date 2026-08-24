@@ -1,0 +1,16 @@
+{
+  "contract_version": "personal-ai-os.module/v1",
+  "module_id": "local-exporter",
+  "name": "Local Exporter",
+  "layer": "output",
+  "summary": "Exports an artifact reference without coupling to the workflow core.",
+  "provides": [
+    "artifact.export"
+  ],
+  "requires": [
+    "execution.result"
+  ],
+  "availability": "READY",
+  "optional": true,
+  "entrypoint": "local_exporter:activate"
+}
