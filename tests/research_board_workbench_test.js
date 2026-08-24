@@ -11,7 +11,7 @@ test("research is a dynamic business line inside work progress", () => {
   assert.ok(!view.boards.some((board) => board.id === "research"));
   assert.deepEqual(view.work.lines.map((line) => line.line_id), ["research", "product", "writing"]);
   assert.equal(view.work.activeLine.line_id, "research");
-  assert.equal(view.work.activeLine.layout, "timeline");
+  assert.equal(view.work.activeLine.layout, "loop");
 });
 
 test("each business line can choose a layout without creating another state source", () => {
@@ -27,8 +27,9 @@ test("each business line can choose a layout without creating another state sour
   assert.equal(workbench.selectBusinessLine(state, "unknown").activeLineId, "writing");
 });
 
-test("research semantics remain explicitly undecided", () => {
+test("the research line declares the five-agent workflow boundary", () => {
   const research = workbench.workspaceView(workbench.createDemoState()).work.lines[0];
-  assert.equal(research.traceStatus, "OPEN_DECISION");
-  assert.match(research.note, /暂不定义/);
+  assert.equal(research.traceStatus, "PRESET_READY");
+  assert.match(research.note, /科学假设/);
+  assert.match(research.note, /反馈优化/);
 });

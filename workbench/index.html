@@ -75,9 +75,40 @@
             <span class="count-chip">manifest 驱动</span>
           </div>
 
-          <section class="first-run-card">
+          <div class="module-map-shell">
+            <section class="map-frame" aria-label="工作区全局模块拓扑">
+              <div class="map-heading">
+                <div><strong>工作区系统流</strong><span><b id="module-count">0</b> 个模块 · <b id="module-edge-count">0</b> 条连接 · <b id="module-unresolved-count">0</b> 个待接入</span></div>
+                <span>拖动模块可整理布局</span>
+              </div>
+              <div class="map-toolbar" aria-label="模块地图控制">
+                <button type="button" data-map-zoom="out">缩小</button>
+                <output id="map-zoom-value" aria-live="polite">100%</output>
+                <button type="button" data-map-zoom="in">放大</button>
+                <button type="button" data-map-fit>适应画布</button>
+                <button type="button" data-map-reset>重置布局</button>
+              </div>
+              <div class="map-viewport" id="module-map-viewport" tabindex="0" aria-label="可平移缩放的模块依赖地图">
+                <div class="module-scene" id="module-scene"></div>
+              </div>
+              <ol class="dependency-edge-list sr-only" id="dependency-edge-list" aria-label="模块能力连接"></ol>
+            </section>
+
+            <aside class="module-detail" id="module-detail" aria-label="模块详情">
+              <div class="module-detail-heading"><span>当前模块</span><h3 id="module-detail-name"></h3><p id="module-detail-summary"></p></div>
+              <dl>
+                <div><dt>上游模块</dt><dd id="module-upstream-list"></dd></div>
+                <div><dt>下游模块</dt><dd id="module-downstream-list"></dd></div>
+                <div><dt>提供的 capability</dt><dd id="module-provides"></dd></div>
+                <div><dt>需要的 capability</dt><dd id="module-requires"></dd></div>
+              </dl>
+              <button class="map-focus-button" type="button" data-map-focus-toggle>只看上下游</button>
+            </aside>
+          </div>
+
+          <section class="first-run-card compact">
             <div>
-              <h3>读取本地工作区，生成第一版操作结构</h3>
+              <h3>重新读取工作区结构</h3>
               <p id="scan-status">首次运行先读取本地结构，再生成可编辑的模块图与工作计划。</p>
             </div>
             <button class="scan-button" type="button" data-run-scan>运行合成扫描</button>
@@ -85,24 +116,10 @@
 
           <div class="template-strip" aria-label="模块组合模板">
             <span>工作流模板</span>
-            <button type="button" data-template-line="loop-validation">循环验证</button>
-            <button type="button" data-template-line="parallel-production">并行生产</button>
-            <button type="button" data-template-line="system-build">系统构建</button>
+            <button type="button" data-template-line="research">科研协作</button>
+            <button type="button" data-template-line="vc-meeting">VC 会议纪要</button>
+            <button type="button" data-template-line="vc-report">行业研究 / 投决</button>
           </div>
-
-          <div class="map-frame">
-            <div class="map-heading"><strong>核心与可选模块</strong><span>新增 module.json 后即可参与能力解析</span></div>
-            <div class="module-grid" id="module-grid"></div>
-            <ol class="dependency-edge-list" id="dependency-edge-list" aria-label="模块能力连接"></ol>
-          </div>
-
-          <section class="module-detail" aria-label="模块详情">
-            <div><span>当前模块</span><h3 id="module-detail-name"></h3><p id="module-detail-summary"></p></div>
-            <dl>
-              <div><dt>提供的 capability</dt><dd id="module-provides"></dd></div>
-              <div><dt>需要的 capability</dt><dd id="module-requires"></dd></div>
-            </dl>
-          </section>
 
           <section class="operation-contract">
             <div class="contract-copy"><h3>所有执行者遵守同一条操作链</h3><p>确认之前保持只读；执行只发生在已确认的任务边界内。</p></div>

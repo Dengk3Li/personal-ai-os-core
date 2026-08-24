@@ -6,19 +6,17 @@ AI chat works well when one conversation owns one bounded task. Longer work is d
 
 [中文说明](README.zh-CN.md) · [v0.6 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.6.md)
 
-![Personal AI OS workflow reader](docs/assets/workbench.jpg)
-
 ## v0.6 workflow showcase
 
 The public workbench uses an anonymous synthetic fixture. It keeps workflow structure, task counts, assignments, run attempts, and event traces while omitting task titles, acceptance copy, source material, and private paths.
 
 The default fixture contains 18 tasks across three workflow shapes:
 
-- an iterative validation flow with three loops and parallel branches;
-- a parallel production flow with fan-out and merge stages;
-- a modular system flow with interchangeable capability providers.
+- a scientific workflow coordinated by Hypothesis, Protocol Design, Autonomous Experiment, Data Analysis, and Feedback Optimization agents, with parallel experiment paths;
+- a VC meeting-notes workflow from recordings, decks, and project material through extraction, drafting, review, and delivery;
+- a VC industry-research / investment-report workflow from broad collection and a data pool through argument planning, chapter writing, layout, and illustration.
 
-Nine tasks are assigned, three are running, two await review, four are closed, and four repeated runs remain visible. Select any node to inspect its model, execution adapter, attempt number, heartbeat, and artifact events.
+Eleven tasks are assigned, three are running, two await review, six are closed, and four repeated runs remain visible. Select any node to inspect its agent, model, execution adapter, attempt number, heartbeat, and artifact events. Running nodes show a model-specific working pet.
 
 ```bash
 make workbench
@@ -49,7 +47,7 @@ Inspection and planning produce read-only candidates. Workspace changes begin af
 
 | Entrance | Responsibility |
 |---|---|
-| Module Map | Shows core and optional modules, their capability interfaces, availability, and replaceable slots. |
+| Module Map | Shows layers, real dependencies, upstream and downstream relationships, availability, and replaceable slots in a draggable, zoomable topology. |
 | Work Progress | Shows allocation totals, loops, parallel branches, repeated attempts, and the selected node's run trace. |
 | Decisions | Collects plan approval, blocked work, and Human Gates in one place. |
 
@@ -126,10 +124,11 @@ examples/             synthetic state records and an example module manifest
 .github/workflows/    Python 3.10-3.12 install and test matrix
 PRODUCT.md            durable product boundaries
 docs/DEVELOPMENT_TASKBOOK_V0.6.md  runtime, workflow, pet, and adapter specification
+docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 package acceptance boundary
 ```
 
 ## Public boundary and license
 
 This repository contains a reusable product skeleton and synthetic demonstrations. Private memory, source material, personal paths, run receipts, model accounts, credentials, and local adapters stay outside the repository.
 
-No reuse license is currently granted. The proposed dual-license model is documented in [Licensing options (Chinese)](docs/LICENSING_OPTIONS.zh-CN.md): free personal and noncommercial use plus a separate paid commercial license.
+The code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE). Personal and noncommercial use within that license is permitted with the required copyright notice. Commercial use requires a separate paid written license from Dengk3Li and attribution. No public commercial contact channel is provided at this time, so commercial rights are not granted unless a separate license has been executed. See [Commercial use](COMMERCIAL_USE.md).

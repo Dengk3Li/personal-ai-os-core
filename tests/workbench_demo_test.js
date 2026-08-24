@@ -99,20 +99,55 @@ test("workflow summary makes allocation, active runs, and repeated work explicit
       completed: summary.completed,
       repeatedRuns: summary.repeatedRuns,
     },
-    { total: 18, assigned: 9, running: 3, review: 2, completed: 4, repeatedRuns: 4 },
+    { total: 18, assigned: 11, running: 3, review: 2, completed: 6, repeatedRuns: 4 },
   );
-  assert.equal(summary.allocation.reduce((total, item) => total + item.tasks, 0), 9);
+  assert.equal(summary.allocation.reduce((total, item) => total + item.tasks, 0), 11);
 });
 
-test("workflow projection preserves loops, parallel branches, and run receipts", () => {
+test("the research preset uses five science agents and parallel experiment paths", () => {
   assert.equal(typeof workbench.workflowProjection, "function");
-  const projection = workbench.workflowProjection(workbench.createShowcaseState(), "loop-validation");
+  const projection = workbench.workflowProjection(workbench.createShowcaseState(), "research");
 
-  assert.equal(projection.workflow_id, "loop-validation");
-  assert.deepEqual(projection.groups.map((group) => group.iteration), [1, 2, 3]);
+  assert.equal(projection.workflow_id, "research");
+  assert.deepEqual(projection.groups.map((group) => group.iteration), [1, 2, 3, 4]);
   assert.ok(projection.groups[1].nodes.some((node) => node.parallel_group === "branch-alpha"));
+  assert.deepEqual(
+    new Set(projection.groups.flatMap((group) => group.nodes.map((node) => node.agent_role))),
+    new Set(["科学假设 Agent", "Protocol 设计 Agent", "自主实验执行 Agent", "数据分析 Agent", "反馈优化 Agent"]),
+  );
   const repeated = projection.groups[1].nodes.find((node) => node.attempts === 2);
   assert.ok(repeated.events.some((event) => event.kind === "heartbeat"));
+});
+
+test("showcase worklines are research and two reusable VC presets", () => {
+  const state = workbench.createShowcaseState();
+
+  assert.deepEqual(state.businessLines.map((line) => line.line_id), ["research", "vc-meeting", "vc-report"]);
+  assert.equal(state.businessLines[0].name, "科研线");
+  assert.equal(state.businessLines[1].name, "VC · 会议纪要");
+  assert.equal(state.businessLines[2].name, "VC · 行业研究 / 投决");
+});
+
+test("a user can create and enter a new browser-style workline", () => {
+  assert.equal(typeof workbench.createWorkline, "function");
+  const original = workbench.createShowcaseState();
+  const next = workbench.createWorkline(original, "新产品验证");
+
+  assert.equal(next.businessLines.at(-1).name, "新产品验证");
+  assert.equal(next.businessLines.at(-1).user_created, true);
+  assert.equal(next.activeLineId, next.businessLines.at(-1).line_id);
+  assert.equal(next.tasks.length, original.tasks.length);
+});
+
+test("running assignments resolve a model-specific pet without changing task truth", () => {
+  assert.equal(typeof workbench.petForTask, "function");
+  const pet = workbench.petForTask({
+    status: "IN_PROGRESS",
+    assignment: { model: "Reasoning model", executor: "Science adapter" },
+  });
+
+  assert.deepEqual(pet, { pet_id: "reasoning-owl", glyph: "🦉", label: "Reasoning model 工作宠物" });
+  assert.equal(workbench.petForTask({ status: "REVIEW", assignment: { model: "Reasoning model" } }), null);
 });
 
 test("every running showcase task has closed prerequisites", () => {
