@@ -1,42 +1,47 @@
 # Personal AI OS
 
-Turn long goals into executable short tasks, keep progress visible, and let people intervene where judgment matters.
+An operating layer for long-running AI work: compose capabilities, turn messy workspaces into parallel work lines, and keep people in control of consequential decisions.
 
-AI conversations handle local tasks well. Long work crosses many conversations, so each new conversation has to reconstruct and verify earlier context. Plan Mode can propose a plan, but the plan still needs an operating surface that schedules tasks, assigns execution, collects decisions, and advances the next step.
-
-Personal AI OS adds that human-interactive operating layer. The system proposes a task hierarchy and a person confirms it. Satisfied dependencies release tasks into dynamic routing and assignment. Human Gates hold decisions that need judgment. Once a person records the decision, execution continues from the current state.
+Most AI conversations are good at finishing one bounded task. Long work breaks that model. A new conversation must reconstruct and verify earlier context, plans do not advance themselves, and progress becomes scattered across chats. Personal AI OS turns a long goal into short executable tasks, preserves their shared state, and gives people a clear place to inspect progress and intervene.
 
 [中文说明](README.zh-CN.md)
 
-![Four-view workspace for long-running work](docs/assets/workbench.jpg)
+![Personal AI OS three-entry Long Work workspace](docs/assets/workbench.jpg)
 
-## Operating loop
+## What is different
+
+Personal AI OS is not another project-management dashboard. It defines a small operating system for AI work:
+
+- a **Module Map** shows reusable capabilities and their dependencies as composable building blocks;
+- **Work Progress** holds the overall plan and parallel research, product, writing, or custom work lines;
+- **Decisions** collects plan confirmation, blocked work, and Human Gates in one place;
+- a shared operation contract tells the next AI how to inspect, map, plan, route, execute, review, and archive work;
+- a local CLI exposes the same contract for scripts and advanced users.
+
+Research is a work line inside Work Progress, not a second source of task truth. Its future research-trace model is deliberately left open until the product requirements are decided.
+
+## The operating loop
 
 ```mermaid
 flowchart LR
-    G[Long goal] --> P[AI proposes task hierarchy]
-    P --> H[Human confirms plan]
-    H --> Q[Dependency queue]
-    Q --> R[Dynamic routing]
-    R --> A[Task assignment]
-    A --> E[Short task execution]
-    E --> V[Result review]
-    V --> D{Human judgment?}
-    D -->|yes| J[Human Gate]
-    J --> Q
-    D -->|no| Q
+    I[Inspect workspace] --> M[Map modules]
+    M --> P[Propose work lines and tasks]
+    P --> H[Human confirms]
+    H --> R[Route and assign]
+    R --> E[Execute short task]
+    E --> V[Review result]
+    V --> D{Needs judgment?}
+    D -->|yes| G[Decision queue]
+    G --> R
+    D -->|no| A[Archive and resume]
+    A --> R
 ```
 
-The loop provides four product behaviors:
+The invariant is simple: inspection and planning are read-only candidates. Workspace changes begin only after confirmation and stay inside the accepted task boundary.
 
-- Decompose long-form writing, research, and other sustained work into short tasks with dependencies and acceptance conditions.
-- Show hierarchy and progress without reconstructing project state from chat transcripts.
-- Select an execution route and executor from task complexity, capabilities, and context budget.
-- Keep plan approval, consequential decisions, and result acceptance under human control.
+## Three-entry workspace
 
-## Four-view workspace
-
-The repository includes an interactive demo backed by synthetic research tasks:
+Run the synthetic interactive demo:
 
 ```bash
 make workbench
@@ -44,89 +49,106 @@ make workbench
 
 Open [http://127.0.0.1:8787](http://127.0.0.1:8787).
 
-All four views read the same long-task state:
-
-| Board | Responsibility |
+| Entrance | Responsibility |
 |---|---|
-| System map | Read-only view of the path from long goal through decomposition, human decisions, routing, assignment, review, and cross-conversation continuation. |
-| Work progress | Shows hierarchy, dependencies, executor, route, context estimate, and acceptance state. Completing prerequisites releases the next task. |
-| Research trace | Projects the research question, evidence stages, claim synthesis, and conclusion review from the same task state. Work in progress remains visibly distinct from accepted evidence. |
-| Decisions | Holds plan approval and Human Gates. Approval releases work; rejection keeps the task blocked. |
+| Module Map | Shows modules, layers, provided capabilities, required capabilities, composition templates, and honest availability. Token Manager is marked as planned. |
+| Work Progress | Shows overall phase and progress, parallel business lines, line-specific layouts, universal task states, routing, assignment, and acceptance actions. |
+| Decisions | Centralizes plan approval, blocked work, and Human Gates so judgment does not disappear inside old conversations. |
 
-Research tasks still execute through Work progress. Research trace adds the domain-specific evidence lens without creating another source of task truth. The interface shares Cognitive Intake's paper surface, ink green, signal lime, serif headings, and split-card structure.
+The demo uses synthetic data and does not read a private workspace.
 
-Demo state stays in the current browser page and does not read a private workspace.
+## First-run workspace intake
 
-## Current capabilities
+The local intake is designed for a new or messy repository. It performs a bounded read-only scan, detects project and Git signals, suggests modules and work lines, and returns a candidate plan for human confirmation. A dirty repository gets an explicit preflight Human Gate for preserving and assigning existing changes.
+
+```bash
+personal-ai-os inspect ./workspace
+personal-ai-os modules
+personal-ai-os plan ./workspace
+personal-ai-os spec
+```
+
+All commands emit machine-readable JSON. For example, `plan` returns candidate business lines, initial tasks, the resolved module graph, and the complete operation chain. It does not write into the inspected workspace.
+
+## Composable modules
+
+Every module declares a small manifest:
+
+```json
+{
+  "module_id": "dynamic-router",
+  "layer": "orchestration",
+  "provides": ["execution.route"],
+  "requires": ["work.task"],
+  "availability": "READY"
+}
+```
+
+The graph resolver connects requirements to providers and blocks a composition with unresolved or duplicate capabilities. The built-in catalog currently includes:
+
+- local workspace intake;
+- Cognitive Intake;
+- long-work workflow core;
+- dynamic routing;
+- execution adapter;
+- continuity and cross-conversation resume;
+- Token Manager as a planned extension.
+
+## Parallel work lines and task creation
+
+The same task state can be projected differently for different work:
+
+- research can use a left-to-right stage line and an unassigned task table;
+- product work can use milestones;
+- writing can use a material-to-draft pipeline.
+
+The workbench also accepts a plain-language request such as “organize industry material and draft a long report.” It proposes a task, business line, execution tier, and model route before adding the task to the unassigned queue. Manual creation and future dynamic dispatch use the same task contract.
+
+Universal user-facing states are: unassigned, in progress, review, blocked, closed, archived, and completed. The existing kernel keeps its validated execution-state compatibility while the operation spec exposes these product-level meanings.
+
+## Current kernel
 
 | Capability | Current behavior |
 |---|---|
-| Long-task planning | Validates task IDs, hierarchy, dependencies, and acceptance conditions. Missing dependencies and cycles block the plan. |
-| Human plan approval | AI-generated plans remain candidates until a person accepts them. |
+| Long-task planning | Validates hierarchy, dependencies, acceptance conditions, missing references, and cycles. |
+| Human plan approval | AI plans remain candidates until a person accepts them. |
 | Dependency scheduling | Releases only tasks whose prerequisites and Human Gates are satisfied. |
-| Dynamic routing | Selects the smallest execution tier that meets complexity, capability, and context requirements. |
-| Task assignment | Chooses an executor with compatible capabilities, route support, and free capacity. |
-| Four-view projection | Derives the read-only system map, work progress, research trace, and decision queue from one task state. |
-| Human judgment | Pauses at plan approval, consequential tasks, and result acceptance. |
-| Long-run reliability | Current truth, continuity capsules, Git closure, and asset freeze support recovery and verification. |
+| Dynamic routing | Selects the smallest available tier that meets complexity, capability, and context requirements. |
+| Task assignment | Chooses a compatible executor with capacity. |
+| Operation protocol | Defines inspect → map → plan → confirm → route → execute → review → archive. |
+| Module composition | Resolves provided and required capabilities and fails closed on broken graphs. |
+| Read-only intake | Scans local structure and proposes a work map without writing to the target. |
+| Long-run continuity | Truth compilation, continuity capsules, Git closure, and asset freeze support recovery and verification. |
 
-## Initial use cases
+## Run and test
 
-The first use cases come from active work:
-
-- long-form writing, including research reviews, industry reports, investment material, and multi-section documents;
-- research workflows spanning question definition, literature work, experiments, evidence synthesis, and result review;
-- projects that require many model calls, multiple executors, and stage-level acceptance across conversations.
-
-Each short task can use a different model or executor. People follow the plan and decisions instead of supervising every model call.
-
-## Dynamic routing and Token Manager
-
-Dynamic routing is part of the current kernel. A task declares complexity, required capabilities, and estimated context. The router selects an execution tier that satisfies those requirements. Manual overrides pass through the same checks.
-
-Token Manager is the next extension. Task records and the workbench already carry `estimated_context_tokens` and route windows. The planned scope includes:
-
-- per-task Token forecasts and usage records;
-- checkpoints and context compaction at thresholds;
-- budget reallocation while a long task is running;
-- cost, context capacity, and execution-quality comparisons across models.
-
-The repository does not claim an implementation that has not been merged from the separate Token Manager discussion.
-
-## Run the kernel
-
-The Python kernel requires Python 3.10 or newer. Workbench behavior tests use Node.js.
+Python 3.10 or newer is required. Workbench behavior tests use Node.js.
 
 ```bash
 make demo
 make test
 ```
 
-Machine-readable demo output:
-
-```json
-{"checks":["asset_freeze","candidate_promotion","domain_route","dynamic_route","git_closure","long_task_plan","task_assignment","truth_compile","workbench_projection","workflow_transition"],"data_source":"synthetic","status":"SAFE"}
-```
-
-Install the Python API:
+Install the CLI and Python API:
 
 ```bash
 python3 -m pip install --no-deps -e .
-personal-ai-os demo
+personal-ai-os spec
 ```
 
 ## Repository map
 
 ```text
-src/personal_ai_os/   planning, routing, assignment, state, and recovery contracts
-workbench/            interactive synthetic long-task workbench
-tests/                Python and workbench behavior tests
+src/personal_ai_os/   planning, routing, module, intake, operation, state, and recovery contracts
+workbench/            interactive synthetic Long Work workspace
+tests/                Python and browser-workbench behavior tests
 examples/             synthetic truth and task records
-.github/workflows/    install and test matrix for Python 3.10–3.12
+.github/workflows/    Python 3.10–3.12 install and test matrix
+PRODUCT.md            durable product boundaries and open decisions
 ```
 
 ## Publication boundary
 
 This repository contains the reusable product skeleton and synthetic demonstrations. Private memory, business material, research results, personal paths, run receipts, model accounts, and local adapters stay outside the repository.
 
-Version `0.4.0` is a private preview. A license must be selected before publication; the repository currently grants no permission to copy, modify, or redistribute the code beyond rights provided by law.
+Version `0.5.0` is a private preview. A license must be selected before publication; the repository currently grants no permission to copy, modify, or redistribute the code beyond rights provided by law.

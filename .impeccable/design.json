@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-24T06:53:08Z",
+  "title": "Design System: Personal AI OS · Long Work",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "主墨色",
+        "canonical": "#16211f",
+        "tonalRamp": ["oklch(0.15 0.016 182.5)", "oklch(0.26 0.016 182.5)", "oklch(0.37 0.016 182.5)", "oklch(0.48 0.016 182.5)", "oklch(0.59 0.016 182.5)", "oklch(0.70 0.016 182.5)", "oklch(0.82 0.016 182.5)", "oklch(0.95 0.016 182.5)"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "次级墨灰",
+        "canonical": "#515d59",
+        "tonalRamp": ["oklch(0.15 0.016 173.5)", "oklch(0.26 0.016 173.5)", "oklch(0.37 0.016 173.5)", "oklch(0.48 0.016 173.5)", "oklch(0.59 0.016 173.5)", "oklch(0.70 0.016 173.5)", "oklch(0.82 0.016 173.5)", "oklch(0.95 0.016 173.5)"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "暖纸底色",
+        "canonical": "#f3f1e9",
+        "tonalRamp": ["oklch(0.15 0.011 95.2)", "oklch(0.26 0.011 95.2)", "oklch(0.37 0.011 95.2)", "oklch(0.48 0.011 95.2)", "oklch(0.59 0.011 95.2)", "oklch(0.70 0.011 95.2)", "oklch(0.82 0.011 95.2)", "oklch(0.95 0.011 95.2)"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "卡片纸白",
+        "canonical": "#fffdf7",
+        "tonalRamp": ["oklch(0.15 0.008 91.5)", "oklch(0.26 0.008 91.5)", "oklch(0.37 0.008 91.5)", "oklch(0.48 0.008 91.5)", "oklch(0.59 0.008 91.5)", "oklch(0.70 0.008 91.5)", "oklch(0.82 0.008 91.5)", "oklch(0.95 0.008 91.5)"]
+      },
+      "surface-strong": {
+        "role": "neutral",
+        "displayName": "压实纸灰",
+        "canonical": "#e9e7dc",
+        "tonalRamp": ["oklch(0.15 0.015 98.3)", "oklch(0.26 0.015 98.3)", "oklch(0.37 0.015 98.3)", "oklch(0.48 0.015 98.3)", "oklch(0.59 0.015 98.3)", "oklch(0.70 0.015 98.3)", "oklch(0.82 0.015 98.3)", "oklch(0.95 0.015 98.3)"]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "结构墨绿",
+        "canonical": "#245c4c",
+        "tonalRamp": ["oklch(0.15 0.065 171.6)", "oklch(0.26 0.065 171.6)", "oklch(0.37 0.065 171.6)", "oklch(0.48 0.065 171.6)", "oklch(0.59 0.065 171.6)", "oklch(0.70 0.065 171.6)", "oklch(0.82 0.065 171.6)", "oklch(0.95 0.065 171.6)"]
+      },
+      "accent-dark": {
+        "role": "primary",
+        "displayName": "深墨绿",
+        "canonical": "#173f35",
+        "tonalRamp": ["oklch(0.15 0.049 174.3)", "oklch(0.26 0.049 174.3)", "oklch(0.37 0.049 174.3)", "oklch(0.48 0.049 174.3)", "oklch(0.59 0.049 174.3)", "oklch(0.70 0.049 174.3)", "oklch(0.82 0.049 174.3)", "oklch(0.95 0.049 174.3)"]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "淡墨绿",
+        "canonical": "#dcebe3",
+        "tonalRamp": ["oklch(0.15 0.019 162.9)", "oklch(0.26 0.019 162.9)", "oklch(0.37 0.019 162.9)", "oklch(0.48 0.019 162.9)", "oklch(0.59 0.019 162.9)", "oklch(0.70 0.019 162.9)", "oklch(0.82 0.019 162.9)", "oklch(0.95 0.019 162.9)"]
+      },
+      "signal": {
+        "role": "secondary",
+        "displayName": "荧光批注",
+        "canonical": "#d7ff6b",
+        "tonalRamp": ["oklch(0.15 0.179 122.6)", "oklch(0.26 0.179 122.6)", "oklch(0.37 0.179 122.6)", "oklch(0.48 0.179 122.6)", "oklch(0.59 0.179 122.6)", "oklch(0.70 0.179 122.6)", "oklch(0.82 0.179 122.6)", "oklch(0.95 0.179 122.6)"]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "阻塞陶红",
+        "canonical": "#914a40",
+        "tonalRamp": ["oklch(0.15 0.098 29.4)", "oklch(0.26 0.098 29.4)", "oklch(0.37 0.098 29.4)", "oklch(0.48 0.098 29.4)", "oklch(0.59 0.098 29.4)", "oklch(0.70 0.098 29.4)", "oklch(0.82 0.098 29.4)", "oklch(0.95 0.098 29.4)"]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "待定赭黄",
+        "canonical": "#8a641b",
+        "tonalRamp": ["oklch(0.15 0.099 79.1)", "oklch(0.26 0.099 79.1)", "oklch(0.37 0.099 79.1)", "oklch(0.48 0.099 79.1)", "oklch(0.59 0.099 79.1)", "oklch(0.70 0.099 79.1)", "oklch(0.82 0.099 79.1)", "oklch(0.95 0.099 79.1)"]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "纯白",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.37 0 0)", "oklch(0.48 0 0)", "oklch(0.59 0 0)", "oklch(0.70 0 0)", "oklch(0.82 0 0)", "oklch(0.95 0 0)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "长期目标", "purpose": "页面主命题与首屏长期目标。" },
+      "headline": { "displayName": "一级面板", "purpose": "模块地图、工作进度与待我决定标题。" },
+      "title": { "displayName": "结构标题", "purpose": "业务线、首次运行与操作契约标题。" },
+      "body": { "displayName": "操作正文", "purpose": "目标说明、摘要、验收条件与帮助文案。" },
+      "label": { "displayName": "系统标签", "purpose": "眉题、层级、步骤和短状态。" }
+    },
+    "shadows": [
+      { "name": "module-rest", "value": "3px 3px 0 rgba(22, 33, 31, .07)", "purpose": "模块卡静置时的硬边积木深度。" },
+      { "name": "module-hover", "value": "4px 6px 0 rgba(22, 33, 31, .08)", "purpose": "模块卡悬停时增强可点击反馈。" },
+      { "name": "focus-signal", "value": "0 0 0 5px #d7ff6b", "purpose": "与墨色轮廓共同形成高可见键盘焦点。" },
+      { "name": "blocked-inset", "value": "inset 0 3px 0 #914a40", "purpose": "标识阻塞决策卡的顶部状态边界。" }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "160ms ease", "purpose": "按钮、导航和模块卡的悬停与颜色切换。" },
+      { "name": "board-reveal", "value": "320ms cubic-bezier(.16, 1, .3, 1)", "purpose": "一级工作面板切换时的轻微显现与上移。" },
+      { "name": "reduced-motion", "value": "prefers-reduced-motion: reduce", "purpose": "关闭动画、过渡与平滑滚动。" }
+    ],
+    "breakpoints": [
+      { "name": "task-collapse", "value": "1100px" },
+      { "name": "workspace-stack", "value": "980px" },
+      { "name": "mobile-stack", "value": "680px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Ink Primary Button",
+      "kind": "button",
+      "refersTo": "button-ink",
+      "description": "顶栏或全局范围的主要行动，使用主墨色而不是业务线墨绿。",
+      "html": "<button class=\"ds-btn-ink\" type=\"button\">重置演示</button>",
+      "css": ".ds-btn-ink { border: 1px solid var(--ink); border-radius: 999px; padding: .72rem 1rem; color: #fff; background: var(--ink); font: inherit; font-weight: 750; cursor: pointer; transition: transform .16s ease, background .16s ease, color .16s ease; } .ds-btn-ink:hover { transform: translateY(-1px); } .ds-btn-ink:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Accent Action Button",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "业务线、任务与人工决策中的主要推进动作。",
+      "html": "<button class=\"ds-btn-accent\" type=\"button\">批准并继续</button>",
+      "css": ".ds-btn-accent { border: 1px solid var(--accent); border-radius: 999px; padding: .72rem 1rem; color: #fff; background: var(--accent); font: inherit; font-weight: 750; cursor: pointer; transition: transform .16s ease, background .16s ease; } .ds-btn-accent:hover { transform: translateY(-1px); background: var(--accent-dark); } .ds-btn-accent:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Signal Start Button",
+      "kind": "button",
+      "refersTo": "button-signal",
+      "description": "用于首次扫描等需要被发现但不代表风险的启动动作。",
+      "html": "<button class=\"ds-btn-signal\" type=\"button\">运行合成扫描</button>",
+      "css": ".ds-btn-signal { border: 1px solid var(--signal); border-radius: 999px; padding: .72rem 1rem; color: var(--ink); background: var(--signal); font: inherit; font-weight: 750; cursor: pointer; transition: transform .16s ease, background .16s ease; } .ds-btn-signal:hover { transform: translateY(-1px); } .ds-btn-signal:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Three-Entry Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "模块地图、工作进度、待我决定三个稳定一级入口。",
+      "html": "<nav class=\"ds-board-nav\" aria-label=\"Long Work 主导航\"><button type=\"button\"><b>模块地图</b><span>组合能力与依赖</span></button><button class=\"ds-active\" type=\"button\"><b>工作进度</b><span>业务线、阶段与任务</span></button><button type=\"button\"><b>待我决定 <em>2</em></b><span>计划、阻塞与 Human Gate</span></button></nav>",
+      "css": ".ds-board-nav { display: grid; gap: .5rem; width: 16rem; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; } .ds-board-nav button { display: grid; gap: .22rem; width: 100%; padding: .78rem .9rem; border: 1px solid var(--line); border-radius: .9rem; color: var(--muted); background: transparent; text-align: left; cursor: pointer; transition: transform .16s ease, background .16s ease; } .ds-board-nav button:hover { transform: translateY(-1px); color: var(--ink); background: rgba(255,255,255,.55); } .ds-board-nav button.ds-active { color: #fff; background: var(--accent); border-color: var(--accent); } .ds-board-nav b { display: flex; justify-content: space-between; align-items: center; font-size: .88rem; } .ds-board-nav span { opacity: .72; font-size: .7rem; line-height: 1.4; } .ds-board-nav em { display: inline-grid; min-width: 1.4rem; height: 1.4rem; padding: 0 .32rem; place-items: center; border-radius: 999px; color: var(--ink); background: var(--signal); font-style: normal; font-size: .66rem; } .ds-board-nav button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Module Card",
+      "kind": "custom",
+      "refersTo": "module-card",
+      "description": "带左右接口、层级标签和可用状态的可组合模块积木。",
+      "html": "<button class=\"ds-module-card\" type=\"button\"><span class=\"ds-layer\">编排</span><b>长期工作内核</b><small>建立业务线、任务依赖、状态和人工裁决点。</small><span class=\"ds-upstream\">上游 · 本地工作区摄取</span><em>可用</em></button>",
+      "css": ".ds-module-card { position: relative; display: grid; align-content: start; gap: .45rem; width: 12rem; min-height: 10.25rem; padding: 1rem 1rem 1rem 1.15rem; border: 1px solid var(--line); border-radius: .75rem; color: var(--ink); background: var(--surface); text-align: left; cursor: pointer; box-shadow: 3px 3px 0 rgba(22,33,31,.07); transition: transform .16s ease, box-shadow .16s ease; } .ds-module-card:hover { transform: translateY(-2px); box-shadow: 4px 6px 0 rgba(22,33,31,.08); } .ds-module-card::before { content: ''; position: absolute; left: -.42rem; top: 1.25rem; width: .72rem; height: 1.4rem; border: 1px solid var(--line); border-right: 0; border-radius: .35rem 0 0 .35rem; background: var(--surface); } .ds-module-card::after { content: ''; position: absolute; right: -.4rem; bottom: 1.15rem; width: .72rem; height: 1.4rem; border-radius: 0 .35rem .35rem 0; background: var(--accent-soft); } .ds-module-card .ds-layer { color: var(--accent); font-size: .62rem; font-weight: 850; letter-spacing: .12em; } .ds-module-card small { color: var(--muted); font-size: .67rem; line-height: 1.4; } .ds-module-card .ds-upstream { align-self: end; margin-top: auto; padding-top: .45rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .58rem; line-height: 1.35; } .ds-module-card em { position: absolute; right: .55rem; top: .5rem; padding: .2rem .4rem; border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-style: normal; font-size: .58rem; font-weight: 800; } .ds-module-card:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Task Composer",
+      "kind": "input",
+      "refersTo": "task-input",
+      "description": "把自然语言目标转为任务候选的纸面输入区。",
+      "html": "<form class=\"ds-task-composer\"><label for=\"ds-task-input\"><span>直接告诉系统你想完成什么</span><small>自动判断业务线、任务类型和模型路由</small></label><div><input id=\"ds-task-input\" placeholder=\"例如：整理行业资料并写一份长文初稿\"><button type=\"button\">生成任务</button></div></form>",
+      "css": ".ds-task-composer { width: min(100%, 42rem); padding: 1.1rem; border: 1px solid var(--line); background: var(--surface); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; } .ds-task-composer label { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; } .ds-task-composer label span { font-weight: 800; } .ds-task-composer label small { color: var(--muted); } .ds-task-composer > div { display: flex; gap: .55rem; } .ds-task-composer input { flex: 1; min-width: 0; padding: .82rem .95rem; border: 1px solid var(--line); border-radius: .7rem; color: var(--ink); background: var(--paper); font: inherit; } .ds-task-composer button { flex: 0 0 auto; padding: .72rem 1rem; border: 1px solid var(--accent); border-radius: 999px; color: #fff; background: var(--accent); font: inherit; font-weight: 750; cursor: pointer; } .ds-task-composer input:focus-visible, .ds-task-composer button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Business-Line Tabs",
+      "kind": "nav",
+      "description": "三条业务线共享一个工作区边界，当前线使用整面墨绿。",
+      "html": "<nav class=\"ds-line-tabs\" aria-label=\"业务线\"><button class=\"ds-active\" type=\"button\"><span><b>科研线</b><small>问题、材料与验证任务</small></span><em>0/2</em></button><button type=\"button\"><span><b>产品线</b><small>模块、能力与版本里程碑</small></span><em>0/2</em></button><button type=\"button\"><span><b>写作线</b><small>资料、结构与长文交付</small></span><em>0/3</em></button></nav>",
+      "css": ".ds-line-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; } .ds-line-tabs button { display: flex; align-items: center; justify-content: space-between; gap: .7rem; padding: .9rem 1rem; border: 0; border-right: 1px solid var(--line); color: var(--muted); background: rgba(255,255,255,.34); text-align: left; cursor: pointer; } .ds-line-tabs button:last-child { border-right: 0; } .ds-line-tabs button.ds-active { color: #fff; background: var(--accent); } .ds-line-tabs b, .ds-line-tabs small { display: block; } .ds-line-tabs b { font-size: .85rem; } .ds-line-tabs small { margin-top: .25rem; color: currentColor; opacity: .7; font-size: .65rem; } .ds-line-tabs em { font-style: normal; font-size: .7rem; } .ds-line-tabs button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Business Task Row",
+      "kind": "custom",
+      "description": "按状态、验收、执行安排和下一动作组织的高密度任务行。",
+      "html": "<article class=\"ds-task-row\"><div class=\"ds-task-state\"><span></span><b>待分配</b></div><div class=\"ds-task-main\"><small>standard</small><strong>建立材料与来源地图</strong><p>主要问题能够对应到可追溯材料</p></div><div class=\"ds-task-route\"><em>等待路由</em></div><button type=\"button\">等待计划确认</button></article>",
+      "css": ".ds-task-row { display: grid; grid-template-columns: 7rem minmax(14rem,1fr) 11rem 9rem; align-items: center; min-height: 7.2rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; } .ds-task-row > * { padding: .85rem; } .ds-task-row > * + * { border-left: 1px solid var(--line); } .ds-task-state { align-self: stretch; display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .68rem; } .ds-task-state span { width: .55rem; height: .55rem; border-radius: 50%; background: #aeb5b1; } .ds-task-main { display: grid; gap: .45rem; } .ds-task-main small, .ds-task-main p { color: var(--muted); font-size: .68rem; } .ds-task-main p { margin: 0; line-height: 1.45; } .ds-task-route em { padding: .25rem .5rem; border-radius: 999px; color: var(--muted); background: var(--surface-strong); font-style: normal; font-size: .64rem; font-weight: 750; } .ds-task-row button { margin: .75rem; padding: .6rem .65rem; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); background: var(--surface); font: inherit; font-size: .67rem; opacity: .52; } .ds-task-row button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    },
+    {
+      "name": "Human Decision Card",
+      "kind": "card",
+      "description": "集中呈现 Human Gate 的验收条件与批准、退回动作。",
+      "html": "<article class=\"ds-decision-card\"><div><span>Human Gate</span><h3>确认研究问题与边界</h3><p>验收条件：问题、范围和排除项得到确认</p></div><div class=\"ds-actions\"><button class=\"ds-reject\" type=\"button\">退回</button><button class=\"ds-approve\" type=\"button\">批准并继续</button></div></article>",
+      "css": ".ds-decision-card { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding: 1.25rem; border: 1px solid var(--line); color: var(--ink); background: var(--surface); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; } .ds-decision-card > div:first-child > span { display: inline-block; padding: .25rem .5rem; border-radius: 999px; color: var(--ink); background: var(--signal); font-size: .64rem; font-weight: 750; } .ds-decision-card h3 { margin: .65rem 0 .45rem; font-size: 1.15rem; } .ds-decision-card p { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.5; } .ds-actions { display: flex; gap: .6rem; } .ds-actions button { min-height: 44px; padding: .72rem 1rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font: inherit; font-weight: 750; cursor: pointer; } .ds-actions .ds-reject { color: var(--danger); } .ds-actions .ds-approve { color: #fff; background: var(--accent); border-color: var(--accent); } .ds-actions button:hover { transform: translateY(-1px); } .ds-actions button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "荧光批注的工作纸面",
+    "overview": "Long Work 延续 Cognitive Intake 已建立的视觉世界：浅暖纸面承载密集信息，深色墨迹建立层级，墨绿把模块、路径和当前状态组织成一个可操作的系统，荧光黄绿像真实纸面上的批注，只标记需要立即注意的节点。它的气质克制、理性、安静，但不是无差别的灰色管理后台。\n\n界面首先帮助用户建立系统结构，再进入具体工作。固定的三个一级入口、可横向浏览的模块画布、分业务线展开的任务工作区和集中出现的人工决策，共同构成可继承的操作骨架。后续页面可以改变内容密度和业务线内部排版，但应保留这套颜色分工、空间层级与交互反馈。\n\nResearch 当前只继承通用的业务线容器、阶段、任务与裁决表现。专用研究脉络的信息模型仍是开放产品决策，设计系统不替它定义结构或语义。",
+    "keyCharacteristics": [
+      "暖白纸面与轻微荧光环境光，而非纯白应用画布。",
+      "墨绿承担结构、选中态与主要行动，荧光信号保持稀缺。",
+      "高密度信息通过网格、细线、色块和字号层级组织。",
+      "模块卡呈现可组合积木，任务区呈现业务线专属工作台。",
+      "桌面端强调并列扫描，窄屏端按决策顺序纵向展开。"
+    ],
+    "rules": [
+      { "name": "荧光稀缺", "body": "荧光信号只标记需要注意、确认或人工裁决的节点；常规导航和装饰不使用荧光填满。", "section": "colors" },
+      { "name": "纸面分层", "body": "页面层级先由暖纸底、卡片纸白、压实纸灰和墨绿色块形成，颜色不脱离状态与结构单独装饰。", "section": "colors" },
+      { "name": "双声部", "body": "衬线字体只承担长期目标与结构性标题；任务、状态、操作和说明统一使用系统无衬线。", "section": "typography" },
+      { "name": "三入口", "body": "后续一级页面始终从“模块地图、工作进度、待我决定”进入；业务线和模块属于入口内部，不新增平级主导航。", "section": "layout" },
+      { "name": "同源异形", "body": "业务线可以采用适合自身工作的阶段与详情排版，但必须复用同一套任务状态、决策信号和主要行动层级。", "section": "layout" },
+      { "name": "结构先于阴影", "body": "默认使用色块、边框、网格和留白建立深度；阴影只用于模块实体、焦点或明确状态反馈。", "section": "elevation" },
+      { "name": "积木接口", "body": "只有具备模块输入、输出或依赖含义的卡片使用连接件轮廓；普通任务卡和信息卡保持纸面几何。", "section": "shapes" }
+    ],
+    "dos": [
+      "Do 保留三个稳定一级入口，并把模块、业务线和人工裁决放回各自入口。",
+      "Do 使用暖纸、纸白、压实纸灰和墨绿形成密度层级，让荧光只承担关键批注。",
+      "Do 让桌面视图支持并列扫描，让移动视图按状态、内容、安排、行动的顺序纵向展开。",
+      "Do 为所有可交互控件提供清晰的 :focus-visible 反馈，并尊重 prefers-reduced-motion。",
+      "Do 让不同业务线继承同一任务状态和操作层级，同时保留适合自身工作的详情排版。"
+    ],
+    "donts": [
+      "Don't 把荧光黄绿当作常规大面积背景、装饰渐变或无意义强调色。",
+      "Don't 把每个信息块都做成圆角浮卡；表格、画布和操作契约依靠结构边界表达层级。",
+      "Don't 在窄屏压缩模块画布到不可读，使用横向滚动保留模块关系。",
+      "Don't 新增与“模块地图、工作进度、待我决定”平级的业务线入口。",
+      "Don't 在设计文档中为 Research 定义尚未决策的信息模型、专用状态或证据结构。"
+    ]
+  }
+}

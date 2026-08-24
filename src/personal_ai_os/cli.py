@@ -8,6 +8,9 @@ from pathlib import Path
 from .dispatching import assign_task, select_execution_route
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
+from .intake import build_candidate_plan, inspect_workspace
+from .modules import build_module_graph, module_catalog
+from .operations import operation_spec
 from .planning import project_plan, ready_tasks, validate_plan
 from .promotion import promote_candidate
 from .routing import route_task
@@ -173,8 +176,28 @@ def demo_payload() -> dict[str, object]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="personal-ai-os")
-    parser.add_argument("command", choices=("demo",))
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("demo", help="run the synthetic safety demo")
+    subparsers.add_parser("modules", help="print the composable module graph")
+    subparsers.add_parser("spec", help="print the operating protocol and task states")
+    inspect_parser = subparsers.add_parser(
+        "inspect", help="inspect a local workspace without writing to it"
+    )
+    inspect_parser.add_argument("path")
+    plan_parser = subparsers.add_parser(
+        "plan", help="propose a work map from a read-only workspace inspection"
+    )
+    plan_parser.add_argument("path")
     args = parser.parse_args(argv)
     if args.command == "demo":
-        print(json.dumps(demo_payload(), ensure_ascii=False, sort_keys=True))
-    return 0
+        payload = demo_payload()
+    elif args.command == "modules":
+        payload = build_module_graph(module_catalog())
+    elif args.command == "spec":
+        payload = operation_spec()
+    elif args.command == "inspect":
+        payload = inspect_workspace(args.path)
+    else:
+        payload = build_candidate_plan(inspect_workspace(args.path))
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 0 if payload.get("status") not in {"UNKNOWN", "BLOCKED"} else 2
