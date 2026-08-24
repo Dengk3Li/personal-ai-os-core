@@ -10,10 +10,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class PackagingTests(unittest.TestCase):
-    def test_editable_install_works_with_the_system_python_toolchain(self):
+    def test_editable_install_works_with_an_available_build_backend(self):
         with tempfile.TemporaryDirectory() as directory:
             environment = Path(directory) / "venv"
-            venv.EnvBuilder(with_pip=True).create(environment)
+            venv.EnvBuilder(with_pip=True, system_site_packages=True).create(environment)
             python = environment / "bin/python"
             install = subprocess.run(
                 [
