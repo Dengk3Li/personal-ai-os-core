@@ -147,6 +147,12 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .module-detail dl div { padding-top: var(--space-2); border-top: 1px solid var(--line); }
 .module-detail dt { color: var(--muted); font-size: .65rem; }
 .module-detail dd { margin: .35rem 0 0; overflow-wrap: anywhere; font-size: .7rem; line-height: 1.45; }
+.module-annotation { display: grid; gap: var(--space-2); margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.module-annotation label { display: grid; gap: .25rem; }
+.module-annotation label b { font-size: .72rem; }
+.module-annotation label span { color: var(--muted); font-size: .62rem; line-height: 1.4; }
+.module-annotation textarea { min-height: 5rem; resize: vertical; padding: .65rem .72rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--ink); background: var(--surface); font: inherit; font-size: .7rem; line-height: 1.45; }
+.module-annotation button { min-height: 44px; color: white; background: var(--accent); border-color: var(--accent); font-size: .68rem; }
 .map-focus-button { align-self: flex-start; margin-top: auto; padding: .55rem .75rem; border: 1px solid var(--accent); border-radius: 99px; color: var(--accent); background: transparent; font-size: .66rem; cursor: pointer; }
 .map-focus-button.active { color: white; background: var(--accent); }
 .first-run-card.compact { align-items: center; margin-top: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: .8rem; }
@@ -226,7 +232,7 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .status-in_progress .run-pulse { color: var(--signal); animation: live-pulse 1.8s cubic-bezier(.16, 1, .3, 1) infinite; }
 .status-blocked .run-pulse { color: #e58b82; }
 .status-review .run-pulse { color: #f0c862; }
-.status-closed .run-pulse { color: #74c49e; }
+.status-done .run-pulse { color: #74c49e; }
 .loop-return { display: flex; align-items: center; gap: .5rem; margin-top: var(--space-2); color: var(--accent); font-size: .62rem; }
 .loop-return::before { content: ""; flex: 1; height: 1px; background: var(--accent-soft); }
 
@@ -245,6 +251,9 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .event-trace li:last-child::after { display: none; }
 .event-trace time { color: var(--ink); font-variant-numeric: tabular-nums; }
 .empty-trace { margin: 0 0 var(--space-3); color: var(--muted); font-size: .7rem; line-height: 1.5; }
+.runtime-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.runtime-controls label { display: grid; gap: .35rem; min-width: 0; color: var(--muted); font-size: .61rem; }
+.runtime-controls input, .runtime-controls select { min-width: 0; width: 100%; padding: .58rem .62rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--ink); background: var(--surface); font: inherit; font-size: .68rem; }
 .task-action { width: 100%; color: white; background: var(--accent); border-color: var(--accent); font-size: .68rem; }
 .task-action:disabled { color: var(--muted); background: transparent; border-color: var(--line); cursor: default; }
 
@@ -268,6 +277,7 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .decision-card { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); padding: var(--space-4); border: 1px solid var(--line); background: var(--surface); }
 .decision-card h3 { margin: .65rem 0 .45rem; font-size: 1.1rem; }
 .decision-card p { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.5; }
+.decision-card small { display: block; margin-top: .55rem; color: var(--accent); font-size: .68rem; line-height: 1.45; }
 .blocked-decision { box-shadow: inset 0 1px 0 var(--danger); }
 .card-action { background: var(--surface); font-size: .72rem; }
 .card-action.approve { color: white; background: var(--accent); border-color: var(--accent); }
@@ -325,6 +335,7 @@ footer { padding: var(--space-4); color: var(--muted); text-align: center; font-
   .execution-values { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); white-space: normal; }
   .workflow-nodes { grid-template-columns: 1fr; }
   .workflow-node { min-height: auto; }
+  .runtime-controls { grid-template-columns: 1fr; }
   .task-composer > div { flex-direction: column; }
   .task-composer button { width: 100%; }
 }

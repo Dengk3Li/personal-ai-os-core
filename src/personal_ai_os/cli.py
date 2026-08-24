@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import tempfile
 from pathlib import Path
 
+from .adapters import OpenAICompatibleAdapter
 from .dispatching import assign_task, select_execution_route
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
@@ -14,6 +16,9 @@ from .operations import operation_spec
 from .planning import project_plan, ready_tasks, validate_plan
 from .promotion import promote_candidate
 from .routing import route_task
+from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
+from .secretary import build_secretary_brief
+from .server import create_runtime_server
 from .truth import compile_truth
 from .workflow import transition_task
 
@@ -193,6 +198,37 @@ def main(argv: list[str] | None = None) -> int:
         "plan", help="propose a work map from a read-only workspace inspection"
     )
     plan_parser.add_argument("path")
+    runtime_parser = subparsers.add_parser(
+        "runtime", help="operate the persistent long-task runtime"
+    )
+    runtime_commands = runtime_parser.add_subparsers(dest="runtime_command", required=True)
+    runtime_init = runtime_commands.add_parser("init", help="initialize a runtime store")
+    runtime_init.add_argument("--store", required=True)
+    runtime_init.add_argument(
+        "--preset",
+        choices=["science", "meeting-notes", "analytical-report"],
+        default="science",
+    )
+    runtime_status = runtime_commands.add_parser("status", help="read runtime state")
+    runtime_status.add_argument("--store", required=True)
+    runtime_brief = runtime_commands.add_parser("brief", help="read the secretary brief")
+    runtime_brief.add_argument("--store", required=True)
+    runtime_run = runtime_commands.add_parser("run", help="dispatch one queued task")
+    runtime_run.add_argument("--store", required=True)
+    runtime_run.add_argument("--task", required=True)
+    runtime_run.add_argument("--model", required=True)
+    runtime_run.add_argument("--adapter", default="openai-compatible")
+    runtime_resolve = runtime_commands.add_parser("resolve", help="record a human decision")
+    runtime_resolve.add_argument("--store", required=True)
+    runtime_resolve.add_argument("--decision", required=True)
+    runtime_resolve.add_argument("--option", required=True)
+    runtime_resolve.add_argument("--by", default="owner")
+    runtime_serve = runtime_commands.add_parser("serve", help="serve the workbench and runtime API")
+    runtime_serve.add_argument("--store", required=True)
+    runtime_serve.add_argument("--web-root", default="workbench")
+    runtime_serve.add_argument("--host", default="127.0.0.1")
+    runtime_serve.add_argument("--port", type=int, default=8787)
+    runtime_serve.add_argument("--model", default=os.environ.get("PERSONAL_AI_OS_DEFAULT_MODEL", ""))
     args = parser.parse_args(argv)
     if args.command == "demo":
         payload = demo_payload()
@@ -208,7 +244,86 @@ def main(argv: list[str] | None = None) -> int:
         payload = operation_spec()
     elif args.command == "inspect":
         payload = inspect_workspace(args.path)
-    else:
+    elif args.command == "plan":
         payload = build_candidate_plan(inspect_workspace(args.path))
+    else:
+        store = RuntimeStore(args.store)
+        if args.runtime_command == "init":
+            installed = install_workflow_preset(store, args.preset)
+            payload = {
+                "status": "READY",
+                "store": str(store.database),
+                "workflow_id": installed["workflow_id"],
+                "task_count": len(store.snapshot()["tasks"]),
+            }
+        elif args.runtime_command == "status":
+            snapshot = store.snapshot()
+            payload = {
+                "status": store.integrity()["status"],
+                "store": str(store.database),
+                "task_count": len(snapshot["tasks"]),
+                "run_count": len(snapshot["runs"]),
+                "brief": build_secretary_brief(snapshot),
+            }
+        elif args.runtime_command == "brief":
+            payload = {"status": store.integrity()["status"], **build_secretary_brief(store.snapshot())}
+        elif args.runtime_command == "resolve":
+            payload = {
+                "status": "READY",
+                "decision": store.resolve_decision(
+                    args.decision, selected_option=args.option, by=args.by
+                ),
+            }
+        else:
+            adapter = OpenAICompatibleAdapter(
+                api_base=os.environ.get("PERSONAL_AI_OS_API_BASE", ""),
+                api_key=os.environ.get("PERSONAL_AI_OS_API_KEY", ""),
+            )
+            adapters = {adapter.adapter_id: adapter}
+            if args.runtime_command == "run":
+                payload = ExecutionBroker(store, adapters).dispatch(
+                    args.task,
+                    adapter_id=args.adapter,
+                    model=args.model,
+                )
+                payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
+            else:
+                if args.host not in {"127.0.0.1", "localhost", "::1"}:
+                    payload = {
+                        "status": "BLOCKED",
+                        "reason": "runtime server binds to loopback only",
+                    }
+                elif not args.model:
+                    payload = {
+                        "status": "BLOCKED",
+                        "reason": "--model or PERSONAL_AI_OS_DEFAULT_MODEL is required",
+                    }
+                else:
+                    server = create_runtime_server(
+                        (args.host, args.port),
+                        store=store,
+                        adapters=adapters,
+                        default_model=args.model,
+                        web_root=args.web_root,
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "status": "READY",
+                                "url": f"http://{args.host}:{server.server_port}",
+                                "store": str(store.database),
+                            },
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        ),
+                        flush=True,
+                    )
+                    try:
+                        server.serve_forever()
+                    except KeyboardInterrupt:
+                        pass
+                    finally:
+                        server.server_close()
+                    return 0
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0 if payload.get("status") not in {"UNKNOWN", "BLOCKED"} else 2

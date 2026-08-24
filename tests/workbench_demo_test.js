@@ -25,11 +25,11 @@ test("a human can approve a plan and advance dependent work", () => {
   state = workbench.applyTaskAction(state, "scope");
   assert.equal(state.taskStates.scope, "REVIEW");
   state = workbench.applyTaskAction(state, "scope");
-  assert.equal(state.taskStates.scope, "CLOSED");
+  assert.equal(state.taskStates.scope, "DONE");
   assert.equal(workbench.actionForTask(state, "evidence"), "DISPATCH");
   assert.deepEqual(workbench.progress(state), { done: 1, total: 7, percent: 14 });
   const view = workbench.viewModel(state);
-  assert.deepEqual(view.lanes.CLOSED, ["scope"]);
+  assert.deepEqual(view.lanes.DONE, ["scope"]);
   assert.equal(view.tasks.evidence.action, "DISPATCH");
 });
 
@@ -39,7 +39,7 @@ test("dependency and human gates remain visible instead of auto-advancing", () =
 
   assert.equal(workbench.actionForTask(state, "evidence"), "WAITING_DEPENDENCY");
   assert.equal(workbench.actionForTask(state, "scope"), "HUMAN_DECISION_REQUIRED");
-  assert.equal(state.taskStates.scope, "UNASSIGNED");
+  assert.equal(state.taskStates.scope, "QUEUED");
 });
 
 test("a recorded rejection is blocked work, not a pending human decision", () => {
@@ -58,7 +58,7 @@ test("task cards expose the human action without injecting task text as markup",
   const html = workbench.renderTaskCard({
     task_id: "unsafe-id",
     title: "<script>alert(1)</script>",
-    status: "UNASSIGNED",
+    status: "QUEUED",
     action: "HUMAN_DECISION_REQUIRED",
     human_gate: true,
     complexity: "standard",
@@ -152,7 +152,7 @@ test("running assignments resolve a model-specific pet without changing task tru
 
 test("every running showcase task has closed prerequisites", () => {
   const state = workbench.createShowcaseState();
-  const closed = new Set(["CLOSED", "ARCHIVED", "COMPLETED"]);
+  const closed = new Set(["DONE", "ARCHIVED"]);
 
   state.tasks
     .filter((task) => state.taskStates[task.task_id] === "IN_PROGRESS")

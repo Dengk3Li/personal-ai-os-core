@@ -106,6 +106,27 @@ test("module focus resolves complete upstream and downstream paths", () => {
   assert.ok(focus.downstream.includes("token-manager"));
 });
 
+test("a module annotation becomes a bounded task candidate for the active workflow", () => {
+  const state = workbench.createShowcaseState();
+  const proposal = workbench.proposeTaskFromModuleAnnotation(
+    state,
+    "workflow-core",
+    "The handoff state needs a clearer acceptance boundary.",
+  );
+
+  assert.equal(proposal.status, "CANDIDATE");
+  assert.equal(proposal.task.line_id, state.activeLineId);
+  assert.equal(proposal.task.context.module_id, "workflow-core");
+  assert.equal(
+    proposal.task.context.annotation,
+    "The handoff state needs a clearer acceptance boundary.",
+  );
+  assert.equal(
+    workbench.proposeTaskFromModuleAnnotation(state, "workflow-core", " ").status,
+    "BLOCKED",
+  );
+});
+
 test("dragging a module updates only its position inside the canvas bounds", () => {
   assert.equal(typeof workbench.moveModuleNode, "function");
   const graph = workbench.moduleGraph();
@@ -162,9 +183,9 @@ test("the drag click guard expires when a browser emits no synthetic click", () 
 test("workbench task states use the public operation contract", () => {
   const view = workbench.workspaceView(workbench.createDemoState());
   assert.deepEqual(Object.keys(view.work.lanes), [
-    "UNASSIGNED", "IN_PROGRESS", "REVIEW", "BLOCKED", "CLOSED", "ARCHIVED", "COMPLETED",
+    "QUEUED", "IN_PROGRESS", "REVIEW", "BLOCKED", "PAUSED", "DONE", "ARCHIVED",
   ]);
-  assert.equal(view.work.activeLine.tasks[0].status, "UNASSIGNED");
+  assert.equal(view.work.activeLine.tasks[0].status, "QUEUED");
 });
 
 test("starter templates create an explicit read-only candidate", () => {
@@ -199,7 +220,7 @@ test("conversation task creation proposes a line, task, and execution route", ()
 
   assert.equal(proposal.status, "CANDIDATE");
   assert.equal(proposal.line_id, "writing");
-  assert.equal(proposal.task.status, "UNASSIGNED");
+  assert.equal(proposal.task.status, "QUEUED");
   assert.equal(proposal.route.route, "standard");
   assert.ok(proposal.route.model);
 });

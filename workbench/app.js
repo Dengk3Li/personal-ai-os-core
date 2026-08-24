@@ -82,6 +82,50 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  function runtimeStateFromPayload(payload) {
+    if (!payload || payload.status !== "READY" || payload.data_source !== "runtime" || !payload.state) {
+      throw new Error("RUNTIME_STATE_UNAVAILABLE");
+    }
+    return {
+      ...clone(payload.state),
+      runtime: true,
+      dataSource: "runtime",
+      defaultModel: payload.default_model || "",
+      adapters: clone(payload.adapters || []),
+      pendingDecisions: clone(payload.state.pendingDecisions || []),
+    };
+  }
+
+  function createRuntimeClient(fetchFn) {
+    if (typeof fetchFn !== "function") return null;
+    async function request(url, options) {
+      const response = await fetchFn(url, options);
+      let payload = {};
+      try { payload = await response.json(); } catch (_error) { payload = {}; }
+      if (!response.ok) {
+        const error = new Error(payload.reason || payload.error || `HTTP_${response.status}`);
+        error.payload = payload;
+        throw error;
+      }
+      return payload;
+    }
+    function post(url, payload) {
+      return request(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    return {
+      load: () => request("/api/runtime"),
+      runTask: (taskId, adapterId, model) => post("/api/runs", { task_id: taskId, adapter_id: adapterId, model }),
+      transitionTask: (taskId, to, reason) => post(`/api/tasks/${encodeURIComponent(taskId)}/transition`, { to, reason, by: "owner" }),
+      createTask: (task) => post("/api/tasks", task),
+      createWorkflow: (workflow) => post("/api/workflows", workflow),
+      resolveDecision: (decisionId, selectedOption) => post(`/api/decisions/${encodeURIComponent(decisionId)}/resolve`, { selected_option: selectedOption, by: "owner" }),
+    };
+  }
+
   function createDemoState() {
     return {
       goal: "把一个复杂工作区变成可理解、可裁决、可持续推进的长期工作系统",
@@ -90,7 +134,7 @@
       planApproved: false,
       tasks: clone(TASKS),
       businessLines: clone(BUSINESS_LINES),
-      taskStates: Object.fromEntries(TASKS.map((task) => [task.task_id, "UNASSIGNED"])),
+      taskStates: Object.fromEntries(TASKS.map((task) => [task.task_id, "QUEUED"])),
       decisions: {},
       assignments: {},
       onboarding: { status: "NOT_STARTED", readOnly: true, detectedLines: [] },
@@ -106,7 +150,7 @@
       { kind: "adapter_started", label: "适配器已启动", at: "09:13" },
       { kind: "heartbeat", label: "运行心跳正常", at: "09:18" },
     ];
-    if (["REVIEW", "CLOSED", "COMPLETED", "ARCHIVED"].includes(status)) {
+    if (["REVIEW", "DONE", "ARCHIVED"].includes(status)) {
       events.push({ kind: "artifact", label: "阶段产物已登记", at: "09:26" });
     }
     if (attempts > 1) {
@@ -117,9 +161,9 @@
 
   function createShowcaseState() {
     const statuses = {
-      "flow-a-01": "CLOSED", "flow-a-02": "CLOSED", "flow-a-03": "IN_PROGRESS", "flow-a-04": "IN_PROGRESS", "flow-a-05": "UNASSIGNED", "flow-a-06": "UNASSIGNED", "flow-a-07": "BLOCKED",
-      "flow-b-01": "CLOSED", "flow-b-02": "CLOSED", "flow-b-03": "IN_PROGRESS", "flow-b-04": "UNASSIGNED", "flow-b-05": "UNASSIGNED",
-      "flow-c-01": "CLOSED", "flow-c-02": "CLOSED", "flow-c-03": "REVIEW", "flow-c-04": "REVIEW", "flow-c-05": "UNASSIGNED", "flow-c-06": "UNASSIGNED",
+      "flow-a-01": "DONE", "flow-a-02": "DONE", "flow-a-03": "IN_PROGRESS", "flow-a-04": "IN_PROGRESS", "flow-a-05": "QUEUED", "flow-a-06": "QUEUED", "flow-a-07": "BLOCKED",
+      "flow-b-01": "DONE", "flow-b-02": "DONE", "flow-b-03": "IN_PROGRESS", "flow-b-04": "QUEUED", "flow-b-05": "QUEUED",
+      "flow-c-01": "DONE", "flow-c-02": "DONE", "flow-c-03": "REVIEW", "flow-c-04": "REVIEW", "flow-c-05": "QUEUED", "flow-c-06": "QUEUED",
     };
     const assignmentSpecs = {
       "flow-a-01": ["deep", "Reasoning model", "科学假设 Agent"],
@@ -217,11 +261,15 @@
     if (!task) return "UNKNOWN_TASK";
     if (!state.planApproved) return "PLAN_APPROVAL_REQUIRED";
     const current = state.taskStates[taskId];
-    if (["CLOSED", "ARCHIVED", "COMPLETED"].includes(current)) return "NONE";
+    if (["DONE", "ARCHIVED"].includes(current)) return "NONE";
     if (current === "BLOCKED") return "BLOCKED";
-    if (task.depends_on.some((dependency) => !["CLOSED", "ARCHIVED", "COMPLETED"].includes(state.taskStates[dependency]))) return "WAITING_DEPENDENCY";
-    if (task.human_gate && state.decisions[taskId] !== "APPROVED") return "HUMAN_DECISION_REQUIRED";
-    if (current === "UNASSIGNED") return "DISPATCH";
+    if (current === "PAUSED") return "RESUME";
+    if (task.depends_on.some((dependency) => !["DONE", "ARCHIVED"].includes(state.taskStates[dependency]))) return "WAITING_DEPENDENCY";
+    const recordedDecision = state.runtime
+      ? state.decisions[taskId] && state.decisions[taskId] !== "PENDING"
+      : state.decisions[taskId] === "APPROVED";
+    if (task.human_gate && !recordedDecision) return "HUMAN_DECISION_REQUIRED";
+    if (current === "QUEUED") return "DISPATCH";
     if (current === "IN_PROGRESS") return "REQUEST_REVIEW";
     if (current === "REVIEW") return "ACCEPT";
     return "NONE";
@@ -260,7 +308,7 @@
         task.events.push({ event_id: `${taskId}-artifact`, kind: "artifact", label: "阶段产物已登记", at: "09:26" });
       }
     } else if (action === "ACCEPT") {
-      next.taskStates[taskId] = "CLOSED";
+      next.taskStates[taskId] = "DONE";
       const task = taskById(next, taskId);
       if (task && Array.isArray(task.events)) task.events.push({ event_id: `${taskId}-accepted`, kind: "accepted", label: "人工验收已通过", at: "09:31" });
     }
@@ -269,15 +317,15 @@
 
   function progress(state, taskIds) {
     const ids = taskIds || state.tasks.map((task) => task.task_id);
-    const done = ids.filter((taskId) => ["CLOSED", "ARCHIVED", "COMPLETED"].includes(state.taskStates[taskId])).length;
+    const done = ids.filter((taskId) => ["DONE", "ARCHIVED"].includes(state.taskStates[taskId])).length;
     return { done, total: ids.length, percent: ids.length ? Math.floor(done * 100 / ids.length) : 0 };
   }
 
   function viewModel(state) {
-    const lanes = { UNASSIGNED: [], IN_PROGRESS: [], REVIEW: [], BLOCKED: [], CLOSED: [], ARCHIVED: [], COMPLETED: [] };
+    const lanes = { QUEUED: [], IN_PROGRESS: [], REVIEW: [], BLOCKED: [], PAUSED: [], DONE: [], ARCHIVED: [] };
     const tasks = {};
     state.tasks.forEach((task) => {
-      const status = state.taskStates[task.task_id] || "UNASSIGNED";
+      const status = state.taskStates[task.task_id] || "QUEUED";
       if (lanes[status]) lanes[status].push(task.task_id);
       tasks[task.task_id] = { ...task, status, action: actionForTask(state, task.task_id), assignment: state.assignments[task.task_id] || null, decision: state.decisions[task.task_id] || "PENDING" };
     });
@@ -288,7 +336,7 @@
   function workflowSummary(state, taskIds) {
     const allowed = taskIds ? new Set(taskIds) : null;
     const tasks = allowed ? state.tasks.filter((task) => allowed.has(task.task_id)) : state.tasks;
-    const completedStates = ["CLOSED", "ARCHIVED", "COMPLETED"];
+    const completedStates = ["DONE", "ARCHIVED"];
     const allocationCounts = {};
     Object.entries(state.assignments || {}).forEach(([taskId, assignment]) => {
       if (!taskById(state, taskId) || (allowed && !allowed.has(taskId))) return;
@@ -311,7 +359,7 @@
     if (!workflow) return null;
     const tasks = state.tasks.filter((task) => task.line_id === workflowId).map((task) => ({
       ...task,
-      status: state.taskStates[task.task_id] || "UNASSIGNED",
+      status: state.taskStates[task.task_id] || "QUEUED",
       assignment: state.assignments[task.task_id] || null,
       events: clone(task.events || []),
     }));
@@ -556,9 +604,22 @@
       return { ...line, tasks, progress: progress(state, tasks.map((task) => task.task_id)) };
     });
     const activeLine = lines.find((line) => line.line_id === state.activeLineId) || lines[0];
+    const persistedDecisions = (state.pendingDecisions || []).map((item) => ({
+      ...item,
+      kind: "runtime-decision",
+      title: item.question,
+      summary: item.context,
+    }));
+    const decidedTasks = new Set(persistedDecisions.map((item) => item.task_id));
+    const pausedItems = state.tasks.filter((task) => state.taskStates[task.task_id] === "PAUSED").map((task) => ({ ...task, title: task.title || task.public_label, acceptance: task.acceptance || task.stage, kind: "paused", summary: "任务已按你的决定暂停。恢复后会重新进入分派队列。" }));
+    const localDecisionItems = state.runtime ? [] : [
+      ...state.tasks.filter((task) => state.taskStates[task.task_id] === "BLOCKED" && !decidedTasks.has(task.task_id)).map((task) => ({ ...task, title: task.title || task.public_label, acceptance: task.acceptance || task.stage, kind: "blocked", summary: "任务已阻塞，需要调整边界或重新批准。" })),
+      ...state.tasks.filter((task) => actionForTask(state, task.task_id) === "HUMAN_DECISION_REQUIRED" && !decidedTasks.has(task.task_id)).map((task) => ({ ...task, title: task.title || task.public_label, acceptance: task.acceptance || task.stage, kind: "task" })),
+    ];
     const pending = state.planApproved ? [
-      ...state.tasks.filter((task) => state.taskStates[task.task_id] === "BLOCKED").map((task) => ({ ...task, title: task.title || task.public_label, acceptance: task.acceptance || task.stage, kind: "blocked", summary: "任务已阻塞，需要调整边界或重新批准。" })),
-      ...state.tasks.filter((task) => actionForTask(state, task.task_id) === "HUMAN_DECISION_REQUIRED").map((task) => ({ ...task, title: task.title || task.public_label, acceptance: task.acceptance || task.stage, kind: "task" })),
+      ...persistedDecisions,
+      ...pausedItems,
+      ...localDecisionItems,
     ] : [{ task_id: "plan-approval", kind: "plan", title: "确认自动生成的工作地图", summary: `${lines.length} 条业务线、${state.tasks.length} 项短任务，确认后进入执行队列。` }];
 
     return {
@@ -610,8 +671,37 @@
     const capabilities = showcase
       ? lineId === "research" ? ["research"] : lineId === "industry-report" ? ["research", "writing"] : ["writing"]
       : lineId === "product" ? ["engineering"] : lineId === "research" ? ["research"] : ["writing"];
-    const task = { task_id: `created-${state.tasks.length + 1}`, public_label: `任务 N-${String(state.tasks.length + 1).padStart(2, "0")}`, line_id: lineId, title: text, acceptance: "产出可检查、可继续推进的阶段结果", stage: "待拆解", iteration: 1, parallel_group: "main", attempts: 0, events: [], depends_on: [], human_gate: false, complexity, capabilities, estimated_tokens: complexity === "deep" ? 120000 : 48000, status: "UNASSIGNED" };
+    const task = { task_id: `created-${state.tasks.length + 1}`, public_label: `任务 N-${String(state.tasks.length + 1).padStart(2, "0")}`, line_id: lineId, title: text, acceptance: "产出可检查、可继续推进的阶段结果", stage: "待拆解", iteration: 1, parallel_group: "main", attempts: 0, events: [], depends_on: [], human_gate: false, complexity, capabilities, estimated_tokens: complexity === "deep" ? 120000 : 48000, status: "QUEUED" };
     return { status: "CANDIDATE", line_id: lineId, task, route: routeTask(task) };
+  }
+
+  function proposeTaskFromModuleAnnotation(state, moduleId, annotation) {
+    const text = String(annotation || "").trim();
+    const module = MODULES.find((item) => item.module_id === moduleId);
+    const lineId = state.activeLineId || (state.businessLines[0] && state.businessLines[0].line_id);
+    if (!text) return { status: "BLOCKED", reason: "ANNOTATION_REQUIRED" };
+    if (!module || !lineId) return { status: "BLOCKED", reason: "MODULE_CONTEXT_REQUIRED" };
+    const sequence = state.tasks.length + 1;
+    const task = {
+      task_id: `module-issue-${module.module_id}-${sequence}`,
+      public_label: `模块问题 ${String(sequence).padStart(2, "0")}`,
+      line_id: lineId,
+      title: `处理 ${module.name} 的模块批注`,
+      acceptance: "批注中的接口、依赖或流程问题得到处理，并登记可检查的结果。",
+      stage: "模块修正",
+      iteration: 1,
+      parallel_group: "module-maintenance",
+      attempts: 0,
+      events: [],
+      depends_on: [],
+      human_gate: false,
+      complexity: "standard",
+      capabilities: ["engineering"],
+      estimated_tokens: 48000,
+      context: { module_id: module.module_id, annotation: text },
+      status: "QUEUED",
+    };
+    return { status: "CANDIDATE", line_id: lineId, module_id: module.module_id, task, route: routeTask(task) };
   }
 
   function addTaskProposal(state, proposal) {
@@ -620,7 +710,7 @@
     const task = clone(proposal.task);
     delete task.status;
     next.tasks.push(task);
-    next.taskStates[task.task_id] = "UNASSIGNED";
+    next.taskStates[task.task_id] = "QUEUED";
     next.activeLineId = task.line_id;
     next.activeBoard = "work";
     next.taskProposal = null;
@@ -631,8 +721,8 @@
     return String(value == null ? "" : value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   }
 
-  const ACTION_LABELS = { PLAN_APPROVAL_REQUIRED: "等待计划确认", HUMAN_DECISION_REQUIRED: "需要你裁决", WAITING_DEPENDENCY: "等待前置任务", DISPATCH: "分派并开始", REQUEST_REVIEW: "提交验收", ACCEPT: "接受并收口", BLOCKED: "需要处理", NONE: "已收口" };
-  const STATUS_LABELS = { UNASSIGNED: "待分配", IN_PROGRESS: "进行中", REVIEW: "待验收", BLOCKED: "已阻塞", CLOSED: "已收口", ARCHIVED: "已归档", COMPLETED: "已完成" };
+  const ACTION_LABELS = { PLAN_APPROVAL_REQUIRED: "等待计划确认", HUMAN_DECISION_REQUIRED: "需要你裁决", WAITING_DEPENDENCY: "等待前置任务", DISPATCH: "分派并开始", REQUEST_REVIEW: "提交验收", ACCEPT: "接受并收口", BLOCKED: "需要处理", RESUME: "恢复到待分配", NONE: "已收口" };
+  const STATUS_LABELS = { QUEUED: "待分配", IN_PROGRESS: "进行中", REVIEW: "待验收", BLOCKED: "已阻塞", PAUSED: "已暂停", DONE: "已收口", ARCHIVED: "已归档" };
 
   function renderTaskCard(task) {
     const assignment = task.assignment ? `<span class="task-chip route">${escapeHtml(task.assignment.route)}</span><span class="task-chip">${escapeHtml(task.assignment.executor)}</span>` : "";
@@ -647,7 +737,12 @@
 
   function renderDecisionCard(item) {
     if (item.kind === "plan") return `<article class="decision-card plan-decision"><div><span class="signal-pill">计划确认</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p></div><button class="primary-button" type="button" data-plan-action="approve">确认并开始</button></article>`;
+    if (item.kind === "runtime-decision") {
+      const options = (item.options || []).map((option) => `<button class="card-action${option.letter === item.recommended_option ? " approve" : ""}" type="button" data-runtime-decision="${escapeHtml(item.decision_id)}" data-decision-option="${escapeHtml(option.letter)}">${escapeHtml(option.label)}</button>`).join("");
+      return `<article class="decision-card"><div><span class="signal-pill">需要你决定</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p>${item.recommendation_reason ? `<small>建议：${escapeHtml(item.recommendation_reason)}</small>` : ""}</div><div class="card-actions">${options}</div></article>`;
+    }
     if (item.kind === "blocked") return `<article class="decision-card blocked-decision" data-decision-task="${escapeHtml(item.task_id)}"><div><span class="status-pill status-blocked">已阻塞</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p></div><div class="card-actions"><button class="card-action" type="button" data-decision="APPROVED">调整后重开</button></div></article>`;
+    if (item.kind === "paused") return `<article class="decision-card paused-decision"><div><span class="status-pill status-paused">已暂停</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p></div></article>`;
     return `<article class="decision-card" data-decision-task="${escapeHtml(item.task_id)}"><div><span class="signal-pill">Human Gate</span><h3>${escapeHtml(item.title)}</h3><p>验收条件：${escapeHtml(item.acceptance)}</p></div><div class="card-actions"><button class="card-action reject" type="button" data-decision="REJECTED">退回</button><button class="card-action approve" type="button" data-decision="APPROVED">批准并继续</button></div></article>`;
   }
 
@@ -680,7 +775,7 @@
     const petSlot = pet ? `<span class="workflow-pet" data-pet-id="${escapeHtml(pet.pet_id)}" aria-label="${escapeHtml(pet.label)}" title="${escapeHtml(pet.label)}"><span aria-hidden="true">${pet.glyph}</span></span>` : "";
     return `<button class="workflow-node status-${escapeHtml(task.status.toLowerCase())}${selected ? " selected" : ""}${pet ? " has-pet" : ""}" type="button" data-workflow-task="${escapeHtml(task.task_id)}" aria-pressed="${selected ? "true" : "false"}">
       <span class="workflow-node-head"><span class="workflow-node-id">${escapeHtml(task.public_label || task.title || task.task_id)}</span><span class="workflow-node-status"><i class="run-pulse" aria-hidden="true"></i>${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span></span>
-      ${agent}<span class="workflow-node-stage">${escapeHtml(task.stage || "自定义任务")}</span>
+      ${agent}<span class="workflow-node-stage">${escapeHtml(task.stage || task.title || "自定义任务")}</span>
       <span class="workflow-node-route">${route}<span>${task.attempts ? `第 ${task.attempts} 次运行` : "尚未运行"}</span></span>
       ${petSlot}</button>`;
   }
@@ -696,16 +791,20 @@
     return `<div class="workflow-groups">${groups}</div>`;
   }
 
-  function renderRunDetail(task) {
+  function renderRunDetail(task, runtimeState) {
     if (!task) return '<p class="empty-trace">选择一个节点查看运行轨迹。</p>';
     const assignment = task.assignment;
     const events = task.events && task.events.length
       ? `<ol class="event-trace">${task.events.map((event) => `<li><time>${escapeHtml(event.at)}</time><span>${escapeHtml(event.label)}</span></li>`).join("")}</ol>`
       : '<p class="empty-trace">任务尚未分配。分配后会记录适配器启动、心跳、产物与复核事件。</p>';
     const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action);
-    return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || "自定义任务")}</h3></div>
+    const runtimeControls = runtimeState && runtimeState.runtime && ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(task.action)
+      ? `<div class="runtime-controls"><label><span>模型</span><input data-runtime-model value="${escapeHtml(runtimeState.defaultModel || "")}" autocomplete="off"></label><label><span>执行适配器</span><select data-runtime-adapter>${(runtimeState.adapters || []).map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}" ${adapter.available ? "" : "disabled"}>${escapeHtml(adapter.adapter_id)}${adapter.available ? "" : " · 未配置"}</option>`).join("")}</select></label></div>`
+      : "";
+    return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || task.title || "自定义任务")}</h3></div>
       <dl class="run-detail-meta"><div><dt>模型</dt><dd>${escapeHtml(assignment ? assignment.model : "等待选择")}</dd></div><div><dt>执行适配器</dt><dd>${escapeHtml(assignment ? assignment.executor : "尚未分配")}</dd></div><div><dt>运行轮次</dt><dd>${task.attempts ? `Attempt ${String(task.attempts).padStart(2, "0")}` : "尚未运行"}</dd></div><div><dt>并行分支</dt><dd>${escapeHtml(task.parallel_group || "main")}</dd></div></dl>
       ${events}
+      ${runtimeControls}
       <div data-task-id="${escapeHtml(task.task_id)}"><button class="task-action" type="button" data-action="task" ${disabled ? "disabled" : ""}>${escapeHtml(ACTION_LABELS[task.action] || task.action)}</button></div>`;
   }
 
@@ -729,6 +828,8 @@
   function mount(doc) {
     const initialBoard = doc.defaultView && doc.defaultView.location ? String(doc.defaultView.location.hash || "").replace(/^#/, "") : "work";
     let state = selectBoard(createShowcaseState(), initialBoard);
+    const runtimeFetch = doc.defaultView && typeof doc.defaultView.fetch === "function" ? doc.defaultView.fetch.bind(doc.defaultView) : null;
+    const runtimeClient = createRuntimeClient(runtimeFetch);
     let selectedModule = "workflow-core";
     let moduleTopology = null;
     let moduleTopologySignature = "";
@@ -784,6 +885,16 @@
       byId("status-message").textContent = message;
     }
 
+    async function refreshRuntime() {
+      if (!runtimeClient) return false;
+      const activeBoard = state.activeBoard;
+      const payload = await runtimeClient.load();
+      state = selectBoard(runtimeStateFromPayload(payload), activeBoard);
+      render();
+      announce("已读取本地运行库");
+      return true;
+    }
+
     function render() {
       const focused = doc.activeElement;
       const focusToken = focused && focused.dataset
@@ -802,6 +913,12 @@
       byId("progress-copy").textContent = `${view.work.progress.done} / ${view.work.progress.total} 项已收口`;
       byId("progress-bar").style.width = `${view.work.progress.percent}%`;
       byId("current-phase").textContent = summary.running ? "并行执行中" : state.planApproved ? "运行与验收" : "工作地图待确认";
+      byId("data-source-mode").textContent = state.runtime ? "本地运行库 · 状态已持久化" : "结构演示 · 任务内容已匿名";
+      byId("source-note-title").textContent = state.runtime ? "本地运行状态" : "公开演示数据";
+      byId("source-note-copy").textContent = state.runtime ? "任务、运行、产物与裁决保存在当前 SQLite 运行库。模型密钥只从服务端环境变量读取。" : "只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。";
+      byId("work-source-label").textContent = state.runtime ? "真实运行状态" : "任务内容已匿名";
+      byId("reset-demo").textContent = state.runtime ? "刷新状态" : "重置演示";
+      byId("footer-mode").textContent = state.runtime ? "Local persistent runtime" : "Synthetic workflow showcase";
       doc.querySelectorAll('[role="tab"][data-board]').forEach((button) => {
         const active = button.dataset.board === view.activeBoard;
         button.classList.toggle("active", active);
@@ -866,7 +983,7 @@
       if (selectedTask) state.activeTaskId = selectedTask.task_id;
       byId("workflow-canvas").innerHTML = renderWorkflowCanvas(projection, state.activeTaskId);
       const selectedTaskView = selectedTask ? view.work.tasks[selectedTask.task_id] : null;
-      byId("run-detail").innerHTML = renderRunDetail(selectedTaskView);
+      byId("run-detail").innerHTML = renderRunDetail(selectedTaskView, state);
       byId("proposal-zone").innerHTML = renderProposal(proposal, view.work.lines);
 
       byId("decision-list").innerHTML = view.decision.pending.length ? view.decision.pending.map(renderDecisionCard).join("") : '<div class="empty-state"><span>✓</span><h3>当前没有待裁决事项</h3><p>新的计划确认、阻塞和 Human Gate 会集中出现在这里。</p></div>';
@@ -879,7 +996,7 @@
       }
     }
 
-    doc.addEventListener("click", (event) => {
+    doc.addEventListener("click", async (event) => {
       const boardButton = event.target.closest && event.target.closest("[data-board]");
       if (boardButton) {
         state = selectBoard(state, boardButton.dataset.board);
@@ -956,12 +1073,38 @@
         render();
         return;
       }
-      if (event.target.closest && event.target.closest("[data-add-proposal]")) { state = addTaskProposal(state, proposal); proposal = null; render(); return; }
+      if (event.target.closest && event.target.closest("[data-add-proposal]")) {
+        if (state.runtime && runtimeClient && proposal && proposal.status === "CANDIDATE") {
+          try {
+            const task = proposal.task;
+            await runtimeClient.createTask({
+              ...task,
+              workflow_id: task.line_id,
+              required_capabilities: task.capabilities || [],
+            });
+            proposal = null;
+            await refreshRuntime();
+          } catch (error) { announce(`任务未创建：${error.message}`); }
+        } else {
+          state = addTaskProposal(state, proposal);
+          proposal = null;
+          render();
+        }
+        return;
+      }
+      const runtimeDecision = event.target.closest && event.target.closest("[data-runtime-decision]");
+      if (runtimeDecision && runtimeClient) {
+        try {
+          await runtimeClient.resolveDecision(runtimeDecision.dataset.runtimeDecision, runtimeDecision.dataset.decisionOption);
+          await refreshRuntime();
+        } catch (error) { announce(`裁决未记录：${error.message}`); }
+        return;
+      }
       const decisionCard = event.target.closest && event.target.closest("[data-decision-task]");
       if (decisionCard && event.target.dataset.decision) {
         const taskId = decisionCard.dataset.decisionTask;
         state = recordDecision(state, taskId, event.target.dataset.decision);
-        if (event.target.dataset.decision === "APPROVED" && state.taskStates[taskId] === "BLOCKED") state.taskStates[taskId] = "UNASSIGNED";
+        if (event.target.dataset.decision === "APPROVED" && state.taskStates[taskId] === "BLOCKED") state.taskStates[taskId] = "QUEUED";
         render();
         return;
       }
@@ -975,7 +1118,34 @@
       const card = event.target.closest && event.target.closest("[data-task-id]");
       if (!card || event.target.dataset.action !== "task") return;
       const taskId = card.dataset.taskId;
-      if (actionForTask(state, taskId) === "HUMAN_DECISION_REQUIRED") state = selectBoard(state, "decision");
+      const action = actionForTask(state, taskId);
+      if (state.runtime && runtimeClient) {
+        try {
+          if (action === "ACCEPT") {
+            await runtimeClient.transitionTask(taskId, "DONE", "Accepted result");
+          } else if (action === "RESUME") {
+            await runtimeClient.transitionTask(taskId, "QUEUED", "Resumed by owner");
+          } else if (["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(action)) {
+            const adapter = doc.querySelector("[data-runtime-adapter]");
+            const model = doc.querySelector("[data-runtime-model]");
+            announce("正在连接执行适配器");
+            await runtimeClient.runTask(taskId, adapter ? adapter.value : "", model ? model.value : state.defaultModel);
+          } else {
+            announce("当前任务还不能执行这个动作");
+            return;
+          }
+          await refreshRuntime();
+        } catch (error) {
+          if (error.payload && error.payload.reason === "HUMAN_DECISION_REQUIRED") {
+            await refreshRuntime();
+            state = selectBoard(state, "decision");
+            render();
+            announce("任务需要你先做选择");
+          } else announce(`操作未执行：${error.message}`);
+        }
+        return;
+      }
+      if (action === "HUMAN_DECISION_REQUIRED") state = selectBoard(state, "decision");
       else state = applyTaskAction(state, taskId);
       render();
     });
@@ -1036,6 +1206,16 @@
       moduleView = zoomModuleView(moduleView, moduleView.scale * (event.deltaY > 0 ? .9 : 1.1), anchor);
       applyModuleView();
     }, { passive: false });
+    mapViewport.addEventListener("contextmenu", (event) => {
+      const moduleButton = event.target.closest && event.target.closest("[data-module-id]");
+      if (!moduleButton) return;
+      event.preventDefault();
+      selectedModule = moduleButton.dataset.moduleId;
+      moduleFocusEnabled = true;
+      render();
+      byId("module-annotation").focus();
+      announce("已打开当前模块的批注入口");
+    });
     mapViewport.addEventListener("keydown", (event) => {
       const arrows = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12] };
       if (!arrows[event.key]) return;
@@ -1059,15 +1239,66 @@
       proposal = proposeTaskFromPrompt(state, byId("task-prompt").value);
       render();
     });
-    doc.addEventListener("submit", (event) => {
+    byId("module-annotation-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const annotation = byId("module-annotation");
+      const candidate = proposeTaskFromModuleAnnotation(
+        state,
+        selectedModule,
+        annotation.value,
+      );
+      if (candidate.status !== "CANDIDATE") {
+        announce("请先填写模块批注");
+        return;
+      }
+      if (state.runtime && runtimeClient) {
+        try {
+          await runtimeClient.createTask({
+            ...candidate.task,
+            workflow_id: candidate.task.line_id,
+            required_capabilities: candidate.task.capabilities,
+          });
+          annotation.value = "";
+          await refreshRuntime();
+          state = selectBoard(state, "work");
+          render();
+          announce("模块批注已加入待分配任务");
+        } catch (error) {
+          announce(`批注任务未创建：${error.message}`);
+        }
+      } else {
+        state = addTaskProposal(state, candidate);
+        annotation.value = "";
+        render();
+        announce("模块批注已加入待分配任务");
+      }
+    });
+    doc.addEventListener("submit", async (event) => {
       const lineForm = event.target.closest && event.target.closest("[data-line-form]");
       if (!lineForm) return;
       event.preventDefault();
       const input = lineForm.querySelector("[data-line-name]");
-      state = createWorkline(state, input ? input.value : "");
+      const nextState = createWorkline(state, input ? input.value : "");
+      const createdLine = nextState.businessLines.at(-1);
+      if (state.runtime && runtimeClient) {
+        try {
+          await runtimeClient.createWorkflow({
+            workflow_id: createdLine.line_id,
+            name: createdLine.name,
+            caption: createdLine.caption,
+            layout: createdLine.layout,
+            goal: createdLine.name,
+          });
+          await refreshRuntime();
+          state = selectBusinessLine(state, createdLine.line_id);
+        } catch (error) {
+          announce(`工作线未创建：${error.message}`);
+          return;
+        }
+      } else state = nextState;
       lineComposerOpen = false;
       render();
-      announce(`已创建工作线：${state.businessLines.at(-1).name}`);
+      announce(`已创建工作线：${createdLine.name}`);
     });
     byId("board-tabs").addEventListener("keydown", (event) => {
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
@@ -1084,7 +1315,11 @@
       render();
       tabs[nextIndex].focus();
     });
-    byId("reset-demo").addEventListener("click", () => {
+    byId("reset-demo").addEventListener("click", async () => {
+      if (state.runtime && runtimeClient) {
+        try { await refreshRuntime(); } catch (error) { announce(`状态未刷新：${error.message}`); }
+        return;
+      }
       state = createShowcaseState();
       selectedModule = "workflow-core";
       moduleTopology = null;
@@ -1096,6 +1331,7 @@
       render();
     });
     render();
+    if (runtimeClient) refreshRuntime().catch(() => announce("未连接本地运行库，当前使用合成演示"));
   }
 
   return {
@@ -1109,6 +1345,7 @@
     buildModuleTopology,
     createDragClickGuard,
     createDemoState,
+    createRuntimeClient,
     createShowcaseState,
     createWorkline,
     moduleGraph,
@@ -1117,10 +1354,13 @@
     petForTask,
     progress,
     proposeTaskFromPrompt,
+    proposeTaskFromModuleAnnotation,
     recordDecision,
     renderDecisionCard,
+    renderWorkflowNode,
     renderModuleTopology,
     renderTaskCard,
+    runtimeStateFromPayload,
     scrollActiveBoardIntoView,
     selectBoard,
     selectBusinessLine,

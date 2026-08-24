@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+UPSTREAM_CONTEXT_CHARACTER_LIMIT = 24_000
+
+
+def build_context_pack(
+    task: dict[str, Any],
+    domain_profile: dict[str, Any] | None = None,
+    *,
+    upstream_artifacts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build the smallest transferable task context without copying memory bodies."""
+    profile = domain_profile or {}
+    remaining = UPSTREAM_CONTEXT_CHARACTER_LIMIT
+    bounded_upstream = []
+    for artifact in upstream_artifacts or []:
+        if remaining <= 0:
+            break
+        content = str(artifact.get("content") or "")
+        excerpt = content[:remaining]
+        remaining -= len(excerpt)
+        bounded_upstream.append(
+            {
+                "artifact_id": artifact.get("artifact_id"),
+                "task_id": artifact.get("task_id"),
+                "summary": artifact.get("summary") or "",
+                "content": excerpt,
+                "truncated": len(excerpt) < len(content),
+            }
+        )
+    return {
+        "schema_version": "personal-ai-os.context-pack/v1",
+        "task_id": task.get("task_id"),
+        "goal": task.get("title") or task.get("public_label") or task.get("task_id"),
+        "acceptance": task.get("acceptance") or "",
+        "current_state": task.get("status", "QUEUED"),
+        "next_action": task.get("next_action") or "produce one inspectable result",
+        "constraints": list(task.get("constraints") or []),
+        "artifact_refs": list(task.get("artifact_refs") or []),
+        "task_context": dict(task.get("context") or {}),
+        "upstream_artifacts": bounded_upstream,
+        "domain_id": profile.get("domain_id") or task.get("domain_id") or "general",
+        "persona": profile.get("persona") or "direct",
+        "memory_refs": list(profile.get("memory_refs") or []),
+        "instruction_refs": list(profile.get("instruction_refs") or []),
+    }
+
+
+def build_secretary_brief(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Project runtime truth into a compact attention and continuity brief."""
+    tasks = snapshot.get("tasks", [])
+    decisions = [item for item in snapshot.get("decisions", []) if item.get("status") == "PENDING"]
+    counts = {
+        state.lower(): sum(task.get("status") == state for task in tasks)
+        for state in ("QUEUED", "IN_PROGRESS", "REVIEW", "BLOCKED", "PAUSED", "DONE")
+    }
+    next_actions = []
+    if decisions:
+        next_actions.append({"kind": "decision", "task_id": decisions[0]["task_id"], "decision_id": decisions[0]["decision_id"]})
+    review_task = next((task for task in tasks if task.get("status") == "REVIEW"), None)
+    if review_task:
+        next_actions.append({"kind": "review", "task_id": review_task["task_id"]})
+    queued_task = next((task for task in tasks if task.get("status") == "QUEUED"), None)
+    if queued_task:
+        next_actions.append({"kind": "dispatch", "task_id": queued_task["task_id"]})
+    return {
+        "schema_version": "personal-ai-os.secretary-brief/v1",
+        "summary": (
+            f"{counts['in_progress']} running, {counts['review']} awaiting review, "
+            f"{len(decisions)} awaiting a decision."
+        ),
+        "attention": {**counts, "decisions": len(decisions)},
+        "next_actions": next_actions[:3],
+        "authority": "runtime-store",
+    }

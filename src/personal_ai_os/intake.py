@@ -150,7 +150,7 @@ def build_candidate_plan(snapshot: dict[str, Any]) -> dict[str, Any]:
             {
                 "task_id": "workspace:dirty-boundary",
                 "title": "确认现有改动归属与保留范围",
-                "status": "UNASSIGNED",
+                "status": "QUEUED",
                 "human_gate": True,
                 "summary": f"检测到 {git_state.get('dirty_count', 0)} 项未提交变更；确认前保持只读。",
             }
@@ -172,19 +172,19 @@ def build_candidate_plan(snapshot: dict[str, Any]) -> dict[str, Any]:
         business_lines.append(
             {
                 **line,
-                "status": "UNASSIGNED",
+                "status": "QUEUED",
                 "tasks": [
                     {
                         "task_id": f"{line_id}:scope",
                         "title": f"确认{line['name']}目标与边界",
-                        "status": "UNASSIGNED",
+                        "status": "QUEUED",
                         "human_gate": True,
                         "depends_on": [item["task_id"] for item in preflight_tasks],
                     },
                     {
                         "task_id": f"{line_id}:first-deliverable",
                         "title": f"生成{line['name']}首个可验收结果",
-                        "status": "UNASSIGNED",
+                        "status": "QUEUED",
                         "depends_on": [f"{line_id}:scope"],
                         "human_gate": False,
                     },

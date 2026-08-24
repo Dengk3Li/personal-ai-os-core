@@ -25,7 +25,7 @@
       <div class="overview-copy">
         <h2 id="overview-title">让长任务真正<br>持续运转</h2>
         <p id="goal"></p>
-        <span class="privacy-marker">结构演示 · 任务内容已匿名</span>
+        <span class="privacy-marker" id="data-source-mode">结构演示 · 任务内容已匿名</span>
       </div>
       <dl class="run-summary" aria-label="长期任务运行摘要">
         <div><dt>任务总量</dt><dd id="metric-total">0</dd></div>
@@ -60,8 +60,8 @@
         </section>
 
         <div class="privacy-note">
-          <strong>公开演示数据</strong>
-          <span>只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。</span>
+          <strong id="source-note-title">公开演示数据</strong>
+          <span id="source-note-copy">只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。</span>
         </div>
         <div class="cli-mini"><span>操作入口</span><code>personal-ai-os plan .</code></div>
       </aside>
@@ -79,7 +79,7 @@
             <section class="map-frame" aria-label="工作区全局模块拓扑">
               <div class="map-heading">
                 <div><strong>工作区系统流</strong><span><b id="module-count">0</b> 个模块 · <b id="module-edge-count">0</b> 条连接 · <b id="module-unresolved-count">0</b> 个待接入</span></div>
-                <span>拖动模块可整理布局</span>
+                <span>拖动整理布局 · 右键添加批注</span>
               </div>
               <div class="map-toolbar" aria-label="模块地图控制">
                 <button type="button" data-map-zoom="out">缩小</button>
@@ -103,6 +103,11 @@
                 <div><dt>需要的 capability</dt><dd id="module-requires"></dd></div>
               </dl>
               <button class="map-focus-button" type="button" data-map-focus-toggle>只看上下游</button>
+              <form class="module-annotation" id="module-annotation-form">
+                <label for="module-annotation"><b>模块批注</b><span>批注会生成一项可分派的修正任务。</span></label>
+                <textarea id="module-annotation" maxlength="500" placeholder="记录接口、依赖或流程问题" required></textarea>
+                <button type="submit">创建修正任务</button>
+              </form>
             </aside>
           </div>
 
@@ -136,7 +141,7 @@
         <section class="board-panel" id="panel-work" data-panel="work" role="tabpanel" aria-labelledby="tab-work">
           <div class="feed-heading">
             <div><h2>工作进度</h2><p>选择一个工作流，查看任务如何分配、并行和重复执行。</p></div>
-            <span class="count-chip">任务内容已匿名</span>
+            <span class="count-chip" id="work-source-label">任务内容已匿名</span>
           </div>
 
           <nav class="line-tabs" id="line-tabs" aria-label="工作流"></nav>
@@ -185,7 +190,7 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · Synthetic workflow showcase · v0.6.0</footer>
+  <footer>Personal AI OS · <span id="footer-mode">Synthetic workflow showcase</span> · v0.6.0</footer>
   <script src="app.js"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>

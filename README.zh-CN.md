@@ -4,7 +4,9 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 
 单个 AI 对话适合处理边界清楚的小任务。任务一旦跨越多次对话，新的对话需要重新核验旧内容；计划生成后缺少稳定的推进方式；多个执行分支也很快变得难以检查。Personal AI OS 补上长期目标和单次 AI 运行之间的操作层。
 
-[English](README.md) · [v0.6 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.6.md)
+[English](README.md) · [v0.6 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.6.md) · [产品研究](docs/PRODUCT_RESEARCH_V0.6.zh-CN.md)
+
+它不打算重复做一套通用 Agent 工具箱。浏览器、终端、定时任务、记忆、子 Agent 和远程运行已经有成熟产品。Personal AI OS 处理这些执行器之上的问题：工作区结构、可移交的任务现场、证据验收、人工决定和跨执行器连续性。
 
 ## v0.6 工作流演示
 
@@ -22,7 +24,28 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 make workbench
 ```
 
-打开 [http://127.0.0.1:8787](http://127.0.0.1:8787)。演示状态只保存在浏览器内存中，不读取本地工作区。
+打开 [http://127.0.0.1:8787](http://127.0.0.1:8787)。静态模式只使用浏览器内存，不读取本地工作区。
+
+## 可持久化运行 MVP
+
+v0.6 已加入一个只依赖 Python 标准库和 SQLite 的本地运行时。它保存工作流、任务、运行、事件、产物和决定，并通过有限 API 驱动同一个工作台。首个真实模型 Adapter 使用 OpenAI-compatible Chat Completions 协议，可以接入 DeepSeek 等兼容服务；凭据不进入仓库和 SQLite。每次运行都会接收当前任务的本地上下文，以及各项已完成依赖的当前验收产物；上下文总量受到明确限制。
+
+```bash
+python3 -m pip install --no-deps -e .
+personal-ai-os runtime init \
+  --store .personal-ai-os/runtime.db \
+  --preset science
+
+export PERSONAL_AI_OS_API_BASE="https://你的兼容接口.example/v1"
+export PERSONAL_AI_OS_API_KEY="只保存在本机环境变量中的密钥"
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --model "你的模型 ID"
+```
+
+打开 [http://127.0.0.1:8787](http://127.0.0.1:8787)。API 可用时，页面会从合成演示切换到本地运行库。创建工作线和任务、启动模型、接受结果、记录裁决都会写入 SQLite。服务重启后，任务、运行轨迹和决定仍可读回。
+
+当前 Adapter 会登记模型的终态输出并送入验收。同一个 runtime 服务进程会拒绝同一任务的并发派发；一个 SQLite 运行库只允许一个 runtime 写入进程。新任务不能伪造完成证据，本地写接口只接受同源 JSON 请求。跨进程派发租约、流式事件、心跳、取消、后台执行、Codex / VS Code 控制、远程机器适配和具备公开许可的动画宠物素材仍在后续工作中；静态演示只展示这些事件的结构，不把它们说成实时能力。
 
 ## 操作闭环
 
@@ -47,7 +70,7 @@ flowchart LR
 
 | 入口 | 负责什么 |
 |---|---|
-| 模块地图 | 在可拖动、可缩放的全局拓扑中查看模块层级、真实依赖、上下游关系、可用状态和可替换插槽。 |
+| 模块地图 | 在可拖动、可缩放的全局拓扑中查看模块层级、真实依赖、上下游关系、可用状态和可替换插槽；模块批注可转成当前工作流中的修正任务。 |
 | 工作进度 | 查看任务数量、分配情况、Loop、并行分支、重复运行和节点轨迹。 |
 | 待我决定 | 集中处理计划确认、阻塞和 Human Gate。 |
 
@@ -101,8 +124,12 @@ personal-ai-os spec
 | 动态路由 | 按能力和上下文要求选择满足条件的最小执行层。 |
 | 任务分配 | 选择能力兼容且仍有容量的执行者。 |
 | 模块组合 | 解析带版本的 capability manifest，组合断裂时停止。 |
+| 模块问题交接 | 把选中模块的批注转成可持久、可分派的任务，不建立第二套任务系统。 |
 | 只读摄取 | 读取本地结构并提出工作地图，不写入目标项目。 |
 | 连续接续 | 保存下一次运行恢复和核验所需的状态。 |
+| 持久化运行时 | 用 SQLite 保存任务、运行、事件、产物和决定，并支持重启后重放。 |
+| 秘书简报 | 从同一状态生成进行中、待验收、阻塞和下一动作摘要，不复制私人记忆正文。 |
+| 兼容模型适配 | 通过已配置的 Chat Completions-compatible 接口执行一个有边界的短任务。 |
 
 ## 安装与测试
 
@@ -117,14 +144,15 @@ make test
 ## 仓库结构
 
 ```text
-src/personal_ai_os/   计划、路由、模块、摄取、操作、状态与恢复合同
-workbench/            可交互的匿名工作流演示
+src/personal_ai_os/   计划、路由、运行时、Adapter、秘书层、模块、状态与恢复合同
+workbench/            可连接本地运行库的工作台，并保留匿名静态演示
 tests/                Python 与工作台行为测试
 examples/             合成状态记录和示例模块 manifest
 .github/workflows/    Python 3.10-3.12 安装与测试矩阵
 PRODUCT.md            稳定的产品边界
 docs/DEVELOPMENT_TASKBOOK_V0.6.md  运行时、工作流、宠物与适配器规格
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 封包验收边界
+docs/PRODUCT_RESEARCH_V0.6.zh-CN.md  产品空缺、证据和可证伪的 MVP 验收
 ```
 
 ## 公开边界与许可证

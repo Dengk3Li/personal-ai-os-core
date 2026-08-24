@@ -44,6 +44,27 @@ class WorkflowStateTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual("GIT_CLOSURE_DONE_REQUIRED", result["reason"])
 
+    def test_non_git_task_requires_a_registered_result_instead_of_git_closure(self):
+        transition_task = getattr(personal_ai_os, "transition_task", None)
+        missing = transition_task(
+            {"task_id": "task-001", "status": "IN_PROGRESS", "requires_git_closure": False},
+            "REVIEW",
+            by="agent:demo",
+        )
+        ready = transition_task(
+            {
+                "task_id": "task-001",
+                "status": "IN_PROGRESS",
+                "requires_git_closure": False,
+                "result_ref": "artifact-001",
+            },
+            "REVIEW",
+            by="agent:demo",
+        )
+
+        self.assertEqual("RESULT_EVIDENCE_REQUIRED", missing["reason"])
+        self.assertTrue(ready["ok"])
+
     def test_block_and_resume_are_explicit_and_reversible(self):
         transition_task = getattr(personal_ai_os, "transition_task", None)
         self.assertTrue(callable(transition_task), "transition_task must be public")

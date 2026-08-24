@@ -8,3 +8,6 @@ dist/
 *.egg-info/
 .DS_Store
 .worktrees/
+.personal-ai-os/
+*.db-wal
+*.db-shm

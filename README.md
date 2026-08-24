@@ -4,7 +4,9 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.6 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.6.md)
+[中文说明](README.zh-CN.md) · [v0.6 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.6.md) · [product research](docs/PRODUCT_RESEARCH_V0.6.zh-CN.md)
+
+The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
 ## v0.6 workflow showcase
 
@@ -22,7 +24,28 @@ Eleven tasks are assigned, three are running, two await review, six are closed, 
 make workbench
 ```
 
-Open [http://127.0.0.1:8787](http://127.0.0.1:8787). The demo stays in browser memory and does not read a local workspace.
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787). In static mode the demo stays in browser memory and does not read a local workspace.
+
+## Persistent runtime MVP
+
+v0.6 also includes a small local runtime built with Python and SQLite. It stores workflows, tasks, runs, events, artifacts, and decisions, and serves the same workbench through a finite local API. The first real model adapter uses the OpenAI-compatible Chat Completions protocol, so it can connect to compatible providers without putting credentials in the repository. Each run receives the task's local context and the current accepted artifact from every completed dependency, with a bounded context size.
+
+```bash
+python3 -m pip install --no-deps -e .
+personal-ai-os runtime init \
+  --store .personal-ai-os/runtime.db \
+  --preset science
+
+export PERSONAL_AI_OS_API_BASE="https://your-compatible-endpoint.example/v1"
+export PERSONAL_AI_OS_API_KEY="your-local-secret"
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --model "your-model-id"
+```
+
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787). When the API is present, the page switches from the synthetic fixture to the local runtime. Creating a workline or task, starting a model run, accepting a result, and recording a decision now write to SQLite. The API key is read from the server process and is never written to the store.
+
+The current adapter records terminal model output and moves it to review. Within one runtime service process, concurrent dispatch of the same task is rejected; new tasks cannot claim completed evidence, and write endpoints require JSON from the same local origin. One SQLite store must have one runtime writer. Cross-process dispatch leases, streaming events, heartbeats, cancellation, background execution, Codex/VS Code control, remote-machine adapters, and licensed animated pet assets remain follow-up work; the static showcase demonstrates those event shapes but does not claim they are live.
 
 ## Operating model
 
@@ -47,7 +70,7 @@ Inspection and planning produce read-only candidates. Workspace changes begin af
 
 | Entrance | Responsibility |
 |---|---|
-| Module Map | Shows layers, real dependencies, upstream and downstream relationships, availability, and replaceable slots in a draggable, zoomable topology. |
+| Module Map | Shows layers, real dependencies, upstream and downstream relationships, availability, and replaceable slots in a draggable, zoomable topology. A module annotation becomes a bounded task in the active workflow. |
 | Work Progress | Shows allocation totals, loops, parallel branches, repeated attempts, and the selected node's run trace. |
 | Decisions | Collects plan approval, blocked work, and Human Gates in one place. |
 
@@ -101,8 +124,12 @@ The commands emit machine-readable JSON. `inspect` and `plan` remain read-only; 
 | Dynamic routing | Chooses the smallest available tier that meets capability and context requirements. |
 | Task assignment | Selects a compatible executor with capacity. |
 | Module composition | Resolves versioned capability manifests and fails closed on broken graphs. |
+| Module issue handoff | Turns a selected module annotation into a persistent, assignable task without creating a second task system. |
 | Read-only intake | Inspects local structure and proposes a work map without modifying the target. |
 | Continuity | Preserves enough state to resume and verify a later run. |
+| Persistent runtime | Stores task, run, event, artifact, and decision records in SQLite and replays them after restart. |
+| Secretary brief | Projects active work, pending review, blockers, and next actions without copying private memory bodies. |
+| Compatible model adapter | Executes one bounded task through a configured Chat Completions-compatible endpoint. |
 
 ## Install and test
 
@@ -117,14 +144,15 @@ make test
 ## Repository map
 
 ```text
-src/personal_ai_os/   planning, routing, module, intake, operation, state, and recovery contracts
-workbench/            interactive anonymous workflow showcase
+src/personal_ai_os/   planning, routing, runtime, adapter, secretary, module, state, and recovery contracts
+workbench/            interactive runtime client with an anonymous static fallback
 tests/                Python and workbench behavior tests
 examples/             synthetic state records and an example module manifest
 .github/workflows/    Python 3.10-3.12 install and test matrix
 PRODUCT.md            durable product boundaries
 docs/DEVELOPMENT_TASKBOOK_V0.6.md  runtime, workflow, pet, and adapter specification
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 package acceptance boundary
+docs/PRODUCT_RESEARCH_V0.6.zh-CN.md  product gap, evidence, and falsifiable MVP tests
 ```
 
 ## Public boundary and license

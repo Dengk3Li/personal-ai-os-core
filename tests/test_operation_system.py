@@ -154,7 +154,7 @@ class OperationCliTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(operation_spec()["operations"], payload["operations"])
-        self.assertEqual("UNASSIGNED", payload["task_states"][0]["state"])
+        self.assertEqual("QUEUED", payload["task_states"][0]["state"])
 
     def test_modules_command_composes_discovered_manifests_without_loading_code(self):
         with tempfile.TemporaryDirectory() as directory:

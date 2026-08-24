@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from .states import TASK_STATE_LABELS, TASK_STATES, TERMINAL_STATES
 
 _TASK_STATES = [
-    {"state": "UNASSIGNED", "label": "待分配", "terminal": False},
-    {"state": "IN_PROGRESS", "label": "进行中", "terminal": False},
-    {"state": "REVIEW", "label": "待验收", "terminal": False},
-    {"state": "BLOCKED", "label": "已阻塞", "terminal": False},
-    {"state": "CLOSED", "label": "已收口", "terminal": True},
-    {"state": "ARCHIVED", "label": "已归档", "terminal": True},
-    {"state": "COMPLETED", "label": "已完成", "terminal": True},
+    {
+        "state": state,
+        "label": TASK_STATE_LABELS[state],
+        "terminal": state in TERMINAL_STATES,
+    }
+    for state in TASK_STATES
 ]
 
 _OPERATIONS = [
@@ -62,7 +62,7 @@ def operation_spec() -> dict[str, object]:
     """Return the stable operating protocol shared by the CLI and workbench."""
 
     return {
-        "spec_version": "0.5.0",
+        "spec_version": "0.6.0",
         "principle": "read_only_until_confirmed",
         "operations": deepcopy(_OPERATIONS),
         "task_states": deepcopy(_TASK_STATES),

@@ -3,17 +3,9 @@ from __future__ import annotations
 import datetime
 from typing import Any
 
+from .states import OVERLAY_STATES, TASK_STATES
 
-STATES = {
-    "QUEUED",
-    "IN_PROGRESS",
-    "REVIEW",
-    "DONE",
-    "ARCHIVED",
-    "BLOCKED",
-    "PAUSED",
-}
-OVERLAY_STATES = {"BLOCKED", "PAUSED"}
+STATES = set(TASK_STATES)
 STRUCTURAL_TRANSITIONS = {
     ("QUEUED", "IN_PROGRESS"),
     ("QUEUED", "DONE"),
@@ -89,13 +81,16 @@ def transition_task(
         if decision_ref and card.get("decision_status") != "RECORDED":
             return _blocked(frm, to, "DECISION_RECORD_REQUIRED")
 
-    closure = card.get("git_closure") or {}
-    if to == "REVIEW" and not closure.get("review_ready"):
-        return _blocked(frm, to, "GIT_CLOSURE_REVIEW_REQUIRED")
-    if to == "DONE" and not closure.get("done_ready"):
-        return _blocked(frm, to, "GIT_CLOSURE_DONE_REQUIRED")
-    if to == "ARCHIVED" and not closure.get("archive_ready"):
-        return _blocked(frm, to, "GIT_CLOSURE_ARCHIVE_REQUIRED")
+    if card.get("requires_git_closure", True):
+        closure = card.get("git_closure") or {}
+        if to == "REVIEW" and not closure.get("review_ready"):
+            return _blocked(frm, to, "GIT_CLOSURE_REVIEW_REQUIRED")
+        if to == "DONE" and not closure.get("done_ready"):
+            return _blocked(frm, to, "GIT_CLOSURE_DONE_REQUIRED")
+        if to == "ARCHIVED" and not closure.get("archive_ready"):
+            return _blocked(frm, to, "GIT_CLOSURE_ARCHIVE_REQUIRED")
+    elif to in {"REVIEW", "DONE"} and not card.get("result_ref"):
+        return _blocked(frm, to, "RESULT_EVIDENCE_REQUIRED")
 
     if resumed:
         event_name = "UNBLOCKED" if frm == "BLOCKED" else "RESUMED"
