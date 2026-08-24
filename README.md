@@ -13,8 +13,8 @@ The public workbench uses an anonymous synthetic fixture. It keeps workflow stru
 The default fixture contains 18 tasks across three workflow shapes:
 
 - a scientific workflow coordinated by Hypothesis, Protocol Design, Autonomous Experiment, Data Analysis, and Feedback Optimization agents, with parallel experiment paths;
-- a VC meeting-notes workflow from recordings, decks, and project material through extraction, drafting, review, and delivery;
-- a VC industry-research / investment-report workflow from broad collection and a data pool through argument planning, chapter writing, layout, and illustration.
+- a meeting-notes workflow from recordings, decks, and project material through extraction, drafting, review, and delivery;
+- an industry-research / professional-report workflow from broad collection and a data pool through argument planning, chapter writing, layout, and illustration.
 
 Eleven tasks are assigned, three are running, two await review, six are closed, and four repeated runs remain visible. Select any node to inspect its agent, model, execution adapter, attempt number, heartbeat, and artifact events. Running nodes show a model-specific working pet.
 

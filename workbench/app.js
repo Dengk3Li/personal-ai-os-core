@@ -23,8 +23,8 @@
 
   const SHOWCASE_WORKFLOWS = [
     { line_id: "research", name: "科研线", caption: "五类 Agent 协作 · 多实验路径 · 反馈进入下一轮", layout: "loop", stages: ["科学假设", "Protocol 设计", "自主实验", "数据分析与反馈"] },
-    { line_id: "vc-meeting", name: "VC · 会议纪要", caption: "原始材料、信息抽取、Draft 与内容审核", layout: "milestones", stages: ["获取原件", "信息抽取", "生成 Draft", "审核定稿"] },
-    { line_id: "vc-report", name: "VC · 行业研究 / 投决", caption: "全网收集、Data pool、报告规划、章节生产与视觉呈现", layout: "branch", stages: ["广泛收集", "Data pool", "论证规划", "写作与视觉"] },
+    { line_id: "meeting-notes", name: "会议纪要", caption: "原始材料、信息抽取、Draft 与内容审核", layout: "milestones", stages: ["获取原件", "信息抽取", "生成 Draft", "审核定稿"] },
+    { line_id: "industry-report", name: "行业研究 / 专业报告", caption: "全网收集、Data pool、报告规划、章节生产与视觉呈现", layout: "branch", stages: ["广泛收集", "Data pool", "论证规划", "写作与视觉"] },
   ];
 
   const SHOWCASE_TASKS = [
@@ -35,17 +35,17 @@
     { task_id: "flow-a-05", public_label: "任务 A-05", line_id: "research", agent_role: "自主实验执行 Agent", stage: "路径 β · 动作编排与异常诊断", iteration: 3, parallel_group: "branch-beta", attempts: 0, depends_on: ["flow-a-03"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 96000 },
     { task_id: "flow-a-06", public_label: "任务 A-06", line_id: "research", agent_role: "数据分析 Agent", stage: "证据更新、数据分析与结论产出", iteration: 4, parallel_group: "main", attempts: 0, depends_on: ["flow-a-04", "flow-a-05"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 76000 },
     { task_id: "flow-a-07", public_label: "任务 A-07", line_id: "research", agent_role: "反馈优化 Agent", stage: "反馈优化、下轮决策与路径更新", iteration: 4, parallel_group: "gate", attempts: 0, depends_on: ["flow-a-06"], human_gate: true, complexity: "deep", capabilities: ["research"], estimated_tokens: 36000 },
-    { task_id: "flow-b-01", public_label: "任务 B-01", line_id: "vc-meeting", agent_role: "材料摄取 Agent", stage: "获取录音、BP 与项目材料原件", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 18000 },
-    { task_id: "flow-b-02", public_label: "任务 B-02", line_id: "vc-meeting", agent_role: "信息抽取 Agent", stage: "抽取事实、观点、数字与待确认项", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-b-01"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 32000 },
-    { task_id: "flow-b-03", public_label: "任务 B-03", line_id: "vc-meeting", agent_role: "Draft Agent", stage: "生成结构化会议纪要 Draft", iteration: 3, parallel_group: "main", attempts: 3, depends_on: ["flow-b-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 44000 },
-    { task_id: "flow-b-04", public_label: "任务 B-04", line_id: "vc-meeting", agent_role: "内容审核 Agent", stage: "核对归因、遗漏与表达边界", iteration: 4, parallel_group: "gate", attempts: 0, depends_on: ["flow-b-03"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 42000 },
-    { task_id: "flow-b-05", public_label: "任务 B-05", line_id: "vc-meeting", agent_role: "交付 Agent", stage: "定稿并生成可交付版本", iteration: 5, parallel_group: "main", attempts: 0, depends_on: ["flow-b-04"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 26000 },
-    { task_id: "flow-c-01", public_label: "任务 C-01", line_id: "vc-report", agent_role: "广域检索 Agent", stage: "全网广泛收集信息与来源", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
-    { task_id: "flow-c-02", public_label: "任务 C-02", line_id: "vc-report", agent_role: "Data pool Agent", stage: "建立 Data pool 并提取结构化数据", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-c-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
-    { task_id: "flow-c-03", public_label: "任务 C-03", line_id: "vc-report", agent_role: "报告规划 Agent", stage: "多轮沟通形成结构与论证线", iteration: 3, parallel_group: "plan", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "deep", capabilities: ["research", "writing"], estimated_tokens: 96000 },
-    { task_id: "flow-c-04", public_label: "任务 C-04", line_id: "vc-report", agent_role: "视觉规划 Agent", stage: "规划图表、配图与版式说明", iteration: 3, parallel_group: "visual", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 42000 },
-    { task_id: "flow-c-05", public_label: "任务 C-05", line_id: "vc-report", agent_role: "章节写作 Agent", stage: "按章节动态分配模型并行撰写", iteration: 4, parallel_group: "chapters", attempts: 0, depends_on: ["flow-c-03", "flow-c-04"], human_gate: false, complexity: "deep", capabilities: ["writing"], estimated_tokens: 120000 },
-    { task_id: "flow-c-06", public_label: "任务 C-06", line_id: "vc-report", agent_role: "排版与配图 Agent", stage: "统一排版、配图与最终审核", iteration: 5, parallel_group: "gate", attempts: 0, depends_on: ["flow-c-05"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 76000 },
+    { task_id: "flow-b-01", public_label: "任务 B-01", line_id: "meeting-notes", agent_role: "材料摄取 Agent", stage: "获取录音、演示材料与项目资料原件", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 18000 },
+    { task_id: "flow-b-02", public_label: "任务 B-02", line_id: "meeting-notes", agent_role: "信息抽取 Agent", stage: "抽取事实、观点、数字与待确认项", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-b-01"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 32000 },
+    { task_id: "flow-b-03", public_label: "任务 B-03", line_id: "meeting-notes", agent_role: "Draft Agent", stage: "生成结构化会议纪要 Draft", iteration: 3, parallel_group: "main", attempts: 3, depends_on: ["flow-b-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 44000 },
+    { task_id: "flow-b-04", public_label: "任务 B-04", line_id: "meeting-notes", agent_role: "内容审核 Agent", stage: "核对归因、遗漏与表达边界", iteration: 4, parallel_group: "gate", attempts: 0, depends_on: ["flow-b-03"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 42000 },
+    { task_id: "flow-b-05", public_label: "任务 B-05", line_id: "meeting-notes", agent_role: "交付 Agent", stage: "定稿并生成可交付版本", iteration: 5, parallel_group: "main", attempts: 0, depends_on: ["flow-b-04"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 26000 },
+    { task_id: "flow-c-01", public_label: "任务 C-01", line_id: "industry-report", agent_role: "广域检索 Agent", stage: "全网广泛收集信息与来源", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
+    { task_id: "flow-c-02", public_label: "任务 C-02", line_id: "industry-report", agent_role: "Data pool Agent", stage: "建立 Data pool 并提取结构化数据", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-c-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
+    { task_id: "flow-c-03", public_label: "任务 C-03", line_id: "industry-report", agent_role: "报告规划 Agent", stage: "多轮沟通形成结构与论证线", iteration: 3, parallel_group: "plan", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "deep", capabilities: ["research", "writing"], estimated_tokens: 96000 },
+    { task_id: "flow-c-04", public_label: "任务 C-04", line_id: "industry-report", agent_role: "视觉规划 Agent", stage: "规划图表、配图与版式说明", iteration: 3, parallel_group: "visual", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 42000 },
+    { task_id: "flow-c-05", public_label: "任务 C-05", line_id: "industry-report", agent_role: "章节写作 Agent", stage: "按章节动态分配模型并行撰写", iteration: 4, parallel_group: "chapters", attempts: 0, depends_on: ["flow-c-03", "flow-c-04"], human_gate: false, complexity: "deep", capabilities: ["writing"], estimated_tokens: 120000 },
+    { task_id: "flow-c-06", public_label: "任务 C-06", line_id: "industry-report", agent_role: "排版与配图 Agent", stage: "统一排版、配图与最终审核", iteration: 5, parallel_group: "gate", attempts: 0, depends_on: ["flow-c-05"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 76000 },
   ];
 
   const MODULES = [
@@ -608,7 +608,7 @@
     const lineId = showcase ? state.activeLineId : writing ? "writing" : research ? "research" : "product";
     const complexity = /复杂|全面|系统性|实验/.test(text) ? "deep" : "standard";
     const capabilities = showcase
-      ? lineId === "research" ? ["research"] : lineId === "vc-report" ? ["research", "writing"] : ["writing"]
+      ? lineId === "research" ? ["research"] : lineId === "industry-report" ? ["research", "writing"] : ["writing"]
       : lineId === "product" ? ["engineering"] : lineId === "research" ? ["research"] : ["writing"];
     const task = { task_id: `created-${state.tasks.length + 1}`, public_label: `任务 N-${String(state.tasks.length + 1).padStart(2, "0")}`, line_id: lineId, title: text, acceptance: "产出可检查、可继续推进的阶段结果", stage: "待拆解", iteration: 1, parallel_group: "main", attempts: 0, events: [], depends_on: [], human_gate: false, complexity, capabilities, estimated_tokens: complexity === "deep" ? 120000 : 48000, status: "UNASSIGNED" };
     return { status: "CANDIDATE", line_id: lineId, task, route: routeTask(task) };

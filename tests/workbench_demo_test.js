@@ -119,13 +119,13 @@ test("the research preset uses five science agents and parallel experiment paths
   assert.ok(repeated.events.some((event) => event.kind === "heartbeat"));
 });
 
-test("showcase worklines are research and two reusable VC presets", () => {
+test("showcase worklines are research and two reusable document presets", () => {
   const state = workbench.createShowcaseState();
 
-  assert.deepEqual(state.businessLines.map((line) => line.line_id), ["research", "vc-meeting", "vc-report"]);
+  assert.deepEqual(state.businessLines.map((line) => line.line_id), ["research", "meeting-notes", "industry-report"]);
   assert.equal(state.businessLines[0].name, "科研线");
-  assert.equal(state.businessLines[1].name, "VC · 会议纪要");
-  assert.equal(state.businessLines[2].name, "VC · 行业研究 / 投决");
+  assert.equal(state.businessLines[1].name, "会议纪要");
+  assert.equal(state.businessLines[2].name, "行业研究 / 专业报告");
 });
 
 test("a user can create and enter a new browser-style workline", () => {
