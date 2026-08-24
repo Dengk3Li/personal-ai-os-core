@@ -1,0 +1,50 @@
+{
+  "schema_version": "personal-ai-os.pet/v1",
+  "pet_id": "blue-whale-maid",
+  "name": "Blue Whale Maid",
+  "pack_version": "1.0.0",
+  "authorized_by": "Dengk3Li",
+  "authorization_recorded_at": "2026-08-25",
+  "license": "CC-BY-NC-4.0",
+  "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+  "runtime_state": "working",
+  "frame_duration_ms": 120,
+  "variants": [
+    {
+      "variant_id": "coding-normal",
+      "activity": "coding",
+      "mood": "normal",
+      "asset": "blue-whale-maid-coding-normal.gif"
+    },
+    {
+      "variant_id": "coding-happy",
+      "activity": "coding",
+      "mood": "happy",
+      "asset": "blue-whale-maid-coding-happy.gif"
+    },
+    {
+      "variant_id": "coding-tired",
+      "activity": "coding",
+      "mood": "tired",
+      "asset": "blue-whale-maid-coding-tired.gif"
+    },
+    {
+      "variant_id": "mining-normal",
+      "activity": "mining",
+      "mood": "normal",
+      "asset": "blue-whale-maid-mining-normal.gif"
+    },
+    {
+      "variant_id": "mining-happy",
+      "activity": "mining",
+      "mood": "happy",
+      "asset": "blue-whale-maid-mining-happy.gif"
+    },
+    {
+      "variant_id": "mining-tired",
+      "activity": "mining",
+      "mood": "tired",
+      "asset": "blue-whale-maid-mining-tired.gif"
+    }
+  ]
+}

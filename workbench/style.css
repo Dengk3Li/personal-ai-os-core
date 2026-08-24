@@ -26,9 +26,9 @@
 [hidden] { display: none !important; }
 html { min-width: 320px; }
 body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 88% 4%, rgba(215, 255, 107, .22), transparent 24rem), var(--paper); }
-button, input, summary, a { font: inherit; -webkit-tap-highlight-color: transparent; }
+button, input, select, summary, a { font: inherit; -webkit-tap-highlight-color: transparent; }
 button { min-height: 44px; color: inherit; }
-button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 5px var(--signal); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .topbar {
@@ -42,6 +42,8 @@ button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visibl
 .brand-block h1 { font-family: Georgia, "Songti SC", serif; font-size: clamp(1.8rem, 3vw, 2.5rem); font-weight: 500; letter-spacing: -.035em; line-height: 1; }
 .brand-block p { margin-top: .3rem; color: var(--muted); font-size: .72rem; }
 .top-actions, .card-actions { display: flex; align-items: center; gap: var(--space-2); }
+.pet-picker { display: grid; grid-template-columns: auto auto; align-items: center; gap: .45rem; min-height: 44px; padding: .35rem .45rem .35rem .75rem; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(255, 255, 255, .56); font-size: .68rem; font-weight: 750; }
+.pet-picker select { min-height: 34px; max-width: 8rem; padding: 0 .55rem; border: 0; border-radius: 999px; color: var(--ink); background: var(--surface); font: inherit; }
 .ghost-button, .primary-button, .card-action, .task-action, .scan-button, .task-composer button {
   border: 1px solid var(--line); border-radius: 999px; cursor: pointer; padding: .7rem 1rem; font-weight: 750; text-decoration: none;
   transition: transform .16s ease, background .16s ease, color .16s ease;
@@ -227,6 +229,9 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .workflow-node.has-pet .workflow-node-route { padding-right: 2.5rem; }
 .workflow-node.selected .workflow-node-route { border-color: rgba(255, 255, 255, .22); color: rgba(255, 255, 255, .76); }
 .workflow-pet { position: absolute; right: .55rem; bottom: .55rem; display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid rgba(36, 92, 76, .22); border-radius: 50%; background: var(--surface-strong); font-size: 1.18rem; box-shadow: 0 .25rem .65rem rgba(22, 33, 31, .1); animation: pet-working 1.4s ease-in-out infinite; }
+.workflow-pet.image-pet { width: 3.15rem; height: 3.4rem; overflow: hidden; border: 0; border-radius: .75rem; background: rgba(255, 255, 255, .8); }
+.workflow-pet.image-pet img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.workflow-pet .pet-static { display: none; }
 .workflow-node.selected .workflow-pet { border-color: rgba(255, 255, 255, .35); background: rgba(255, 255, 255, .92); }
 .run-pulse { display: inline-block; width: .5rem; height: .5rem; margin-right: .3rem; border-radius: 50%; background: currentColor; vertical-align: middle; }
 .status-in_progress .run-pulse { color: var(--signal); animation: live-pulse 1.8s cubic-bezier(.16, 1, .3, 1) infinite; }
@@ -309,8 +314,10 @@ footer { padding: var(--space-4); color: var(--muted); text-align: center; font-
 
 @media (max-width: 680px) {
   .topbar { align-items: flex-start; flex-direction: column; gap: var(--space-2); }
-  .top-actions { width: 100%; }
-  .top-actions > * { flex: 1; }
+  .top-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .top-actions > * { width: 100%; }
+  .pet-picker { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 1fr); }
+  .pet-picker select { width: 100%; max-width: none; }
   .overview { gap: var(--space-3); padding: var(--space-4) 0 var(--space-3); }
   .overview h2 { font-size: 2.35rem; }
   .overview h2 br { display: none; }
@@ -346,4 +353,6 @@ footer { padding: var(--space-4); color: var(--muted); text-align: center; font-
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .workflow-pet.image-pet img { display: none; }
+  .workflow-pet.image-pet .pet-static { display: block; }
 }

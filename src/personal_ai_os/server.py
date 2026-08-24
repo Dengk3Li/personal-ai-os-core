@@ -34,7 +34,37 @@ def runtime_workbench_state(store: RuntimeStore) -> dict[str, Any]:
                 "at": event["at"][11:16] if len(event["at"]) >= 16 else event["at"],
             }
         )
-    tasks = [{**task, "events": events_by_task.get(task["task_id"], [])} for task in snapshot["tasks"]]
+    browser_task_fields = (
+        "task_id",
+        "workflow_id",
+        "line_id",
+        "public_label",
+        "title",
+        "acceptance",
+        "agent_role",
+        "status",
+        "resume_to",
+        "depends_on",
+        "human_gate",
+        "iteration",
+        "parallel_group",
+        "required_capabilities",
+        "complexity",
+        "domain_id",
+        "requires_git_closure",
+        "result_ref",
+        "created_at",
+        "updated_at",
+        "attempts",
+        "artifact_refs",
+    )
+    tasks = [
+        {
+            **{field: task[field] for field in browser_task_fields},
+            "events": events_by_task.get(task["task_id"], []),
+        }
+        for task in snapshot["tasks"]
+    ]
     states = {task["task_id"]: task["status"] for task in tasks}
     workflows = [
         {

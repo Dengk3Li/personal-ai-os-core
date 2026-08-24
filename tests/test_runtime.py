@@ -84,6 +84,13 @@ class CaptureAdapter(SuccessfulAdapter):
         return receipt
 
 
+class RaisingAdapter(SuccessfulAdapter):
+    adapter_id = "raising-adapter"
+
+    def start(self, task, *, model, context_pack):
+        raise RuntimeError("token=SENSITIVE_SENTINEL https://private.invalid/run")
+
+
 class RuntimeStoreTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -164,7 +171,7 @@ class RuntimeStoreTests(unittest.TestCase):
         self.assertEqual(["memory://science/accepted"], context_pack["memory_refs"])
         self.assertNotIn("memory_body", context_pack)
 
-    def test_adapter_identity_is_required_before_task_enters_progress(self):
+    def test_adapter_identity_failure_is_preserved_as_a_blocked_run(self):
         store = RuntimeStore(self.database)
         install_workflow_preset(store, "science")
         broker = ExecutionBroker(store, {"missing-identity": MissingIdentityAdapter()})
@@ -175,8 +182,26 @@ class RuntimeStoreTests(unittest.TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual("ADAPTER_RUN_ID_REQUIRED", result["reason"])
-        self.assertEqual("QUEUED", store.get_task("science:hypothesis")["status"])
-        self.assertEqual([], store.snapshot()["runs"])
+        self.assertEqual("BLOCKED", store.get_task("science:hypothesis")["status"])
+        self.assertEqual("REJECTED", store.snapshot()["runs"][0]["status"])
+
+    def test_adapter_exception_details_do_not_cross_the_runtime_boundary(self):
+        store = RuntimeStore(self.database)
+        install_workflow_preset(store, "science")
+        adapter = RaisingAdapter()
+        broker = ExecutionBroker(store, {adapter.adapter_id: adapter})
+
+        result = broker.dispatch(
+            "science:hypothesis", adapter_id=adapter.adapter_id, model="model-a"
+        )
+        persisted = json.dumps(store.snapshot(), ensure_ascii=False)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("ADAPTER_START_FAILED", result["reason"])
+        self.assertEqual("ADAPTER_START_FAILED", result["error"])
+        self.assertNotIn("SENSITIVE_SENTINEL", json.dumps(result))
+        self.assertNotIn("SENSITIVE_SENTINEL", persisted)
+        self.assertNotIn("private.invalid", persisted)
 
     def test_blocked_run_creates_one_decision_and_resolution_requeues_the_task(self):
         store = RuntimeStore(self.database)
@@ -374,6 +399,8 @@ class RuntimeStoreTests(unittest.TestCase):
         )
         thread.start()
         self.assertTrue(adapter.started.wait(timeout=1))
+        self.assertEqual("IN_PROGRESS", store.get_task("science:hypothesis")["status"])
+        self.assertEqual("RUNNING", store.snapshot()["runs"][0]["status"])
         second = broker.dispatch(
             "science:hypothesis", adapter_id=adapter.adapter_id, model="model-a"
         )
@@ -386,7 +413,67 @@ class RuntimeStoreTests(unittest.TestCase):
         self.assertTrue(first_result["ok"])
         self.assertEqual(1, len(store.snapshot()["runs"]))
 
-    def test_next_task_receives_upstream_results_and_its_local_context(self):
+    def test_separate_store_instances_claim_the_task_before_calling_the_model(self):
+        barrier = threading.Barrier(2)
+
+        class RacingStore(RuntimeStore):
+            def claim_run(self, **kwargs):
+                barrier.wait(timeout=2)
+                return super().claim_run(**kwargs)
+
+        installed_by = RuntimeStore(self.database)
+        install_workflow_preset(installed_by, "science")
+        adapter = SlowAdapter()
+        stores = [RacingStore(self.database), RacingStore(self.database)]
+        brokers = [
+            ExecutionBroker(store, {adapter.adapter_id: adapter}) for store in stores
+        ]
+        outcomes = []
+
+        def dispatch(broker):
+            outcomes.append(
+                broker.dispatch(
+                    "science:hypothesis",
+                    adapter_id=adapter.adapter_id,
+                    model="model-a",
+                )
+            )
+
+        threads = [threading.Thread(target=dispatch, args=(broker,)) for broker in brokers]
+        for thread in threads:
+            thread.start()
+        self.assertTrue(adapter.started.wait(timeout=2))
+        adapter.release.set()
+        for thread in threads:
+            thread.join(timeout=3)
+
+        self.assertEqual(1, adapter.calls)
+        self.assertEqual(1, sum(bool(item.get("ok")) for item in outcomes))
+        runs = RuntimeStore(self.database).snapshot()["runs"]
+        self.assertEqual(["SUCCEEDED"], [item["status"] for item in runs])
+
+    def test_run_claim_rolls_back_if_its_assignment_event_cannot_be_recorded(self):
+        class FailingClaimStore(RuntimeStore):
+            def _record_event(self, connection, **kwargs):
+                if kwargs.get("event_type") == "RUN_ASSIGNED":
+                    raise RuntimeError("synthetic assignment failure")
+                return super()._record_event(connection, **kwargs)
+
+        store = FailingClaimStore(self.database)
+        install_workflow_preset(store, "science")
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic assignment failure"):
+            store.claim_run(
+                task_id="science:hypothesis",
+                adapter_id="test-adapter",
+                model="model-a",
+                by="adapter:test-adapter",
+            )
+
+        self.assertEqual("QUEUED", store.get_task("science:hypothesis")["status"])
+        self.assertEqual([], store.snapshot()["runs"])
+
+    def test_next_task_receives_upstream_results_and_explicit_model_context(self):
         store = RuntimeStore(self.database)
         install_workflow_preset(store, "science")
         producer = ExecutionBroker(store, {"test-adapter": SuccessfulAdapter()})
@@ -415,8 +502,11 @@ class RuntimeStoreTests(unittest.TestCase):
             "title": "Resolve a module annotation",
             "acceptance": "The annotation has an inspectable result",
             "context": {
-                "module_id": "workflow-core",
-                "annotation": "Clarify the module handoff boundary.",
+                "workspace_path": "/private/SENSITIVE_SENTINEL",
+                "model_context": {
+                    "module_id": "workflow-core",
+                    "annotation": "Clarify the module handoff boundary.",
+                },
             },
         })
         consumer.dispatch(
@@ -429,8 +519,30 @@ class RuntimeStoreTests(unittest.TestCase):
         self.assertIn("Accepted replacement result", upstream[0]["content"])
         self.assertEqual(
             "Clarify the module handoff boundary.",
-            capture.context_packs[1]["task_context"]["annotation"],
+            capture.context_packs[1]["model_context"]["annotation"],
         )
+        self.assertNotIn(
+            "SENSITIVE_SENTINEL",
+            json.dumps(capture.context_packs[1], ensure_ascii=False),
+        )
+
+    def test_model_context_has_a_bounded_explicit_payload(self):
+        store = RuntimeStore(self.database)
+        install_workflow_preset(store, "science")
+        task = store.get_task("science:hypothesis")
+        task["context"] = {"model_context": {"body": "x" * 30_000}}
+
+        with self.assertRaisesRegex(ValueError, "model_context exceeds"):
+            build_context_pack(task)
+
+        with self.assertRaisesRegex(ValueError, "model_context exceeds"):
+            store.create_task({
+                "task_id": "science:oversized-context",
+                "workflow_id": "science",
+                "title": "Reject an oversized model payload",
+                "acceptance": "The payload remains outside the runtime",
+                "context": {"model_context": {"body": "x" * 30_000}},
+            })
 
     def test_concurrent_decision_resolution_records_only_one_choice(self):
         barrier = threading.Barrier(2)

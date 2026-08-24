@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · Long Work</title>
   <meta name="description" content="把长期目标拆成可分配、可重复运行、可由人类裁决的短任务。">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=0.7.0">
 </head>
 <body>
   <header class="topbar">
@@ -15,6 +15,11 @@
       <p>Personal AI OS · Local first</p>
     </a>
     <div class="top-actions">
+      <label class="pet-picker" for="pet-preference"><span>工作宠物</span><select id="pet-preference">
+        <option value="blue-whale-maid">蓝鲸女仆</option>
+        <option value="model-animal">模型动物</option>
+        <option value="off">关闭</option>
+      </select></label>
       <button class="ghost-button" data-board="global" type="button">模块地图</button>
       <button class="primary-button" id="reset-demo" type="button">重置演示</button>
     </div>
@@ -190,8 +195,8 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · <span id="footer-mode">Synthetic workflow showcase</span> · v0.6.0</footer>
-  <script src="app.js"></script>
+  <footer>Personal AI OS · <span id="footer-mode">Synthetic workflow showcase</span> · v0.7.0</footer>
+  <script src="app.js?v=0.7.0"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>
 </html>

@@ -12,11 +12,12 @@ from .planning import project_plan, ready_tasks, validate_plan
 from .presets import get_workflow_preset, workflow_preset_catalog
 from .routing import route_task
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
+from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .secretary import build_context_pack, build_secretary_brief
 from .truth import compile_truth
 from .workflow import transition_task
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 __all__ = [
     "build_capsule",
@@ -31,6 +32,7 @@ __all__ = [
     "freeze_assets",
     "inspect_workspace",
     "install_workflow_preset",
+    "load_runtime_plan",
     "module_catalog",
     "operation_spec",
     "promote_candidate",
@@ -39,6 +41,7 @@ __all__ = [
     "route_task",
     "RuntimeStore",
     "select_execution_route",
+    "sync_runtime_plan",
     "transition_task",
     "validate_plan",
     "verify_freeze",

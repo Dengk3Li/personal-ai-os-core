@@ -90,6 +90,57 @@ class DemoCliTests(unittest.TestCase):
         self.assertEqual("READY", payload["status"])
         self.assertEqual("runtime-store", payload["brief"]["authority"])
 
+    def test_runtime_cli_syncs_a_private_local_plan_without_copying_it_to_output(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = str(root / "runtime.db")
+            private_path = "/private/local/workspace"
+            plan = root / "private-plan.json"
+            plan.write_text(json.dumps({
+                "schema_version": "personal-ai-os.runtime-plan/v1",
+                "workflows": [{
+                    "workflow_id": "next-stage",
+                    "name": "Next stage",
+                    "caption": "Self-hosted work",
+                    "layout": "milestones",
+                    "goal": "Advance one verified slice",
+                    "tasks": [{
+                        "task_id": "next-stage:first",
+                        "title": "Index the local workspace",
+                        "acceptance": "A bounded local reference exists",
+                        "context": {"workspace_path": private_path},
+                    }],
+                }],
+            }), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "sync-plan",
+                    "--store",
+                    store,
+                    "--plan",
+                    str(plan),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual("READY", payload["status"])
+        self.assertEqual(1, payload["created_workflows"])
+        self.assertEqual(1, payload["created_tasks"])
+        self.assertNotIn(private_path, result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

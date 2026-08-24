@@ -150,6 +150,23 @@ test("running assignments resolve a model-specific pet without changing task tru
   assert.equal(workbench.petForTask({ status: "REVIEW", assignment: { model: "Reasoning model" } }), null);
 });
 
+test("an authorized blue whale maid can be selected or disabled", () => {
+  const task = {
+    task_id: "science:analysis",
+    status: "IN_PROGRESS",
+    attempts: 1,
+    agent_role: "Data Analysis Agent",
+    assignment: { model: "Reasoning model", executor: "Science adapter" },
+  };
+
+  const pet = workbench.petForTask(task, "blue-whale-maid");
+  assert.equal(pet.pet_id, "blue-whale-maid");
+  assert.equal(pet.kind, "image");
+  assert.match(pet.src, /^assets\/pets\/blue-whale-maid\/blue-whale-maid-mining-(normal|happy|tired)\.gif$/);
+  assert.equal(workbench.petForTask(task, "off"), null);
+  assert.equal(workbench.setPetPreference({ petPreference: "model-animal" }, "blue-whale-maid").petPreference, "blue-whale-maid");
+});
+
 test("every running showcase task has closed prerequisites", () => {
   const state = workbench.createShowcaseState();
   const closed = new Set(["DONE", "ARCHIVED"]);

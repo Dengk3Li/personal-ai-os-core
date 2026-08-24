@@ -106,6 +106,30 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertTrue(accepted["ok"])
         self.assertEqual("DONE", self.store.get_task("science:extra")["status"])
 
+    def test_runtime_projection_omits_local_task_context_and_git_closure(self):
+        self.store.create_task({
+            "task_id": "science:private-local-reference",
+            "workflow_id": "science",
+            "title": "Use a registered local workspace",
+            "acceptance": "The local reference remains server-side",
+            "context": {
+                "workspace_path": "/private/SENSITIVE_SENTINEL",
+                "model_context": {"instruction": "Use only accepted evidence."},
+            },
+        })
+
+        _, projection = self.request("/api/runtime")
+        serialized = json.dumps(projection, ensure_ascii=False)
+        task = next(
+            item
+            for item in projection["state"]["tasks"]
+            if item["task_id"] == "science:private-local-reference"
+        )
+
+        self.assertNotIn("context", task)
+        self.assertNotIn("git_closure", task)
+        self.assertNotIn("SENSITIVE_SENTINEL", serialized)
+
     def test_server_blocks_path_traversal_and_unknown_adapter(self):
         with self.assertRaises(urllib.error.HTTPError) as traversal:
             urllib.request.build_opener(urllib.request.ProxyHandler({})).open(

@@ -77,6 +77,7 @@
   ];
 
   const OPERATION_CHAIN = ["INSPECT", "MAP", "PLAN", "CONFIRM", "ROUTE", "EXECUTE", "REVIEW", "ARCHIVE"];
+  const PET_PREFERENCES = new Set(["blue-whale-maid", "model-animal", "off"]);
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -93,6 +94,7 @@
       defaultModel: payload.default_model || "",
       adapters: clone(payload.adapters || []),
       pendingDecisions: clone(payload.state.pendingDecisions || []),
+      petPreference: "blue-whale-maid",
     };
   }
 
@@ -126,6 +128,26 @@
     };
   }
 
+  async function runTaskWithPolling(
+    runTask,
+    refresh,
+    schedule = (callback) => setInterval(callback, 400),
+    cancel = (timer) => clearInterval(timer),
+  ) {
+    let refreshing = false;
+    const timer = schedule(() => {
+      if (refreshing) return;
+      refreshing = true;
+      Promise.resolve(refresh()).catch(() => {}).finally(() => { refreshing = false; });
+    });
+    try {
+      return await runTask();
+    } finally {
+      cancel(timer);
+      await refresh();
+    }
+  }
+
   function createDemoState() {
     return {
       goal: "把一个复杂工作区变成可理解、可裁决、可持续推进的长期工作系统",
@@ -140,7 +162,14 @@
       onboarding: { status: "NOT_STARTED", readOnly: true, detectedLines: [] },
       activeTemplate: null,
       taskProposal: null,
+      petPreference: "blue-whale-maid",
     };
+  }
+
+  function setPetPreference(state, preference) {
+    const next = clone(state);
+    next.petPreference = PET_PREFERENCES.has(preference) ? preference : "blue-whale-maid";
+    return next;
   }
 
   function runEvents(taskId, attempts, status) {
@@ -198,6 +227,7 @@
       onboarding: { status: "SHOWCASE_READY", readOnly: true, detectedLines: [] },
       activeTemplate: null,
       taskProposal: null,
+      petPreference: "blue-whale-maid",
     };
   }
 
@@ -698,7 +728,9 @@
       complexity: "standard",
       capabilities: ["engineering"],
       estimated_tokens: 48000,
-      context: { module_id: module.module_id, annotation: text },
+      context: {
+        model_context: { module_id: module.module_id, annotation: text },
+      },
       status: "QUEUED",
     };
     return { status: "CANDIDATE", line_id: lineId, module_id: module.module_id, task, route: routeTask(task) };
@@ -754,9 +786,22 @@
     return `<button class="line-tab${active ? " active" : ""}" type="button" data-line-id="${escapeHtml(line.line_id)}" aria-pressed="${active ? "true" : "false"}"><span><b>${escapeHtml(line.name)}</b><small>${escapeHtml(line.caption)}</small></span><em>${line.progress.done}/${line.progress.total}</em></button>`;
   }
 
-  function petForTask(task) {
+  function petForTask(task, preference = "model-animal") {
     if (!task || task.status !== "IN_PROGRESS" || !task.assignment) return null;
+    if (preference === "off") return null;
     const model = String(task.assignment.model || "");
+    if (preference === "blue-whale-maid") {
+      const activitySource = `${task.agent_role || ""} ${task.domain_id || ""} ${task.title || ""}`;
+      const activity = /science|research|analysis|experiment|data|hypothesis|科研|实验|分析|数据|假设/i.test(activitySource) ? "mining" : "coding";
+      const seed = Array.from(String(task.task_id || task.public_label || model)).reduce((total, character) => total + character.charCodeAt(0), 0);
+      const mood = Number(task.attempts || 0) > 1 ? "tired" : seed % 2 ? "happy" : "normal";
+      return {
+        pet_id: "blue-whale-maid",
+        kind: "image",
+        src: `assets/pets/blue-whale-maid/blue-whale-maid-${activity}-${mood}.gif`,
+        label: `${model || "当前模型"} 的蓝鲸女仆正在工作`,
+      };
+    }
     if (/Reasoning|Research/i.test(model)) return { pet_id: "reasoning-owl", glyph: "🦉", label: `${model} 工作宠物` };
     if (/Writing|Long-context/i.test(model)) return { pet_id: "writing-whale", glyph: "🐋", label: `${model} 工作宠物` };
     if (/Fast/i.test(model)) return { pet_id: "fast-rabbit", glyph: "🐇", label: `${model} 工作宠物` };
@@ -767,12 +812,15 @@
     return `<ol class="stage-rail layout-${escapeHtml(line.layout)}">${line.stages.map((stage, index) => `<li class="${index === 0 ? "current" : ""}"><span>${String(index + 1).padStart(2, "0")}</span><b>${escapeHtml(stage)}</b></li>`).join("")}</ol>`;
   }
 
-  function renderWorkflowNode(task, selected) {
+  function renderWorkflowNode(task, selected, petPreference = "model-animal") {
     const assignment = task.assignment;
-    const pet = petForTask(task);
+    const pet = petForTask(task, petPreference);
     const route = assignment ? `${escapeHtml(assignment.model)}<span>${escapeHtml(assignment.executor)}</span>` : "等待分配<span>尚未选择执行器</span>";
     const agent = task.agent_role ? `<span class="workflow-node-agent">${escapeHtml(task.agent_role)}</span>` : "";
-    const petSlot = pet ? `<span class="workflow-pet" data-pet-id="${escapeHtml(pet.pet_id)}" aria-label="${escapeHtml(pet.label)}" title="${escapeHtml(pet.label)}"><span aria-hidden="true">${pet.glyph}</span></span>` : "";
+    const petMedia = pet && pet.kind === "image"
+      ? `<img src="${escapeHtml(pet.src)}" alt="" loading="lazy" decoding="async"><span class="pet-static" aria-hidden="true">🐋</span>`
+      : pet ? `<span aria-hidden="true">${pet.glyph}</span>` : "";
+    const petSlot = pet ? `<span class="workflow-pet${pet.kind === "image" ? " image-pet" : ""}" data-pet-id="${escapeHtml(pet.pet_id)}" aria-label="${escapeHtml(pet.label)}" title="${escapeHtml(pet.label)}">${petMedia}</span>` : "";
     return `<button class="workflow-node status-${escapeHtml(task.status.toLowerCase())}${selected ? " selected" : ""}${pet ? " has-pet" : ""}" type="button" data-workflow-task="${escapeHtml(task.task_id)}" aria-pressed="${selected ? "true" : "false"}">
       <span class="workflow-node-head"><span class="workflow-node-id">${escapeHtml(task.public_label || task.title || task.task_id)}</span><span class="workflow-node-status"><i class="run-pulse" aria-hidden="true"></i>${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span></span>
       ${agent}<span class="workflow-node-stage">${escapeHtml(task.stage || task.title || "自定义任务")}</span>
@@ -780,13 +828,13 @@
       ${petSlot}</button>`;
   }
 
-  function renderWorkflowCanvas(projection, selectedTaskId) {
+  function renderWorkflowCanvas(projection, selectedTaskId, petPreference = "model-animal") {
     if (!projection || !projection.groups.length) return '<p class="empty-trace">当前工作流还没有任务。</p>';
     const groups = projection.groups.map((group, index) => {
       const active = group.nodes.some((task) => task.status === "IN_PROGRESS" || task.status === "REVIEW");
       const label = projection.layout === "loop" ? `Loop ${String(group.iteration).padStart(2, "0")}` : `阶段 ${String(group.iteration).padStart(2, "0")}`;
       const returnEdge = projection.layout === "loop" && index < projection.groups.length - 1 ? '<div class="loop-return">复核后进入下一轮</div>' : "";
-      return `<section class="workflow-group${active ? " active" : ""}"><header class="group-heading"><strong>${label}</strong><span>${group.nodes.length} 个节点 · ${new Set(group.nodes.map((task) => task.parallel_group)).size} 个分支</span></header><div class="workflow-nodes">${group.nodes.map((task) => renderWorkflowNode(task, task.task_id === selectedTaskId)).join("")}</div>${returnEdge}</section>`;
+      return `<section class="workflow-group${active ? " active" : ""}"><header class="group-heading"><strong>${label}</strong><span>${group.nodes.length} 个节点 · ${new Set(group.nodes.map((task) => task.parallel_group)).size} 个分支</span></header><div class="workflow-nodes">${group.nodes.map((task) => renderWorkflowNode(task, task.task_id === selectedTaskId, petPreference)).join("")}</div>${returnEdge}</section>`;
     }).join("");
     return `<div class="workflow-groups">${groups}</div>`;
   }
@@ -888,8 +936,10 @@
     async function refreshRuntime() {
       if (!runtimeClient) return false;
       const activeBoard = state.activeBoard;
+      const petPreference = state.petPreference;
       const payload = await runtimeClient.load();
       state = selectBoard(runtimeStateFromPayload(payload), activeBoard);
+      state.petPreference = petPreference || state.petPreference;
       render();
       announce("已读取本地运行库");
       return true;
@@ -981,7 +1031,8 @@
       let selectedTask = projectedTasks.find((task) => task.task_id === state.activeTaskId);
       if (!selectedTask) selectedTask = projectedTasks.find((task) => task.status === "IN_PROGRESS") || projectedTasks[0];
       if (selectedTask) state.activeTaskId = selectedTask.task_id;
-      byId("workflow-canvas").innerHTML = renderWorkflowCanvas(projection, state.activeTaskId);
+      byId("workflow-canvas").innerHTML = renderWorkflowCanvas(projection, state.activeTaskId, state.petPreference);
+      byId("pet-preference").value = state.petPreference || "blue-whale-maid";
       const selectedTaskView = selectedTask ? view.work.tasks[selectedTask.task_id] : null;
       byId("run-detail").innerHTML = renderRunDetail(selectedTaskView, state);
       byId("proposal-zone").innerHTML = renderProposal(proposal, view.work.lines);
@@ -995,6 +1046,18 @@
         if (target) target.focus();
       }
     }
+
+    doc.addEventListener("change", (event) => {
+      if (event.target.id !== "pet-preference") return;
+      state = setPetPreference(state, event.target.value);
+      try { doc.defaultView.localStorage.setItem("personal-ai-os.pet-preference", state.petPreference); } catch (_error) {}
+      render();
+      announce(state.petPreference === "off" ? "工作宠物已关闭" : "工作宠物已更新");
+    });
+
+    try {
+      state = setPetPreference(state, doc.defaultView.localStorage.getItem("personal-ai-os.pet-preference"));
+    } catch (_error) {}
 
     doc.addEventListener("click", async (event) => {
       const boardButton = event.target.closest && event.target.closest("[data-board]");
@@ -1121,6 +1184,7 @@
       const action = actionForTask(state, taskId);
       if (state.runtime && runtimeClient) {
         try {
+          let refreshAfterAction = true;
           if (action === "ACCEPT") {
             await runtimeClient.transitionTask(taskId, "DONE", "Accepted result");
           } else if (action === "RESUME") {
@@ -1129,12 +1193,16 @@
             const adapter = doc.querySelector("[data-runtime-adapter]");
             const model = doc.querySelector("[data-runtime-model]");
             announce("正在连接执行适配器");
-            await runtimeClient.runTask(taskId, adapter ? adapter.value : "", model ? model.value : state.defaultModel);
+            await runTaskWithPolling(
+              () => runtimeClient.runTask(taskId, adapter ? adapter.value : "", model ? model.value : state.defaultModel),
+              refreshRuntime,
+            );
+            refreshAfterAction = false;
           } else {
             announce("当前任务还不能执行这个动作");
             return;
           }
-          await refreshRuntime();
+          if (refreshAfterAction) await refreshRuntime();
         } catch (error) {
           if (error.payload && error.payload.reason === "HUMAN_DECISION_REQUIRED") {
             await refreshRuntime();
@@ -1361,6 +1429,8 @@
     renderModuleTopology,
     renderTaskCard,
     runtimeStateFromPayload,
+    runTaskWithPolling,
+    setPetPreference,
     scrollActiveBoardIntoView,
     selectBoard,
     selectBusinessLine,

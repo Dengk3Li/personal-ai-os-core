@@ -1,9 +1,26 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 
 UPSTREAM_CONTEXT_CHARACTER_LIMIT = 24_000
+MODEL_CONTEXT_CHARACTER_LIMIT = 12_000
+
+
+def model_context_for_task(task: dict[str, Any]) -> dict[str, Any]:
+    local_context = task.get("context") or {}
+    if not isinstance(local_context, dict):
+        raise ValueError("task context must be an object")
+    model_context = local_context.get("model_context") or {}
+    if not isinstance(model_context, dict):
+        raise ValueError("model_context must be an object")
+    encoded = json.dumps(model_context, ensure_ascii=False, sort_keys=True)
+    if len(encoded) > MODEL_CONTEXT_CHARACTER_LIMIT:
+        raise ValueError(
+            f"model_context exceeds {MODEL_CONTEXT_CHARACTER_LIMIT} characters"
+        )
+    return dict(model_context)
 
 
 def build_context_pack(
@@ -40,7 +57,7 @@ def build_context_pack(
         "next_action": task.get("next_action") or "produce one inspectable result",
         "constraints": list(task.get("constraints") or []),
         "artifact_refs": list(task.get("artifact_refs") or []),
-        "task_context": dict(task.get("context") or {}),
+        "model_context": model_context_for_task(task),
         "upstream_artifacts": bounded_upstream,
         "domain_id": profile.get("domain_id") or task.get("domain_id") or "general",
         "persona": profile.get("persona") or "direct",

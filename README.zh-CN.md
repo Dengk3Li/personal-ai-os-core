@@ -4,7 +4,7 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 
 单个 AI 对话适合处理边界清楚的小任务。任务一旦跨越多次对话，新的对话需要重新核验旧内容；计划生成后缺少稳定的推进方式；多个执行分支也很快变得难以检查。Personal AI OS 补上长期目标和单次 AI 运行之间的操作层。
 
-[English](README.md) · [v0.6 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.6.md) · [产品研究](docs/PRODUCT_RESEARCH_V0.6.zh-CN.md)
+[English](README.md) · [v0.7 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.7.md)
 
 它不打算重复做一套通用 Agent 工具箱。浏览器、终端、定时任务、记忆、子 Agent 和远程运行已经有成熟产品。Personal AI OS 处理这些执行器之上的问题：工作区结构、可移交的任务现场、证据验收、人工决定和跨执行器连续性。
 
@@ -16,9 +16,9 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 
 - 科研线由科学假设、Protocol 设计、自主实验执行、数据分析和反馈优化五类 Agent 协作，多条实验路径可以并行推进；
 - 会议纪要线从录音、演示材料和项目资料进入信息抽取、Draft、审核和定稿；
-- 行业研究 / 专业报告线从广泛检索和 Data pool 进入论证规划、章节写作、排版与配图。
+- 深度分析报告线从来源收集和证据池进入论证规划、章节写作、排版与配图。
 
-其中 11 项已分配，3 项正在运行，2 项待验收，6 项已收口，另有 4 次重复运行保留在轨迹中。点击任一节点，可以查看 Agent、模型、执行适配器、Attempt 次数、心跳和产物事件。运行中的节点会按模型显示工作宠物。
+其中 11 项已分配，3 项正在运行，2 项待验收，6 项已收口，另有 4 次重复运行保留在轨迹中。点击任一节点，可以查看 Agent、模型、执行适配器、Attempt 次数、心跳和产物事件。运行中的节点可以显示模型动物或蓝鲸女仆动画，也可以由用户关闭。
 
 ```bash
 make workbench
@@ -26,15 +26,23 @@ make workbench
 
 打开 [http://127.0.0.1:8787](http://127.0.0.1:8787)。静态模式只使用浏览器内存，不读取本地工作区。
 
-## 可持久化运行 MVP
+## v0.7 自举开发切片
 
-v0.6 已加入一个只依赖 Python 标准库和 SQLite 的本地运行时。它保存工作流、任务、运行、事件、产物和决定，并通过有限 API 驱动同一个工作台。首个真实模型 Adapter 使用 OpenAI-compatible Chat Completions 协议，可以接入 DeepSeek 等兼容服务；凭据不进入仓库和 SQLite。每次运行都会接收当前任务的本地上下文，以及各项已完成依赖的当前验收产物；上下文总量受到明确限制。
+本地运行时只依赖 Python 标准库和 SQLite。它保存工作流、任务、运行、事件、产物和决定，并通过有限 API 驱动同一个工作台。`personal-ai-os.runtime-plan/v1` 可以把真实本地工作线幂等同步进运行库：首次创建缺失项，之后不会重置任务状态、上下文、运行证据和结果。
+
+实际计划应放在 Git 已忽略的 `.personal-ai-os/` 目录。这样可以让 Personal AI OS 管理自身仓库的开发，同时保证本机路径、私人项目名称和当前任务正文不会进入公开 Git。
+
+任务的 `context` 属于服务端恢复元数据，不进入浏览器投影。只有显式写入 `context.model_context` 的对象才会发送给模型，并受 12,000 字符上限约束；本地工作区路径不会因为同步计划而自动进入模型请求。
 
 ```bash
 python3 -m pip install --no-deps -e .
 personal-ai-os runtime init \
   --store .personal-ai-os/runtime.db \
   --preset science
+
+personal-ai-os runtime sync-plan \
+  --store .personal-ai-os/runtime.db \
+  --plan .personal-ai-os/self-hosting-plan.private.json
 
 export PERSONAL_AI_OS_API_BASE="https://你的兼容接口.example/v1"
 export PERSONAL_AI_OS_API_KEY="只保存在本机环境变量中的密钥"
@@ -45,7 +53,9 @@ personal-ai-os runtime serve \
 
 打开 [http://127.0.0.1:8787](http://127.0.0.1:8787)。API 可用时，页面会从合成演示切换到本地运行库。创建工作线和任务、启动模型、接受结果、记录裁决都会写入 SQLite。服务重启后，任务、运行轨迹和决定仍可读回。
 
-当前 Adapter 会登记模型的终态输出并送入验收。同一个 runtime 服务进程会拒绝同一任务的并发派发；一个 SQLite 运行库只允许一个 runtime 写入进程。新任务不能伪造完成证据，本地写接口只接受同源 JSON 请求。跨进程派发租约、流式事件、心跳、取消、后台执行、Codex / VS Code 控制、远程机器适配和具备公开许可的动画宠物素材仍在后续工作中；静态演示只展示这些事件的结构，不把它们说成实时能力。
+调用 Adapter 前，运行时先原子取得任务执行权、创建本地 run，并把任务转为 `IN_PROGRESS`。同步请求未返回时，Workbench 会持续读取持久化状态，因此 working 宠物对应真实模型调用。成功响应会补入外部运行标识、产物和待验收状态；失败响应会保留为 rejected run 和阻塞任务。多个 RuntimeStore 同时竞争同一 SQLite 任务时，只有取得状态转换的一方会调用模型。
+
+新任务不能伪造完成证据，本地写接口只接受同源 JSON 请求。流式 token、取消、服务端宠物注册表、Codex / VS Code 控制、远程机器适配和整仓递归抽象仍属于后续工作。
 
 ## 操作闭环
 
@@ -64,7 +74,7 @@ flowchart LR
     A --> R
 ```
 
-检查和规划只生成候选。确认之后，系统才允许在已接受的任务边界内执行。执行器返回运行标识和事件后，任务才能进入运行状态；只修改界面标签不算执行。
+检查和规划只生成候选。确认之后，系统才允许在已接受的任务边界内执行。运行时只有持久化本地 run 并取得任务执行权后才进入运行状态；只修改界面标签不算执行。
 
 ## 三个固定入口
 
@@ -128,8 +138,10 @@ personal-ai-os spec
 | 只读摄取 | 读取本地结构并提出工作地图，不写入目标项目。 |
 | 连续接续 | 保存下一次运行恢复和核验所需的状态。 |
 | 持久化运行时 | 用 SQLite 保存任务、运行、事件、产物和决定，并支持重启后重放。 |
+| 本地计划同步 | 幂等导入带版本的本地工作计划，不覆盖已经发生的运行事实。 |
 | 秘书简报 | 从同一状态生成进行中、待验收、阻塞和下一动作摘要，不复制私人记忆正文。 |
 | 兼容模型适配 | 通过已配置的 Chat Completions-compatible 接口执行一个有边界的短任务。 |
+| 可选工作宠物 | 只在持久化任务运行时按需显示蓝鲸女仆 GIF 或模型动物，用户可随时关闭。 |
 
 ## 安装与测试
 
@@ -150,9 +162,8 @@ tests/                Python 与工作台行为测试
 examples/             合成状态记录和示例模块 manifest
 .github/workflows/    Python 3.10-3.12 安装与测试矩阵
 PRODUCT.md            稳定的产品边界
-docs/DEVELOPMENT_TASKBOOK_V0.6.md  运行时、工作流、宠物与适配器规格
+docs/DEVELOPMENT_TASKBOOK_V0.7.md  自举开发、工作区、运行时、宠物与适配器任务书
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 封包验收边界
-docs/PRODUCT_RESEARCH_V0.6.zh-CN.md  产品空缺、证据和可证伪的 MVP 验收
 ```
 
 ## 公开边界与许可证

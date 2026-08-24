@@ -116,9 +116,9 @@ test("a module annotation becomes a bounded task candidate for the active workfl
 
   assert.equal(proposal.status, "CANDIDATE");
   assert.equal(proposal.task.line_id, state.activeLineId);
-  assert.equal(proposal.task.context.module_id, "workflow-core");
+  assert.equal(proposal.task.context.model_context.module_id, "workflow-core");
   assert.equal(
-    proposal.task.context.annotation,
+    proposal.task.context.model_context.annotation,
     "The handoff state needs a clearer acceptance boundary.",
   );
   assert.equal(

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .presets import get_workflow_preset
-from .secretary import build_context_pack
+from .secretary import build_context_pack, model_context_for_task
 from .states import TASK_STATES
 from .workflow import transition_task
 
@@ -24,6 +24,17 @@ def _identifier(prefix: str) -> str:
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _stable_error_code(value: Any, default: str) -> str:
+    candidate = str(value or "").strip()
+    if (
+        candidate
+        and len(candidate) <= 64
+        and all(character in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for character in candidate)
+    ):
+        return candidate
+    return default
 
 
 class RuntimeStore:
@@ -134,23 +145,31 @@ class RuntimeStore:
             )
 
     def create_workflow(self, workflow: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as connection:
+            workflow_id = self._insert_workflow(connection, workflow)
+        return self.get_workflow(workflow_id)
+
+    def _insert_workflow(
+        self,
+        connection: sqlite3.Connection,
+        workflow: dict[str, Any],
+    ) -> str:
         workflow_id = str(workflow.get("workflow_id") or "").strip()
         if not workflow_id:
             raise ValueError("workflow_id is required")
         now = _now()
-        with self._connect() as connection:
-            connection.execute(
-                "INSERT INTO workflows VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    workflow_id,
-                    str(workflow.get("name") or workflow_id),
-                    str(workflow.get("caption") or ""),
-                    str(workflow.get("layout") or "custom"),
-                    str(workflow.get("goal") or ""),
-                    now,
-                ),
-            )
-        return self.get_workflow(workflow_id)
+        connection.execute(
+            "INSERT INTO workflows VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                workflow_id,
+                str(workflow.get("name") or workflow_id),
+                str(workflow.get("caption") or ""),
+                str(workflow.get("layout") or "custom"),
+                str(workflow.get("goal") or ""),
+                now,
+            ),
+        )
+        return workflow_id
 
     def get_workflow(self, workflow_id: str) -> dict[str, Any]:
         with self._connect() as connection:
@@ -162,6 +181,15 @@ class RuntimeStore:
         return dict(row)
 
     def create_task(self, task: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as connection:
+            task_id = self._insert_task(connection, task)
+        return self.get_task(task_id)
+
+    def _insert_task(
+        self,
+        connection: sqlite3.Connection,
+        task: dict[str, Any],
+    ) -> str:
         task_id = str(task.get("task_id") or "").strip()
         workflow_id = str(task.get("workflow_id") or task.get("line_id") or "").strip()
         title = str(task.get("title") or "").strip()
@@ -173,17 +201,25 @@ class RuntimeStore:
             raise ValueError(f"unknown task status: {status}")
         if status != "QUEUED":
             raise ValueError("new tasks must start in QUEUED")
-        self.get_workflow(workflow_id)
+        context = task.get("context") or {}
+        if not isinstance(context, dict):
+            raise ValueError("task context must be an object")
+        model_context_for_task({"context": context})
+        if connection.execute(
+            "SELECT 1 FROM workflows WHERE workflow_id = ?", (workflow_id,)
+        ).fetchone() is None:
+            raise KeyError(f"workflow not found: {workflow_id}")
         dependencies = [str(item).strip() for item in task.get("depends_on") or []]
         if any(not item for item in dependencies):
             raise ValueError("task dependencies cannot be empty")
         if task_id in dependencies:
             raise ValueError("task cannot depend on itself")
         for dependency_id in dependencies:
-            try:
-                dependency = self.get_task(dependency_id)
-            except KeyError as exc:
-                raise ValueError(f"dependency not found: {dependency_id}") from exc
+            dependency = connection.execute(
+                "SELECT workflow_id FROM tasks WHERE task_id = ?", (dependency_id,)
+            ).fetchone()
+            if dependency is None:
+                raise ValueError(f"dependency not found: {dependency_id}")
             if dependency["workflow_id"] != workflow_id:
                 raise ValueError(
                     f"dependency must belong to the same workflow: {dependency_id}"
@@ -206,27 +242,26 @@ class RuntimeStore:
             _json(list(task.get("required_capabilities") or [])),
             str(task.get("complexity") or "standard"),
             str(task.get("domain_id") or workflow_id),
-            _json(dict(task.get("context") or {})),
+            _json(dict(context)),
             int(bool(task.get("requires_git_closure", False))),
             _json({}),
             None,
             now,
             now,
         )
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO tasks (
-                    task_id, workflow_id, line_id, public_label, title, acceptance,
-                    agent_role, status, resume_to, depends_on, human_gate, iteration,
-                    parallel_group, required_capabilities, complexity, domain_id,
-                    context_json, requires_git_closure, git_closure, result_ref,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                values,
-            )
-        return self.get_task(task_id)
+        connection.execute(
+            """
+            INSERT INTO tasks (
+                task_id, workflow_id, line_id, public_label, title, acceptance,
+                agent_role, status, resume_to, depends_on, human_gate, iteration,
+                parallel_group, required_capabilities, complexity, domain_id,
+                context_json, requires_git_closure, git_closure, result_ref,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            values,
+        )
+        return task_id
 
     @staticmethod
     def _decode_task(row: sqlite3.Row, *, attempts: int = 0, artifacts: list[str] | None = None) -> dict[str, Any]:
@@ -369,6 +404,73 @@ class RuntimeStore:
             )
         return self.get_run(run_id)
 
+    def claim_run(
+        self,
+        *,
+        task_id: str,
+        adapter_id: str,
+        model: str,
+        by: str,
+    ) -> dict[str, Any]:
+        """Atomically claim a queued task and create its local run."""
+
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"task not found: {task_id}")
+            task = self._decode_task(row)
+            if task["status"] != "QUEUED":
+                return {
+                    "ok": False,
+                    "reason": "TASK_NOT_QUEUED",
+                    "status": task["status"],
+                }
+            transition = transition_task(task, "IN_PROGRESS", by=by)
+            if not transition["ok"]:
+                return transition
+
+            event = transition["event"]
+            cursor = connection.execute(
+                """UPDATE tasks SET status = 'IN_PROGRESS', resume_to = NULL, updated_at = ?
+                    WHERE task_id = ? AND status = 'QUEUED'""",
+                (event["at"], task_id),
+            )
+            if cursor.rowcount != 1:
+                return {
+                    "ok": False,
+                    "reason": "STATE_CHANGED_RETRY",
+                    "status": "QUEUED",
+                }
+
+            attempt = connection.execute(
+                "SELECT COUNT(*) + 1 FROM runs WHERE task_id = ?", (task_id,)
+            ).fetchone()[0]
+            run_id = _identifier("run")
+            connection.execute(
+                """INSERT INTO runs (
+                    run_id, external_run_id, task_id, adapter_id, model, status,
+                    attempt, usage_json, error, started_at, ended_at
+                ) VALUES (?, '', ?, ?, ?, 'RUNNING', ?, '{}', '', ?, NULL)""",
+                (run_id, task_id, adapter_id, model, attempt, event["at"]),
+            )
+            self._record_event(
+                connection,
+                task_id=task_id,
+                run_id=run_id,
+                event_type="RUN_ASSIGNED",
+                payload={
+                    "from": event["from"],
+                    "to": event["to"],
+                    "by": by,
+                    "reason": "",
+                },
+                at=event["at"],
+            )
+        return {"ok": True, "run": self.get_run(run_id)}
+
     def get_run(self, run_id: str) -> dict[str, Any]:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
@@ -391,6 +493,19 @@ class RuntimeStore:
                 "UPDATE runs SET status = ?, usage_json = ?, error = ?, ended_at = ? WHERE run_id = ?",
                 (status, _json(usage or {}), error, _now(), run_id),
             )
+        return self.get_run(run_id)
+
+    def set_run_external_id(self, run_id: str, external_run_id: str) -> dict[str, Any]:
+        external_run_id = str(external_run_id or "").strip()
+        if not external_run_id:
+            raise ValueError("external_run_id is required")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE runs SET external_run_id = ? WHERE run_id = ?",
+                (external_run_id, run_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"run not found: {run_id}")
         return self.get_run(run_id)
 
     def create_artifact(self, *, task_id: str, run_id: str, content: str) -> dict[str, Any]:
@@ -705,45 +820,68 @@ class ExecutionBroker:
             for artifact in self.store.snapshot()["artifacts"]
             if artifact["artifact_id"] in dependency_result_refs
         ]
-        receipt = adapter.start(
-            task,
-            model=model,
-            context_pack=build_context_pack(
-                task,
-                profile,
-                upstream_artifacts=upstream_artifacts,
-            ),
-        )
-        if not receipt.get("ok"):
-            return {"ok": False, "reason": receipt.get("reason") or "ADAPTER_START_FAILED", "error": receipt.get("error", "")}
-        external_run_id = str(receipt.get("external_run_id") or "").strip()
-        if not external_run_id:
-            return {"ok": False, "reason": "ADAPTER_RUN_ID_REQUIRED"}
-        run = self.store.create_run(
+        claim = self.store.claim_run(
             task_id=task_id,
-            external_run_id=external_run_id,
             adapter_id=adapter_id,
             model=model,
-        )
-        started = self.store.transition(
-            task_id,
-            "IN_PROGRESS",
             by=f"adapter:{adapter_id}",
-            run_id=run["run_id"],
-            event_type="RUN_ASSIGNED",
         )
-        if not started["ok"]:
-            self.store.finish_run(run["run_id"], status="REJECTED", error=started["reason"])
-            return {"ok": False, "reason": started["reason"]}
+        if not claim["ok"]:
+            return claim
+        run = claim["run"]
         with self.store._connect() as connection:
             self.store._record_event(
                 connection,
                 task_id=task_id,
                 run_id=run["run_id"],
                 event_type="ADAPTER_STARTED",
-                payload={"adapter_id": adapter_id, "model": model, "external_run_id": external_run_id},
+                payload={"adapter_id": adapter_id, "model": model},
             )
+        try:
+            receipt = adapter.start(
+                task,
+                model=model,
+                context_pack=build_context_pack(
+                    task,
+                    profile,
+                    upstream_artifacts=upstream_artifacts,
+                ),
+            )
+        except Exception:
+            receipt = {
+                "ok": False,
+                "reason": "ADAPTER_START_FAILED",
+            }
+        if not receipt.get("ok"):
+            reason = _stable_error_code(
+                receipt.get("reason"), "ADAPTER_START_FAILED"
+            )
+            error = reason
+            self.store.finish_run(run["run_id"], status="REJECTED", error=error)
+            self.store.transition(
+                task_id,
+                "BLOCKED",
+                by=f"adapter:{adapter_id}",
+                reason=error,
+                run_id=run["run_id"],
+            )
+            return {"ok": False, "status": "BLOCKED", "reason": reason, "error": error}
+        external_run_id = str(receipt.get("external_run_id") or "").strip()
+        if not external_run_id:
+            reason = "ADAPTER_RUN_ID_REQUIRED"
+            self.store.finish_run(run["run_id"], status="REJECTED", error=reason)
+            self.store.transition(
+                task_id,
+                "BLOCKED",
+                by=f"adapter:{adapter_id}",
+                reason=reason,
+                run_id=run["run_id"],
+            )
+            return {"ok": False, "status": "BLOCKED", "reason": reason}
+        self.store.set_run_external_id(run["run_id"], external_run_id)
         status = str(receipt.get("status") or "RUNNING").upper()
+        if status not in {"RUNNING", "SUCCEEDED", "BLOCKED", "FAILED", "CANCELLED"}:
+            status = "FAILED"
         if status == "RUNNING":
             return {"ok": True, "status": "IN_PROGRESS", "run": self.store.get_run(run["run_id"])}
         if status == "SUCCEEDED":
@@ -778,7 +916,9 @@ class ExecutionBroker:
                 "run": self.store.get_run(run["run_id"]),
                 "artifact": artifact,
             }
-        error = str(receipt.get("error") or "Adapter stopped before producing a result")
+        error = _stable_error_code(
+            receipt.get("reason"), f"ADAPTER_{status}"
+        )
         self.store.finish_run(run["run_id"], status=status, usage=receipt.get("usage") or {}, error=error)
         blocked = self.store.transition(
             task_id,

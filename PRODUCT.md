@@ -32,14 +32,16 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 - 模块地图从 `personal-ai-os.module/v1` manifest 解析能力和依赖，支持拖动、平移、缩放、视口适配与上下游聚焦；选中模块的批注可以进入当前工作流成为修正任务。
 - 通用任务状态为 `QUEUED`、`IN_PROGRESS`、`REVIEW`、`DONE`、`BLOCKED`、`PAUSED` 和 `ARCHIVED`；UI 分别呈现待分配、进行中、待验收、已收口、已阻塞、已暂停和已归档。
 - SQLite 运行库持久保存工作流、任务、运行、事件、模型输出产物和人工决定，并支持服务重启后读回。
-- Execution Broker 在依赖、Human Gate、Adapter 可用性和外部运行标识通过校验后才把任务置为 `IN_PROGRESS`。依赖任务必须存在且属于同一工作流。
+- Execution Broker 在依赖、Human Gate 和 Adapter 可用性通过校验后，以同一 SQLite 事务完成任务执行权占用、本地 run 创建和分配事件登记。只有取得执行权的实例会调用模型；外部运行标识在 Adapter 响应后补入 run。
 - 当前本地服务使用 Python 标准库 HTTP server，提供运行投影、工作流与任务创建、任务转换、运行启动和决定记录的有限 JSON API。
-- 当前真实模型入口是同步的 OpenAI-compatible Chat Completions Adapter。它从服务进程读取 base URL 与密钥，要求供应商返回外部运行 ID，并把终态输出登记为本地产物后送入 `REVIEW`。
+- 当前真实模型入口是同步的 OpenAI-compatible Chat Completions Adapter。它从服务进程读取 base URL 与密钥；Workbench 在请求期间轮询持久化状态，因此真实调用阶段可见 `IN_PROGRESS` 与 working 宠物。终态输出登记为本地产物后送入 `REVIEW`。
+- `personal-ai-os.runtime-plan/v1` 可以把本地实际工作线幂等同步到 SQLite。计划文件保存在 Git 忽略目录；重复同步不会覆盖任务状态、运行证据或结果。
+- 任务 `context` 只在服务端保存，并从浏览器投影移除；模型只接收显式 `context.model_context`，且该对象最多 12,000 字符。
 - Secretary 已提供最小上下文包和只读简报：从运行库汇总进行中、待验收、阻塞、暂停、待决定和下一动作，不复制记忆正文。
 - 内置工作流预设包括 science、meeting notes 和 analytical report。Science 预设实现五类 Agent 与并行实验路径的任务合同，但不把工程运行状态当作科学结论。
 - 首次扫描与计划生成仍是候选结果，未经用户确认不写入被分析的工作区。
-- 静态演示中的心跳、宠物和流式事件只表达目标事件形态，不代表本地服务已经提供实时流。
-- 当前版本没有 SSE、后台流式执行、运行取消或续接、模型自动发现、Codex App Server Adapter、VS Code Adapter、远程执行 Adapter，也没有自动递归理解整仓内部结构的分形扫描。
+- 静态演示中的心跳仍是合成事件。连接本地运行库后，working 宠物只消费真实 `IN_PROGRESS` 状态；它不会反向改变任务状态。
+- 当前版本没有 SSE、流式 token 展示、运行取消或续接、服务端宠物注册表、模型自动发现、Codex App Server Adapter、VS Code Adapter、远程执行 Adapter，也没有自动递归理解整仓内部结构的分形扫描。
 - Token Manager 仍是规划中的可组合模块，不能标为已可用。
 
 ## Brand Commitments
@@ -50,8 +52,8 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 
 - `src/personal_ai_os/` 已包含计划拆分、动态路由、任务分配、统一状态、SQLite 运行库、Execution Broker、OpenAI-compatible Adapter、Secretary 简报、连续性和验收能力。
 - `workbench/` 能在本地 API 可用时读取运行投影，并在连接失败时回到匿名合成演示。
-- 当前全量测试通过 58 个 Python 用例和 37 个 Workbench 用例，覆盖持久化恢复、依赖产物接续、单服务实例并发派发、原子状态与裁决、证据边界、Human Gate、模块批注交接、同源本地 API、真实兼容 HTTP 调用、API 错误和静态回退。
-- 一个 SQLite 运行库只允许一个 runtime 写入进程；跨进程派发租约尚未交付。
+- 当前全量测试通过 72 个 Python 用例和 39 个 Workbench 用例，覆盖计划整批回滚与定义漂移保护、持久化恢复、模型上下文隔离与限长、依赖产物接续、跨 RuntimeStore 派发竞争、调用期间真实运行态、原子状态与裁决、异常脱敏、证据边界、Human Gate、模块批注交接、同源本地 API、真实兼容 HTTP 调用、API 错误和静态回退。
+- SQLite 原子状态转换保证同一任务只有一个模型调用方；完整的多进程调度、租约续期和崩溃恢复仍未交付。
 - 公开仓库不包含真实用户工作区数据、模型密钥、商业指标或研究结论；用户选择的本地 SQLite 文件可能保存模型输出，必须按本地敏感数据管理，不能提交到 Git。
 
 ## Product Principles
@@ -60,5 +62,5 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 2. 一个事实来源，多种适合业务线的视图。
 3. 自动分析提出候选，人类只在关键节点介入。
 4. 模块契约和操作协议优先于隐式约定。
-5. 只有取得运行标识、保存结果并通过状态校验后，界面才展示相应真实状态。
+5. 只有持久化本地运行记录并取得任务执行权后，界面才展示真实运行状态；外部运行标识和结果按实际响应补齐。
 6. 已交付能力与静态演示、规划能力和开放产品决策分别标注。

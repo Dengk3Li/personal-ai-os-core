@@ -142,3 +142,26 @@ test("runtime client surfaces HTTP failures instead of pretending the action ran
     /ADAPTER_UNAVAILABLE/,
   );
 });
+
+
+test("a pending model request keeps refreshing the real runtime projection", async () => {
+  let finishRun;
+  let scheduled;
+  let cancelled = false;
+  let refreshes = 0;
+  const run = new Promise((resolve) => { finishRun = resolve; });
+  const pending = workbench.runTaskWithPolling(
+    () => run,
+    async () => { refreshes += 1; },
+    (callback) => { scheduled = callback; return "timer-1"; },
+    (timer) => { cancelled = timer === "timer-1"; },
+  );
+
+  await scheduled();
+  assert.equal(refreshes, 1);
+  finishRun({ ok: true, status: "REVIEW" });
+  await pending;
+
+  assert.equal(cancelled, true);
+  assert.equal(refreshes, 2);
+});

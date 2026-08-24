@@ -17,6 +17,7 @@ from .planning import project_plan, ready_tasks, validate_plan
 from .promotion import promote_candidate
 from .routing import route_task
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
+from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .secretary import build_secretary_brief
 from .server import create_runtime_server
 from .truth import compile_truth
@@ -211,6 +212,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     runtime_status = runtime_commands.add_parser("status", help="read runtime state")
     runtime_status.add_argument("--store", required=True)
+    runtime_sync = runtime_commands.add_parser(
+        "sync-plan", help="idempotently register a versioned local runtime plan"
+    )
+    runtime_sync.add_argument("--store", required=True)
+    runtime_sync.add_argument("--plan", required=True)
     runtime_brief = runtime_commands.add_parser("brief", help="read the secretary brief")
     runtime_brief.add_argument("--store", required=True)
     runtime_run = runtime_commands.add_parser("run", help="dispatch one queued task")
@@ -264,6 +270,12 @@ def main(argv: list[str] | None = None) -> int:
                 "task_count": len(snapshot["tasks"]),
                 "run_count": len(snapshot["runs"]),
                 "brief": build_secretary_brief(snapshot),
+            }
+        elif args.runtime_command == "sync-plan":
+            payload = {
+                "status": "READY",
+                "store": str(store.database),
+                **sync_runtime_plan(store, load_runtime_plan(args.plan)),
             }
         elif args.runtime_command == "brief":
             payload = {"status": store.integrity()["status"], **build_secretary_brief(store.snapshot())}
