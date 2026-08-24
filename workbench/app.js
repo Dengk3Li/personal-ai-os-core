@@ -121,6 +121,7 @@
     return {
       load: () => request("/api/runtime"),
       runTask: (taskId, adapterId, model) => post("/api/runs", { task_id: taskId, adapter_id: adapterId, model }),
+      advance: (adapterId, model, maxSteps = 25, workflowId = null) => post("/api/advance", { adapter_id: adapterId, model, max_steps: maxSteps, failure_budget: 1, workflow_id: workflowId }),
       transitionTask: (taskId, to, reason) => post(`/api/tasks/${encodeURIComponent(taskId)}/transition`, { to, reason, by: "owner" }),
       createTask: (task) => post("/api/tasks", task),
       createWorkflow: (workflow) => post("/api/workflows", workflow),
@@ -1026,6 +1027,20 @@
       byId("workflow-running").textContent = String(lineSummary.running);
       byId("workflow-repeated").textContent = String(lineSummary.repeatedRuns);
       byId("workflow-progress-bar").style.width = `${view.work.activeLine.progress.percent}%`;
+      const autoControls = byId("auto-advance-controls");
+      autoControls.hidden = !state.runtime;
+      if (state.runtime) {
+        byId("auto-advance-model").value = state.defaultModel || "";
+        const availableAdapters = (state.adapters || []).filter((adapter) => adapter.available);
+        byId("auto-advance-adapter").innerHTML = (state.adapters || []).map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}" ${adapter.available ? "" : "disabled"}>${escapeHtml(adapter.adapter_id)}${adapter.available ? "" : " · 未配置"}</option>`).join("");
+        const advanceButton = doc.querySelector("[data-auto-advance]");
+        advanceButton.disabled = !state.defaultModel || !availableAdapters.length;
+        advanceButton.textContent = !state.defaultModel
+          ? "配置模型后推进"
+          : !availableAdapters.length
+            ? "配置 Adapter 后推进"
+            : "推进当前工作线";
+      }
       const projection = workflowProjection(state, view.work.activeLine.line_id);
       const projectedTasks = projection ? projection.groups.flatMap((group) => group.nodes) : [];
       let selectedTask = projectedTasks.find((task) => task.task_id === state.activeTaskId);
@@ -1161,6 +1176,19 @@
           await runtimeClient.resolveDecision(runtimeDecision.dataset.runtimeDecision, runtimeDecision.dataset.decisionOption);
           await refreshRuntime();
         } catch (error) { announce(`裁决未记录：${error.message}`); }
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-auto-advance]") && state.runtime && runtimeClient) {
+        const adapter = byId("auto-advance-adapter");
+        const model = byId("auto-advance-model");
+        try {
+          announce("正在推进当前可运行任务");
+          const result = await runTaskWithPolling(
+            () => runtimeClient.advance(adapter ? adapter.value : "", model ? model.value : state.defaultModel, 25, state.activeLineId),
+            refreshRuntime,
+          );
+          announce(`当前工作线已推进 ${result.advanced_count || 0} 项，停在 ${result.stop_reason || "UNKNOWN"}`);
+        } catch (error) { announce(`自动推进未执行：${error.message}`); }
         return;
       }
       const decisionCard = event.target.closest && event.target.closest("[data-decision-task]");

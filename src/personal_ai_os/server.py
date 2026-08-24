@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from .runtime import ExecutionBroker, RuntimeStore
+from .automation import AutoAdvanceEngine
 from .secretary import build_secretary_brief
 
 
@@ -24,6 +25,8 @@ def runtime_workbench_state(store: RuntimeStore) -> dict[str, Any]:
         "BLOCKED": "Run needs a decision",
         "DECISION_REQUESTED": "Decision requested",
         "DECISION_RECORDED": "Decision recorded",
+        "AUTO_ADVANCE_SELECTED": "Selected by auto advance",
+        "AUTO_ADVANCE_FINISHED": "Auto advance step finished",
     }
     for event in snapshot["events"]:
         events_by_task.setdefault(event["task_id"], []).append(
@@ -211,6 +214,19 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     str(payload.get("task_id") or ""),
                     adapter_id=str(payload.get("adapter_id") or ""),
                     model=str(payload.get("model") or self.server.app.default_model),
+                )
+                if not result.get("ok"):
+                    self._json(422, result)
+                    return
+            elif path == "/api/advance":
+                result = AutoAdvanceEngine(
+                    self.server.app.broker,
+                    adapter_id=str(payload.get("adapter_id") or ""),
+                    model=str(payload.get("model") or self.server.app.default_model),
+                ).advance(
+                    max_steps=payload.get("max_steps", 25),
+                    failure_budget=payload.get("failure_budget", 1),
+                    workflow_id=payload.get("workflow_id"),
                 )
                 if not result.get("ok"):
                     self._json(422, result)

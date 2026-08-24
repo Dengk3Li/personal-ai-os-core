@@ -259,6 +259,10 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .runtime-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin: 0 0 var(--space-3); }
 .runtime-controls label { display: grid; gap: .35rem; min-width: 0; color: var(--muted); font-size: .61rem; }
 .runtime-controls input, .runtime-controls select { min-width: 0; width: 100%; padding: .58rem .62rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--ink); background: var(--surface); font: inherit; font-size: .68rem; }
+.auto-advance-controls { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(9rem, .8fr) auto; gap: var(--space-2); align-items: end; width: 100%; padding-top: var(--space-2); border-top: 1px solid var(--line); }
+.auto-advance-controls[hidden] { display: none; }
+.auto-advance-controls label { display: grid; gap: .3rem; color: var(--muted); font-size: .61rem; }
+.auto-advance-controls input, .auto-advance-controls select { min-width: 0; width: 100%; padding: .58rem .62rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--ink); background: var(--surface); font: inherit; font-size: .68rem; }
 .task-action { width: 100%; color: white; background: var(--accent); border-color: var(--accent); font-size: .68rem; }
 .task-action:disabled { color: var(--muted); background: transparent; border-color: var(--line); cursor: default; }
 
@@ -343,6 +347,7 @@ footer { padding: var(--space-4); color: var(--muted); text-align: center; font-
   .workflow-nodes { grid-template-columns: 1fr; }
   .workflow-node { min-height: auto; }
   .runtime-controls { grid-template-columns: 1fr; }
+  .auto-advance-controls { grid-template-columns: 1fr; }
   .task-composer > div { flex-direction: column; }
   .task-composer button { width: 100%; }
 }

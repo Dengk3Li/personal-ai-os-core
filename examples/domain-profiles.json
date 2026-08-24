@@ -1,0 +1,26 @@
+{
+  "schema_version": "personal-ai-os.domain-registry/v1",
+  "profiles": [
+    {
+      "domain_id": "software",
+      "persona": "test-first",
+      "context_layers": {
+        "domain_contract": ["contract://software/v1"],
+        "current_state": ["state://software/current"],
+        "relevant_knowledge": ["knowledge://software/accepted"],
+        "constraints": ["policy://local-write-boundary"]
+      },
+      "allowed_tools": ["repository-inspection", "tests"]
+    },
+    {
+      "domain_id": "writing",
+      "persona": "reader-first",
+      "context_layers": {
+        "domain_contract": ["contract://writing/v1"],
+        "current_state": ["state://writing/current"],
+        "relevant_knowledge": ["knowledge://writing/accepted-style"]
+      },
+      "allowed_tools": ["document-editor"]
+    }
+  ]
+}

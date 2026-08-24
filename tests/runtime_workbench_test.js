@@ -116,6 +116,7 @@ test("runtime client calls finite task run transition and decision endpoints", a
   await client.transitionTask("task:1", "DONE", "Accepted result");
   await client.createTask({ task_id: "task:2", workflow_id: "science" });
   await client.resolveDecision("decision:1", "B");
+  await client.advance("openai-compatible", "model-a", 4, "science");
 
   assert.deepEqual(calls.map((call) => call.url), [
     "/api/runtime",
@@ -123,10 +124,13 @@ test("runtime client calls finite task run transition and decision endpoints", a
     "/api/tasks/task%3A1/transition",
     "/api/tasks",
     "/api/decisions/decision%3A1/resolve",
+    "/api/advance",
   ]);
   assert.equal(JSON.parse(calls[1].options.body).adapter_id, "openai-compatible");
   assert.equal(JSON.parse(calls[2].options.body).to, "DONE");
   assert.equal(JSON.parse(calls[4].options.body).selected_option, "B");
+  assert.equal(JSON.parse(calls[5].options.body).max_steps, 4);
+  assert.equal(JSON.parse(calls[5].options.body).workflow_id, "science");
 });
 
 

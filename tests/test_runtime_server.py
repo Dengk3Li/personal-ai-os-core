@@ -80,6 +80,28 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("REVIEW", after["state"]["taskStates"][task["task_id"]])
         self.assertEqual(1, task["attempts"])
 
+    def test_api_advances_ready_work_with_a_bounded_request(self):
+        status, advanced = self.request(
+            "/api/advance",
+            {"adapter_id": "test-adapter", "model": "model-a", "max_steps": 2, "workflow_id": "science"},
+        )
+
+        self.assertEqual(200, status)
+        self.assertTrue(advanced["ok"])
+        self.assertEqual(1, advanced["advanced_count"])
+        self.assertEqual("science:hypothesis", advanced["actions"][0]["task_id"])
+        self.assertEqual("WAITING_REVIEW", advanced["stop_reason"])
+
+    def test_advance_api_rejects_non_integer_limits_without_dropping_the_connection(self):
+        with self.assertRaises(urllib.error.HTTPError) as invalid:
+            self.request(
+                "/api/advance",
+                {"adapter_id": "test-adapter", "model": "model-a", "max_steps": [1]},
+            )
+
+        self.assertEqual(422, invalid.exception.code)
+        self.assertEqual([], self.store.snapshot()["runs"])
+
     def test_api_creates_tasks_and_accepts_reviewed_results(self):
         _, created = self.request(
             "/api/tasks",

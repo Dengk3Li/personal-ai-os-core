@@ -185,6 +185,33 @@ class RuntimeStoreTests(unittest.TestCase):
         self.assertEqual("BLOCKED", store.get_task("science:hypothesis")["status"])
         self.assertEqual("REJECTED", store.snapshot()["runs"][0]["status"])
 
+    def test_successful_run_that_cannot_enter_review_becomes_blocked(self):
+        store = RuntimeStore(self.database)
+        store.create_workflow({
+            "workflow_id": "closure",
+            "name": "Closure",
+            "caption": "Git boundary",
+            "layout": "milestones",
+            "goal": "Keep evidence honest",
+        })
+        store.create_task({
+            "task_id": "closure:task",
+            "workflow_id": "closure",
+            "title": "Produce a repository change",
+            "acceptance": "A review-ready Git closure exists",
+            "requires_git_closure": True,
+        })
+        broker = ExecutionBroker(store, {"test-adapter": SuccessfulAdapter()})
+
+        result = broker.dispatch(
+            "closure:task", adapter_id="test-adapter", model="model-a"
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("GIT_CLOSURE_REVIEW_REQUIRED", result["reason"])
+        self.assertEqual("BLOCKED", store.get_task("closure:task")["status"])
+        self.assertEqual("SUCCEEDED", store.snapshot()["runs"][0]["status"])
+
     def test_adapter_exception_details_do_not_cross_the_runtime_boundary(self):
         store = RuntimeStore(self.database)
         install_workflow_preset(store, "science")
@@ -217,6 +244,7 @@ class RuntimeStoreTests(unittest.TestCase):
         )
 
         self.assertEqual("BLOCKED", result["status"])
+        self.assertEqual("HUMAN_DECISION_REQUIRED", result["reason"])
         self.assertEqual(1, len(pending))
         self.assertEqual("B", resolved["selected_option"])
         self.assertEqual("QUEUED", store.get_task("science:hypothesis")["status"])
@@ -251,6 +279,80 @@ class RuntimeStoreTests(unittest.TestCase):
         self.assertEqual("HUMAN_DECISION_REQUIRED", result["reason"])
         self.assertEqual(1, len(store.pending_decisions()))
         self.assertEqual([], store.snapshot()["runs"])
+
+    def test_separate_runtime_instances_create_one_pending_human_gate(self):
+        store = RuntimeStore(self.database)
+        store.create_workflow({
+            "workflow_id": "gate-race",
+            "name": "Gate race",
+            "caption": "One decision",
+            "layout": "gate",
+            "goal": "Keep one pending choice",
+        })
+        store.create_task({
+            "task_id": "gate-race:choose",
+            "workflow_id": "gate-race",
+            "title": "Choose one path",
+            "acceptance": "One persisted decision",
+            "human_gate": True,
+        })
+        barrier = threading.Barrier(2)
+        results = []
+
+        def dispatch_from_new_store():
+            local = RuntimeStore(self.database)
+            broker = ExecutionBroker(local, {"test-adapter": SuccessfulAdapter()})
+            barrier.wait(timeout=2)
+            results.append(broker.dispatch(
+                "gate-race:choose", adapter_id="test-adapter", model="model-a"
+            ))
+
+        threads = [threading.Thread(target=dispatch_from_new_store) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=3)
+
+        snapshot = RuntimeStore(self.database).snapshot()
+        self.assertEqual(2, len(results))
+        self.assertEqual({"HUMAN_DECISION_REQUIRED"}, {item["reason"] for item in results})
+        self.assertEqual(1, len([item for item in snapshot["decisions"] if item["status"] == "PENDING"]))
+        self.assertEqual([], snapshot["runs"])
+
+    def test_gate_ensure_does_not_reopen_an_already_recorded_decision(self):
+        store = RuntimeStore(self.database)
+        store.create_workflow({
+            "workflow_id": "recorded-gate",
+            "name": "Recorded gate",
+            "caption": "No reopen",
+            "layout": "gate",
+            "goal": "Keep the recorded choice",
+        })
+        store.create_task({
+            "task_id": "recorded-gate:choose",
+            "workflow_id": "recorded-gate",
+            "title": "Choose",
+            "acceptance": "One recorded decision",
+            "human_gate": True,
+        })
+        packet = {
+            "question": "Continue?",
+            "context": "The task is ready.",
+            "options": [
+                {"letter": "A", "label": "Continue", "action": "continue"},
+                {"letter": "B", "label": "Pause", "action": "pause"},
+            ],
+        }
+        pending = store.ensure_pending_decision("recorded-gate:choose", packet)
+        store.resolve_decision(pending["decision_id"], selected_option="A", by="owner")
+
+        ensured = RuntimeStore(self.database).ensure_pending_decision(
+            "recorded-gate:choose", packet
+        )
+
+        self.assertEqual("RECORDED", ensured["status"])
+        self.assertEqual([], store.pending_decisions())
+        self.assertEqual(1, len(store.snapshot()["decisions"]))
 
     def test_human_gate_pause_choice_keeps_task_out_of_dispatch(self):
         store = RuntimeStore(self.database)

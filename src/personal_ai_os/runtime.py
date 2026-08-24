@@ -303,6 +303,27 @@ class RuntimeStore:
             (task_id, run_id, event_type, _json(payload or {}), at or _now()),
         )
 
+    def record_task_event(
+        self,
+        task_id: str,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        run_id: str | None = None,
+    ) -> None:
+        """Append a bounded runtime event without changing task state."""
+        self.get_task(task_id)
+        if not event_type or len(event_type) > 64:
+            raise ValueError("event_type is required and must be at most 64 characters")
+        with self._connect() as connection:
+            self._record_event(
+                connection,
+                task_id=task_id,
+                event_type=event_type,
+                payload=payload,
+                run_id=run_id,
+            )
+
     def transition(
         self,
         task_id: str,
@@ -564,6 +585,52 @@ class RuntimeStore:
             )
         return self._get_decision(decision_id)
 
+    def ensure_pending_decision(self, task_id: str, decision: dict[str, Any]) -> dict[str, Any]:
+        """Return the task's single pending decision, creating it atomically if needed."""
+        options = decision.get("options") or []
+        if not decision.get("question") or not decision.get("context") or len(options) < 2:
+            raise ValueError("decision requires question, context, and at least two options")
+        self.get_task(task_id)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """SELECT decision_id FROM decisions
+                    WHERE task_id = ? AND status IN ('RECORDED', 'PENDING')
+                    ORDER BY CASE status WHEN 'RECORDED' THEN 0 ELSE 1 END, created_at DESC
+                    LIMIT 1""",
+                (task_id,),
+            ).fetchone()
+            if row is not None:
+                decision_id = row["decision_id"]
+            else:
+                decision_id = _identifier("decision")
+                now = _now()
+                connection.execute(
+                    """INSERT INTO decisions (
+                        decision_id, task_id, status, question, context, options_json,
+                        recommended_option, recommendation_reason, selected_option,
+                        created_at, resolved_at, resolved_by
+                    ) VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?, NULL, ?, NULL, NULL)""",
+                    (
+                        decision_id,
+                        task_id,
+                        str(decision["question"]),
+                        str(decision["context"]),
+                        _json(options),
+                        str(decision.get("recommended_option") or ""),
+                        str(decision.get("recommendation_reason") or ""),
+                        now,
+                    ),
+                )
+                self._record_event(
+                    connection,
+                    task_id=task_id,
+                    event_type="DECISION_REQUESTED",
+                    payload={"decision_id": decision_id},
+                    at=now,
+                )
+        return self._get_decision(decision_id)
+
     def _get_decision(self, decision_id: str) -> dict[str, Any]:
         with self._connect() as connection:
             row = connection.execute(
@@ -785,29 +852,32 @@ class ExecutionBroker:
                 if item["task_id"] == task_id
             ]
             if not any(item["status"] == "RECORDED" for item in task_decisions):
-                if not any(item["status"] == "PENDING" for item in task_decisions):
-                    self.store.create_decision(
-                        task_id,
-                        {
-                            "question": f"Should {task['title']} continue?",
-                            "context": task["acceptance"],
-                            "options": [
-                                {
-                                    "letter": "A",
-                                    "label": "Approve and continue",
-                                    "action": "continue",
-                                },
-                                {
-                                    "letter": "B",
-                                    "label": "Pause this task",
-                                    "action": "pause",
-                                },
-                            ],
-                            "recommended_option": "A",
-                            "recommendation_reason": "The task is ready and its dependencies are closed.",
-                        },
-                    )
-                return {"ok": False, "reason": "HUMAN_DECISION_REQUIRED"}
+                decision = self.store.ensure_pending_decision(
+                    task_id,
+                    {
+                        "question": f"Should {task['title']} continue?",
+                        "context": task["acceptance"],
+                        "options": [
+                            {
+                                "letter": "A",
+                                "label": "Approve and continue",
+                                "action": "continue",
+                            },
+                            {
+                                "letter": "B",
+                                "label": "Pause this task",
+                                "action": "pause",
+                            },
+                        ],
+                        "recommended_option": "A",
+                        "recommendation_reason": "The task is ready and its dependencies are closed.",
+                    },
+                )
+                if decision["status"] != "RECORDED":
+                    return {"ok": False, "reason": "HUMAN_DECISION_REQUIRED"}
+                task = self.store.get_task(task_id)
+                if task["status"] != "QUEUED":
+                    return {"ok": False, "reason": "TASK_NOT_QUEUED", "status": task["status"]}
         adapter = self.adapters.get(adapter_id)
         if adapter is None:
             return {"ok": False, "reason": "ADAPTER_NOT_FOUND"}
@@ -909,7 +979,19 @@ class ExecutionBroker:
                 run_id=run["run_id"],
             )
             if not review["ok"]:
-                return {"ok": False, "reason": review["reason"], "run": self.store.get_run(run["run_id"])}
+                blocked = self.store.transition(
+                    task_id,
+                    "BLOCKED",
+                    by=f"adapter:{adapter_id}",
+                    reason=review["reason"],
+                    run_id=run["run_id"],
+                )
+                return {
+                    "ok": False,
+                    "status": "BLOCKED" if blocked["ok"] else "RECOVERY_REQUIRED",
+                    "reason": review["reason"],
+                    "run": self.store.get_run(run["run_id"]),
+                }
             return {
                 "ok": True,
                 "status": "REVIEW",
@@ -927,6 +1009,13 @@ class ExecutionBroker:
             reason=error,
             run_id=run["run_id"],
         )
+        decision = None
         if receipt.get("decision"):
-            self.store.create_decision(task_id, receipt["decision"])
-        return {"ok": blocked["ok"], "status": "BLOCKED", "run": self.store.get_run(run["run_id"])}
+            decision = self.store.create_decision(task_id, receipt["decision"])
+        return {
+            "ok": False,
+            "status": "BLOCKED",
+            "reason": "HUMAN_DECISION_REQUIRED" if decision else error,
+            "run": self.store.get_run(run["run_id"]),
+            **({"decision": decision} if decision else {}),
+        }

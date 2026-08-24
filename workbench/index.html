@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · Long Work</title>
   <meta name="description" content="把长期目标拆成可分配、可重复运行、可由人类裁决的短任务。">
-  <link rel="stylesheet" href="style.css?v=0.7.0">
+  <link rel="stylesheet" href="style.css?v=0.8.0">
 </head>
 <body>
   <header class="topbar">
@@ -160,6 +160,11 @@
               <span><b id="workflow-repeated">0</b> 次重复</span>
             </div>
             <div class="execution-progress"><span id="workflow-progress-bar"></span></div>
+            <div class="auto-advance-controls" id="auto-advance-controls" hidden>
+              <label><span>自动推进模型</span><input id="auto-advance-model" autocomplete="off"></label>
+              <label><span>执行适配器</span><select id="auto-advance-adapter"></select></label>
+              <button class="primary-button" type="button" data-auto-advance>推进当前工作线</button>
+            </div>
           </section>
 
           <div class="workflow-reader">
@@ -195,8 +200,8 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · <span id="footer-mode">Synthetic workflow showcase</span> · v0.7.0</footer>
-  <script src="app.js?v=0.7.0"></script>
+  <footer>Personal AI OS · <span id="footer-mode">Synthetic workflow showcase</span> · v0.8.0</footer>
+  <script src="app.js?v=0.8.0"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>
 </html>

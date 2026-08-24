@@ -15,7 +15,8 @@ from .modules import build_module_graph, discover_module_manifests, module_catal
 from .operations import operation_spec
 from .planning import project_plan, ready_tasks, validate_plan
 from .promotion import promote_candidate
-from .routing import route_task
+from .routing import compile_domain_context, route_task
+from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .secretary import build_secretary_brief
@@ -199,6 +200,11 @@ def main(argv: list[str] | None = None) -> int:
         "plan", help="propose a work map from a read-only workspace inspection"
     )
     plan_parser.add_argument("path")
+    context_parser = subparsers.add_parser(
+        "domain-context", help="compile one references-only domain context manifest"
+    )
+    context_parser.add_argument("--registry", required=True)
+    context_parser.add_argument("--domain", required=True)
     runtime_parser = subparsers.add_parser(
         "runtime", help="operate the persistent long-task runtime"
     )
@@ -224,6 +230,15 @@ def main(argv: list[str] | None = None) -> int:
     runtime_run.add_argument("--task", required=True)
     runtime_run.add_argument("--model", required=True)
     runtime_run.add_argument("--adapter", default="openai-compatible")
+    runtime_advance = runtime_commands.add_parser(
+        "advance", help="boundedly dispatch every currently ready task"
+    )
+    runtime_advance.add_argument("--store", required=True)
+    runtime_advance.add_argument("--model", required=True)
+    runtime_advance.add_argument("--adapter", default="openai-compatible")
+    runtime_advance.add_argument("--max-steps", type=int, default=25)
+    runtime_advance.add_argument("--failure-budget", type=int, default=1)
+    runtime_advance.add_argument("--workflow")
     runtime_resolve = runtime_commands.add_parser("resolve", help="record a human decision")
     runtime_resolve.add_argument("--store", required=True)
     runtime_resolve.add_argument("--decision", required=True)
@@ -252,6 +267,13 @@ def main(argv: list[str] | None = None) -> int:
         payload = inspect_workspace(args.path)
     elif args.command == "plan":
         payload = build_candidate_plan(inspect_workspace(args.path))
+    elif args.command == "domain-context":
+        registry = json.loads(Path(args.registry).read_text(encoding="utf-8"))
+        profiles = registry.get("profiles") if isinstance(registry, dict) else registry
+        if not isinstance(profiles, list):
+            payload = {"status": "BLOCKED", "reason": "DOMAIN_REGISTRY_INVALID"}
+        else:
+            payload = compile_domain_context(args.domain, profiles)
     else:
         store = RuntimeStore(args.store)
         if args.runtime_command == "init":
@@ -297,6 +319,17 @@ def main(argv: list[str] | None = None) -> int:
                     args.task,
                     adapter_id=args.adapter,
                     model=args.model,
+                )
+                payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
+            elif args.runtime_command == "advance":
+                payload = AutoAdvanceEngine(
+                    ExecutionBroker(store, adapters),
+                    adapter_id=args.adapter,
+                    model=args.model,
+                ).advance(
+                    max_steps=args.max_steps,
+                    failure_budget=args.failure_budget,
+                    workflow_id=args.workflow,
                 )
                 payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
             else:

@@ -141,6 +141,91 @@ class DemoCliTests(unittest.TestCase):
         self.assertEqual(1, payload["created_tasks"])
         self.assertNotIn(private_path, result.stdout)
 
+    def test_domain_context_cli_compiles_only_the_selected_profile(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "domains.json"
+            registry.write_text(json.dumps({"profiles": [{
+                "domain_id": "software",
+                "persona": "test-first",
+                "context_layers": {
+                    "domain_contract": ["contract://software/v1"],
+                    "current_state": ["state://software/current"],
+                },
+                "allowed_tools": ["tests"],
+            }]}), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "domain-context",
+                    "--registry",
+                    str(registry),
+                    "--domain",
+                    "software",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual("RESOLVED", payload["status"])
+        self.assertEqual("test-first", payload["persona"])
+
+    def test_runtime_advance_exits_blocked_when_the_adapter_is_unavailable(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        env.pop("PERSONAL_AI_OS_API_BASE", None)
+        env.pop("PERSONAL_AI_OS_API_KEY", None)
+        with tempfile.TemporaryDirectory() as directory:
+            store = str(Path(directory) / "runtime.db")
+            initialized = subprocess.run(
+                [sys.executable, "-m", "personal_ai_os", "runtime", "init", "--store", store, "--preset", "science"],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            advanced = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "advance",
+                    "--store",
+                    store,
+                    "--workflow",
+                    "science",
+                    "--model",
+                    "model-a",
+                    "--max-steps",
+                    "10",
+                    "--failure-budget",
+                    "1",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, initialized.returncode, initialized.stderr)
+        self.assertEqual(2, advanced.returncode, advanced.stderr)
+        payload = json.loads(advanced.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertEqual("BLOCKED", payload["status"])
+        self.assertEqual("ADAPTER_UNAVAILABLE", payload["stop_reason"])
+        self.assertEqual(1, len(payload["actions"]))
+
 
 if __name__ == "__main__":
     unittest.main()

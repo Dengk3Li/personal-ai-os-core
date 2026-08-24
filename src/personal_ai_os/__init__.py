@@ -10,23 +10,26 @@ from .operations import operation_spec
 from .promotion import promote_candidate
 from .planning import project_plan, ready_tasks, validate_plan
 from .presets import get_workflow_preset, workflow_preset_catalog
-from .routing import route_task
+from .routing import compile_domain_context, route_task
+from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .secretary import build_context_pack, build_secretary_brief
 from .truth import compile_truth
 from .workflow import transition_task
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = [
     "build_capsule",
+    "AutoAdvanceEngine",
     "build_candidate_plan",
     "build_module_graph",
     "build_context_pack",
     "build_secretary_brief",
     "assign_task",
     "compile_truth",
+    "compile_domain_context",
     "evaluate_git_closure",
     "ExecutionBroker",
     "freeze_assets",

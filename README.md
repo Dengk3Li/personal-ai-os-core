@@ -1,10 +1,10 @@
 # Personal AI OS
 
-Personal AI OS is a local-first operating layer for long-running AI work. It breaks a long goal into short executable tasks, assigns each task to a compatible model or tool, preserves shared state, and brings consequential decisions back to a person.
+Personal AI OS is a local-first operating layer for long-running AI work. It breaks a long goal into independently assignable short tasks, preserves shared state, and brings consequential decisions back to a person.
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.7 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.7.md)
+[中文说明](README.zh-CN.md) · [v0.8 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.8.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -32,7 +32,7 @@ The local runtime is built with Python and SQLite. It stores workflows, tasks, r
 
 Keep actual plans under the ignored `.personal-ai-os/` directory. This lets Personal AI OS govern development of its own repository while keeping local paths, private project names, and current task bodies out of public Git.
 
-Task `context` is server-side recovery metadata and is omitted from the browser projection. Only an explicit `context.model_context` object is sent to a model, with a 12,000-character limit. Local workspace paths therefore stay outside model requests unless a user deliberately places them in that explicit field.
+Task `context` is server-side recovery metadata and is omitted from the browser projection. It is not sent wholesale to a model. A model request contains the task envelope, an explicit `context.model_context` object capped at 12,000 characters, and bounded accepted upstream artifacts. Local paths must stay out of those model-bound fields and artifacts.
 
 ```bash
 python3 -m pip install --no-deps -e .
@@ -55,7 +55,35 @@ Open [http://127.0.0.1:8787](http://127.0.0.1:8787). When the API is present, th
 
 Before the adapter request begins, the runtime atomically claims the task, creates a local run, and moves the task to `IN_PROGRESS`. The Workbench polls the persisted projection while the synchronous request is pending, so the working pet reflects a real model call rather than a synthetic heartbeat. A successful response adds the external run identity, artifact, and review transition. A failed request remains visible as a rejected run and blocked task. Separate runtime instances sharing one SQLite store race on the same state transition before either calls the model, so only the successful claimant executes it.
 
-New tasks cannot claim completed evidence, and write endpoints require JSON from the same local origin. Streaming tokens, cancellation, a server-side pet registry, Codex/VS Code control, remote-machine adapters, and recursive whole-repository abstraction remain follow-up work.
+New tasks cannot claim completed evidence. Browser writes require JSON from the same loopback origin; a local non-browser client may call the finite JSON API without an `Origin` header. Streaming tokens, cancellation, a server-side pet registry, Codex/VS Code control, remote-machine adapters, and recursive whole-repository abstraction remain follow-up work.
+
+## v0.8 bounded auto advance
+
+The runtime can now process currently ready tasks through one bounded synchronous command or API request. Selection is deterministic: a task must be `QUEUED`, all dependencies must be `DONE` or `ARCHIVED`, and no pending decision may exist. Each selected task is atomically claimed before its Adapter is called.
+
+Successful model output still stops at `REVIEW`. Human Gates create one persisted decision, blocked or paused work is not retried, and an interrupted `IN_PROGRESS` task is left for recovery instead of being dispatched again. A `max_steps` boundary prevents an invocation from becoming an unbounded daemon.
+
+```bash
+personal-ai-os runtime advance \
+  --store .personal-ai-os/runtime.db \
+  --workflow science \
+  --adapter openai-compatible \
+  --model "your-model-id" \
+  --max-steps 25 \
+  --failure-budget 1
+```
+
+The Work Progress page exposes the same action as **Advance current workflow** and keeps polling persisted state while model calls are active. The CLI can omit `--workflow` for an explicitly global run.
+
+One invocation uses the same configured model and Adapter for its selected tasks and processes them in stable order. Capability-aware per-task routing, background unattended progression, streaming, cancellation, and interrupted external-run reconciliation remain next-stage work.
+
+The second v0.8 slice is a references-only Domain Context compiler. It selects exactly one domain profile, orders its approved context layers, and rejects ambiguous domains or unrecognized layers. It does not load memory bodies.
+
+```bash
+personal-ai-os domain-context \
+  --registry examples/domain-profiles.json \
+  --domain software
+```
 
 ## Operating model
 
@@ -131,7 +159,9 @@ The commands emit machine-readable JSON. `inspect` and `plan` remain read-only; 
 | Long-task planning | Validates hierarchy, dependencies, acceptance conditions, missing references, and cycles. |
 | Human confirmation | Keeps generated plans as candidates until a person accepts them. |
 | Dependency scheduling | Releases only tasks whose prerequisites and Human Gates are satisfied. |
-| Dynamic routing | Chooses the smallest available tier that meets capability and context requirements. |
+| Bounded auto advance | Dispatches every currently ready task once, records selection and outcome events, and stops at review, decisions, blocked work, recovery, or the step limit. |
+| Dynamic routing primitive | Pure selection logic chooses the smallest available tier that meets capability and context requirements; Runtime AutoAdvance integration is pending. |
+| Domain context compiler | Loads one domain through a fixed references-only allowlist and fails closed on ambiguity or unknown layers. |
 | Task assignment | Selects a compatible executor with capacity. |
 | Module composition | Resolves versioned capability manifests and fails closed on broken graphs. |
 | Module issue handoff | Turns a selected module annotation into a persistent, assignable task without creating a second task system. |
@@ -162,7 +192,7 @@ tests/                Python and workbench behavior tests
 examples/             synthetic state records and an example module manifest
 .github/workflows/    Python 3.10-3.12 install and test matrix
 PRODUCT.md            durable product boundaries
-docs/DEVELOPMENT_TASKBOOK_V0.7.md  self-hosting, workspace, runtime, pet, and adapter delivery plan
+docs/DEVELOPMENT_TASKBOOK_V0.8.md  automatic progression, domain context, and real-use acceptance plan
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 package acceptance boundary
 ```
 

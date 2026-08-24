@@ -1,10 +1,10 @@
 # Personal AI OS
 
-Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期目标拆成可执行的短任务，为任务分配合适的模型或工具，保存共享状态，并把需要判断的节点交还给人。
+Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期目标拆成可独立分配的短任务，保存共享状态，并把需要判断的节点交还给人。
 
 单个 AI 对话适合处理边界清楚的小任务。任务一旦跨越多次对话，新的对话需要重新核验旧内容；计划生成后缺少稳定的推进方式；多个执行分支也很快变得难以检查。Personal AI OS 补上长期目标和单次 AI 运行之间的操作层。
 
-[English](README.md) · [v0.7 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.7.md)
+[English](README.md) · [v0.8 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.8.md)
 
 它不打算重复做一套通用 Agent 工具箱。浏览器、终端、定时任务、记忆、子 Agent 和远程运行已经有成熟产品。Personal AI OS 处理这些执行器之上的问题：工作区结构、可移交的任务现场、证据验收、人工决定和跨执行器连续性。
 
@@ -32,7 +32,7 @@ make workbench
 
 实际计划应放在 Git 已忽略的 `.personal-ai-os/` 目录。这样可以让 Personal AI OS 管理自身仓库的开发，同时保证本机路径、私人项目名称和当前任务正文不会进入公开 Git。
 
-任务的 `context` 属于服务端恢复元数据，不进入浏览器投影。只有显式写入 `context.model_context` 的对象才会发送给模型，并受 12,000 字符上限约束；本地工作区路径不会因为同步计划而自动进入模型请求。
+任务的 `context` 属于服务端恢复元数据，不进入浏览器投影，也不会整体发送给模型。模型请求包含任务 envelope、最多 12,000 字符的显式 `context.model_context`，以及有界的已接受上游产物。本地路径必须留在这些模型字段和产物之外。
 
 ```bash
 python3 -m pip install --no-deps -e .
@@ -55,7 +55,35 @@ personal-ai-os runtime serve \
 
 调用 Adapter 前，运行时先原子取得任务执行权、创建本地 run，并把任务转为 `IN_PROGRESS`。同步请求未返回时，Workbench 会持续读取持久化状态，因此 working 宠物对应真实模型调用。成功响应会补入外部运行标识、产物和待验收状态；失败响应会保留为 rejected run 和阻塞任务。多个 RuntimeStore 同时竞争同一 SQLite 任务时，只有取得状态转换的一方会调用模型。
 
-新任务不能伪造完成证据，本地写接口只接受同源 JSON 请求。流式 token、取消、服务端宠物注册表、Codex / VS Code 控制、远程机器适配和整仓递归抽象仍属于后续工作。
+新任务不能伪造完成证据。浏览器写请求必须是同一 loopback origin 的 JSON；本机非浏览器客户端可以不携带 `Origin` 调用有限 JSON API。流式 token、取消、服务端宠物注册表、Codex / VS Code 控制、远程机器适配和整仓递归抽象仍属于后续工作。
+
+## v0.8 有界自动推进
+
+运行时现在可以通过一次有界、同步的命令或 API 请求，依次处理当前满足条件的短任务。任务必须处于 `QUEUED`，全部依赖已经 `DONE` 或 `ARCHIVED`，并且没有待处理决定；Adapter 调用前仍由 SQLite 原子取得执行权。
+
+模型成功返回后只进入 `REVIEW`，系统不会代替人验收。Human Gate 只生成一张持久化决定卡；阻塞、暂停和遗留的 `IN_PROGRESS` 任务不会被重复派发；`max_steps` 为每次推进设置硬边界。
+
+```bash
+personal-ai-os runtime advance \
+  --store .personal-ai-os/runtime.db \
+  --workflow science \
+  --adapter openai-compatible \
+  --model "你的模型 ID" \
+  --max-steps 25 \
+  --failure-budget 1
+```
+
+工作进度页提供同一项“推进当前工作线”操作。模型调用期间，页面持续读取持久化状态，因此任务轨迹和工作宠物都来自真实运行。CLI 只有在明确省略 `--workflow` 时才执行全局推进。
+
+同一次调用为选中任务使用同一组模型与 Adapter，并按稳定顺序执行。逐任务能力路由、后台无人值守推进、流式、取消和外部运行中断对账仍属于下一阶段。
+
+v0.8 同时增加引用式 Domain Context 编译器。它只选择一个领域，按固定顺序装配获准的上下文引用；领域歧义或未知层级会停止，私人记忆正文不会被加载。
+
+```bash
+personal-ai-os domain-context \
+  --registry examples/domain-profiles.json \
+  --domain software
+```
 
 ## 操作闭环
 
@@ -131,7 +159,9 @@ personal-ai-os spec
 | 长任务拆解 | 检查父子层级、依赖、验收条件、缺失引用和循环依赖。 |
 | 人类确认 | AI 生成的计划保持候选状态，人确认后才能执行。 |
 | 依赖调度 | 只开放前置任务和 Human Gate 均满足的短任务。 |
-| 动态路由 | 按能力和上下文要求选择满足条件的最小执行层。 |
+| 有界自动推进 | 每项就绪任务只派发一次，记录选择与结果，并在待验收、待决定、阻塞、恢复门或步数上限处停止。 |
+| 动态路由原语 | 纯选择逻辑按能力和上下文要求选择最小执行层；尚未接入 Runtime AutoAdvance。 |
+| Domain Context 编译 | 按固定引用白名单只加载一个领域；歧义和未知层级直接停止。 |
 | 任务分配 | 选择能力兼容且仍有容量的执行者。 |
 | 模块组合 | 解析带版本的 capability manifest，组合断裂时停止。 |
 | 模块问题交接 | 把选中模块的批注转成可持久、可分派的任务，不建立第二套任务系统。 |
@@ -162,7 +192,7 @@ tests/                Python 与工作台行为测试
 examples/             合成状态记录和示例模块 manifest
 .github/workflows/    Python 3.10-3.12 安装与测试矩阵
 PRODUCT.md            稳定的产品边界
-docs/DEVELOPMENT_TASKBOOK_V0.7.md  自举开发、工作区、运行时、宠物与适配器任务书
+docs/DEVELOPMENT_TASKBOOK_V0.8.md  自动推进、领域上下文与真实使用验收任务书
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 封包验收边界
 ```
 
