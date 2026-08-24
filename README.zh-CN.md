@@ -6,6 +6,8 @@
 
 [English](README.md)
 
+[v0.6 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.6.md)
+
 ![Personal AI OS 三入口长期工作空间](docs/assets/workbench.jpg)
 
 ## 核心机制
@@ -145,10 +147,11 @@ tests/                Python 与工作空间行为测试
 examples/             合成事实和任务记录
 .github/workflows/    Python 3.10–3.12 安装与测试矩阵
 PRODUCT.md            长期产品边界与待定事项
+docs/DEVELOPMENT_TASKBOOK_V0.6.md  真实运行、非线性工作流、宠物与适配器计划
 ```
 
 ## 公开边界
 
 这个仓库只保留可复用产品骨架和合成演示。私人 Memory、业务材料、科研结果、真实路径、运行回执、模型账号和本地适配器不会进入仓库。
 
-当前版本为 `0.5.0` 私有预览。公开前需要选择许可证；仓库目前没有授予法律默认权利之外的复制、修改或再分发许可。
+当前版本为 `0.5.0` 公开源码预览。下一阶段的实现范围已经整理到 [v0.6 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.6.md)。项目尚未选择开源许可证，因此仓库没有授予法律默认权利之外的复制、修改或再分发许可。

@@ -6,6 +6,8 @@ Most AI conversations are good at finishing one bounded task. Long work breaks t
 
 [中文说明](README.zh-CN.md)
 
+[v0.6 development taskbook (Chinese)](docs/DEVELOPMENT_TASKBOOK_V0.6.md)
+
 ![Personal AI OS three-entry Long Work workspace](docs/assets/workbench.jpg)
 
 ## What is different
@@ -145,10 +147,11 @@ tests/                Python and browser-workbench behavior tests
 examples/             synthetic truth and task records
 .github/workflows/    Python 3.10–3.12 install and test matrix
 PRODUCT.md            durable product boundaries and open decisions
+docs/DEVELOPMENT_TASKBOOK_V0.6.md  real-runtime, nonlinear-workflow, pet, and adapter plan
 ```
 
 ## Publication boundary
 
 This repository contains the reusable product skeleton and synthetic demonstrations. Private memory, business material, research results, personal paths, run receipts, model accounts, and local adapters stay outside the repository.
 
-Version `0.5.0` is a private preview. A license must be selected before publication; the repository currently grants no permission to copy, modify, or redistribute the code beyond rights provided by law.
+Version `0.5.0` is a public source preview. The next implementation scope is tracked in the [v0.6 development taskbook](docs/DEVELOPMENT_TASKBOOK_V0.6.md). No open-source license has been selected, so the repository does not grant permission to copy, modify, or redistribute the code beyond rights provided by law.
