@@ -1,114 +1,129 @@
-# Personal AI OS Core
+# Personal AI OS
 
-**A recoverable control-plane kernel for persistent AI agents.**
+Turn long goals into executable short tasks, keep progress visible, and let people intervene where judgment matters.
 
-Most agent frameworks focus on completing the next tool call. Persistent agents have a different problem: they must preserve authority, scope, review state, and recovery context across sessions, machines, models, and human handoffs.
+AI conversations handle local tasks well. Long work crosses many conversations, so each new conversation has to reconstruct and verify earlier context. Plan Mode can propose a plan, but the plan still needs an operating surface that schedules tasks, assigns execution, collects decisions, and advances the next step.
 
-Personal AI OS Core turns those concerns into small, deterministic Python contracts. Ambiguous facts resolve to `UNKNOWN`; out-of-scope work and results without evidence resolve to `BLOCKED`.
+Personal AI OS adds that human-interactive operating layer. The system proposes a task hierarchy and a person confirms it. Satisfied dependencies release tasks into dynamic routing and assignment. Human Gates hold decisions that need judgment. Once a person records the decision, execution continues from the current state.
 
 [中文说明](README.zh-CN.md)
 
-## The problem it solves
+![Long Task Workbench](docs/assets/workbench.jpg)
 
-A long-running agent needs reliable answers to questions that a chat transcript cannot settle:
-
-- Which evidence defines the current state, and which files are only views?
-- What context may this task read, and what outputs may it create?
-- Is an output still a candidate, or has a human accepted it?
-- Is the task result committed, reviewable, and reversible?
-- What is the smallest state package needed to resume work safely?
-- Have frozen assets changed since they were accepted?
-
-This repository provides the control-plane rules for those decisions. It is designed for agent infrastructure, local-first AI workspaces, multi-agent operations, and reliability tooling.
-
-It is not a model orchestration framework, hosted assistant, vector database, or dump of a private workspace.
-
-## Control loop
+## Operating loop
 
 ```mermaid
 flowchart LR
-    E[Accepted evidence] --> T[Current truth]
-    V[Views and snapshots] -. compare only .-> T
-    T --> R[Bounded route]
-    R --> W[Task workflow]
-    W --> C[Candidate result]
-    C --> H[Human decision]
-    H --> G[Git closure]
-    G --> A[Accepted state]
-    A --> K[Recovery capsule]
-    A --> F[Asset freeze]
+    G[Long goal] --> P[AI proposes task hierarchy]
+    P --> H[Human confirms plan]
+    H --> Q[Dependency queue]
+    Q --> R[Dynamic routing]
+    R --> A[Task assignment]
+    A --> E[Short task execution]
+    E --> V[Result review]
+    V --> D{Human judgment?}
+    D -->|yes| J[Human Gate]
+    J --> Q
+    D -->|no| Q
 ```
 
-## Run it
+The loop provides four product behaviors:
 
-Python 3.10 or newer is enough. The core has no runtime dependencies.
+- Decompose long-form writing, research, and other sustained work into short tasks with dependencies and acceptance conditions.
+- Show hierarchy and progress without reconstructing project state from chat transcripts.
+- Select an execution route and executor from task complexity, capabilities, and context budget.
+- Keep plan approval, consequential decisions, and result acceptance under human control.
+
+## Interactive workbench
+
+The repository includes an interactive demo backed by synthetic research tasks:
+
+```bash
+make workbench
+```
+
+Open [http://127.0.0.1:8787](http://127.0.0.1:8787).
+
+The demo lets you:
+
+- approve an AI-proposed task plan;
+- inspect hierarchy, dependencies, and total progress;
+- approve or reject work at Human Gates;
+- watch tasks route by complexity and estimated context;
+- move work through execution, review, and acceptance, then release the next task.
+
+Demo state stays in the current browser page and does not read a private workspace.
+
+## Current capabilities
+
+| Capability | Current behavior |
+|---|---|
+| Long-task planning | Validates task IDs, hierarchy, dependencies, and acceptance conditions. Missing dependencies and cycles block the plan. |
+| Human plan approval | AI-generated plans remain candidates until a person accepts them. |
+| Dependency scheduling | Releases only tasks whose prerequisites and Human Gates are satisfied. |
+| Dynamic routing | Selects the smallest execution tier that meets complexity, capability, and context requirements. |
+| Task assignment | Chooses an executor with compatible capabilities, route support, and free capacity. |
+| Workbench projection | Produces hierarchy, operating lanes, assignments, and overall progress together. |
+| Human judgment | Pauses at plan approval, consequential tasks, and result acceptance. |
+| Long-run reliability | Current truth, continuity capsules, Git closure, and asset freeze support recovery and verification. |
+
+## Initial use cases
+
+The first use cases come from active work:
+
+- long-form writing, including research reviews, industry reports, investment material, and multi-section documents;
+- research workflows spanning question definition, literature work, experiments, evidence synthesis, and result review;
+- projects that require many model calls, multiple executors, and stage-level acceptance across conversations.
+
+Each short task can use a different model or executor. People follow the plan and decisions instead of supervising every model call.
+
+## Dynamic routing and Token Manager
+
+Dynamic routing is part of the current kernel. A task declares complexity, required capabilities, and estimated context. The router selects an execution tier that satisfies those requirements. Manual overrides pass through the same checks.
+
+Token Manager is the next extension. Task records and the workbench already carry `estimated_context_tokens` and route windows. The planned scope includes:
+
+- per-task Token forecasts and usage records;
+- checkpoints and context compaction at thresholds;
+- budget reallocation while a long task is running;
+- cost, context capacity, and execution-quality comparisons across models.
+
+The repository does not claim an implementation that has not been merged from the separate Token Manager discussion.
+
+## Run the kernel
+
+The Python kernel requires Python 3.10 or newer. Workbench behavior tests use Node.js.
 
 ```bash
 make demo
 make test
 ```
 
-The demo uses synthetic data and returns a machine-readable result:
+Machine-readable demo output:
 
 ```json
-{"checks":["asset_freeze","candidate_promotion","domain_route","git_closure","truth_compile","workflow_transition"],"data_source":"synthetic","status":"SAFE"}
+{"checks":["asset_freeze","candidate_promotion","domain_route","dynamic_route","git_closure","long_task_plan","task_assignment","truth_compile","workbench_projection","workflow_transition"],"data_source":"synthetic","status":"SAFE"}
 ```
 
-Install the command when you want to call it outside the repository:
+Install the Python API:
 
 ```bash
 python3 -m pip install --no-deps -e .
 personal-ai-os demo
 ```
 
-## Core contracts
-
-| Module | Contract |
-|---|---|
-| Current truth compiler | Accepted evidence can set current truth. Dashboards and snapshots remain views. Missing evidence and equal-authority conflicts return `UNKNOWN`. |
-| Domain router | Every route declares its domain, executor, allowed inputs, and allowed outputs. Missing or out-of-scope routes stop. |
-| Workflow state | Task transitions are explicit, return appendable events, and do not mutate the source card. Review, completion, and archive transitions require Git closure. |
-| Candidate promotion | A candidate needs evidence and a matching human final decision before it becomes accepted. |
-| Git closure | A result needs a commit, an attested no-change outcome, or an external artifact reference. Uncommitted task changes block review; independent candidates need explicit acceptance before completion. |
-| Continuity capsule | Recovery state contains only authority, current state, and the next action, with a deterministic digest. |
-| Asset freeze | A manifest records exact file digests. Missing or changed files block verification. |
-
-All contracts are pure or local-first. They return structured data and leave persistence, UI, and provider integrations to adapters outside the kernel.
-
-## Example
-
-```python
-from personal_ai_os import evaluate_git_closure, transition_task
-
-closure = evaluate_git_closure({
-    "result_kind": "result_commit",
-    "result_commit": "a1b2c3d4",
-    "integration_status": "mainline",
-    "dirty_paths": [],
-})
-
-result = transition_task(
-    {"task_id": "demo", "status": "IN_PROGRESS", "git_closure": closure},
-    "REVIEW",
-    by="agent:demo",
-)
-
-assert result["ok"]
-```
-
 ## Repository map
 
 ```text
-src/personal_ai_os/   control-plane contracts and CLI
-tests/                executable behavior specifications
-examples/             synthetic manifests and task records
-.github/workflows/    clean-install test matrix for Python 3.10–3.12
+src/personal_ai_os/   planning, routing, assignment, state, and recovery contracts
+workbench/            interactive synthetic long-task workbench
+tests/                Python and workbench behavior tests
+examples/             synthetic truth and task records
+.github/workflows/    install and test matrix for Python 3.10–3.12
 ```
 
-## Data boundary
+## Publication boundary
 
-The repository contains synthetic examples only. It excludes credentials, personal paths, private memory, business records, research results, run logs, and historical receipts. Model providers, browsers, cloud storage, messaging systems, live task boards, and private workspace adapters remain outside this core.
+This repository contains the reusable product skeleton and synthetic demonstrations. Private memory, business material, research results, personal paths, run receipts, model accounts, and local adapters stay outside the repository.
 
-## Status and license
-
-Version `0.1.0` is a private preview of the reusable kernel, not the full Personal AI OS runtime. The owner has not selected an open-source license, so no permission is granted to copy, modify, or redistribute the code beyond rights provided by law. Choose a license before making the repository public.
+Version `0.2.0` is a private preview. A license must be selected before publication; the repository currently grants no permission to copy, modify, or redistribute the code beyond rights provided by law.

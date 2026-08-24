@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Personal AI OS · Long Task Workbench</title>
+  <meta name="description" content="把长期目标拆成可执行短任务，让人类在关键节点查看进度、分派工作并作出裁决。">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="https://github.com/Dengk3Li/personal-ai-os-core" aria-label="Personal AI OS Core">
+      <span class="brand-mark" aria-hidden="true">P</span>
+      <span><b>Personal AI OS</b><small>Long Task Workbench</small></span>
+    </a>
+    <div class="topbar-actions">
+      <span id="plan-state" class="plan-state">等待你确认计划</span>
+      <button id="reset-demo" class="button secondary">重置演示</button>
+      <button id="approve-plan" class="button primary">确认任务计划</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Human-in-the-loop orchestration</p>
+        <h1>把长期目标变成一条<br>可查看、可介入的执行链</h1>
+        <p class="hero-copy">系统把长文本与科研工作拆成短任务，按依赖逐步开放。你可以确认计划、裁决关键节点、分派执行并验收结果。</p>
+      </div>
+      <div class="goal-card">
+        <span>当前长期目标</span>
+        <strong id="goal"></strong>
+        <div class="progress-track" aria-label="任务完成进度"><span id="progress-bar"></span></div>
+        <div class="progress-label"><b id="progress-percent">0%</b><span><span id="progress-text">0 / 5</span> 项完成</span></div>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="计划摘要">
+      <article><span>待你裁决</span><b id="human-gates">3</b><small>关键节点保留人工决定</small></article>
+      <article><span>预计上下文</span><b id="context-total">418k</b><small>Token Manager 的计划入口</small></article>
+      <article><span>执行策略</span><b>动态路由</b><small>按复杂度、能力与上下文预算分派</small></article>
+    </section>
+
+    <section class="workspace">
+      <aside class="plan-panel">
+        <div class="section-heading"><p class="eyebrow">Task hierarchy</p><h2>任务拆分</h2></div>
+        <ol id="task-tree" class="task-tree"></ol>
+        <div class="plan-note"><b>推进规则</b><p>前置任务完成后，下一项才进入可分派状态。Human Gate 会停在你的裁决界面。</p></div>
+      </aside>
+
+      <section class="board-panel">
+        <div class="section-heading board-heading">
+          <div><p class="eyebrow">Live execution view</p><h2>执行进度</h2></div>
+          <p>点击卡片底部操作，模拟分派、送审和验收。</p>
+        </div>
+        <div class="board">
+          <section class="lane"><header><span class="lane-dot queued"></span><h3>待启动</h3><b data-count="QUEUED">5</b></header><div class="lane-body" data-lane="QUEUED"></div></section>
+          <section class="lane"><header><span class="lane-dot running"></span><h3>执行中</h3><b data-count="IN_PROGRESS">0</b></header><div class="lane-body" data-lane="IN_PROGRESS"></div></section>
+          <section class="lane"><header><span class="lane-dot review"></span><h3>待验收</h3><b data-count="REVIEW">0</b></header><div class="lane-body" data-lane="REVIEW"></div></section>
+          <section class="lane"><header><span class="lane-dot done"></span><h3>已完成</h3><b data-count="DONE">0</b></header><div class="lane-body" data-lane="DONE"></div></section>
+        </div>
+        <div class="blocked-row" data-lane="BLOCKED"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="decision-modal" class="modal-backdrop" hidden>
+    <section class="decision-modal" role="dialog" aria-modal="true" aria-labelledby="decision-heading">
+      <p class="eyebrow">Human Gate</p>
+      <h2 id="decision-heading">需要你的决定</h2>
+      <p id="decision-title" class="decision-title"></p>
+      <p>确认后任务可以进入动态分派；退回后任务保持阻塞，后续任务不会自动启动。</p>
+      <div class="decision-actions">
+        <button id="decision-reject" class="button secondary">退回</button>
+        <button id="decision-approve" class="button primary">批准并继续</button>
+      </div>
+    </section>
+  </div>
+
+  <footer>合成研究任务演示 · 所有状态只保存在当前页面</footer>
+  <script src="app.js"></script>
+  <script>PersonalAIWorkbench.mount(document);</script>
+</body>
+</html>

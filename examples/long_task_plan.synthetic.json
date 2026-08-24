@@ -1,0 +1,39 @@
+{
+  "goal": "Produce a source-grounded interdisciplinary research review",
+  "plan_id": "plan:research-review-demo",
+  "tasks": [
+    {
+      "acceptance": "One bounded research question is accepted",
+      "complexity": "standard",
+      "depends_on": [],
+      "estimated_context_tokens": 18000,
+      "human_gate": true,
+      "parent_id": null,
+      "required_capabilities": ["research"],
+      "task_id": "scope",
+      "title": "Confirm the research question"
+    },
+    {
+      "acceptance": "Each major claim has a source",
+      "complexity": "deep",
+      "depends_on": ["scope"],
+      "estimated_context_tokens": 120000,
+      "human_gate": false,
+      "parent_id": "scope",
+      "required_capabilities": ["research"],
+      "task_id": "evidence",
+      "title": "Build the evidence map"
+    },
+    {
+      "acceptance": "The draft follows the accepted outline",
+      "complexity": "standard",
+      "depends_on": ["evidence"],
+      "estimated_context_tokens": 82000,
+      "human_gate": true,
+      "parent_id": "scope",
+      "required_capabilities": ["research", "writing"],
+      "task_id": "draft",
+      "title": "Draft and review the article"
+    }
+  ]
+}
