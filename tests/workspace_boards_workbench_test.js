@@ -3,16 +3,17 @@ const test = require("node:test");
 
 const workbench = require("../workbench/app.js");
 
-test("the workspace exposes exactly the three accepted primary boards", () => {
-  assert.equal(typeof workbench.workspaceView, "function", "three-board projection must exist");
+test("the workspace exposes the four primary views over one task state", () => {
+  assert.equal(typeof workbench.workspaceView, "function", "workspace projection must exist");
   const view = workbench.workspaceView(workbench.createDemoState());
 
   assert.deepEqual(
     view.boards.map((board) => board.id),
-    ["global", "work", "decision"],
+    ["global", "work", "research", "decision"],
   );
   assert.equal(view.activeBoard, "work");
   assert.equal(view.global.readOnly, true);
+  assert.equal(view.research.readOnly, true);
 });
 
 test("switching boards preserves the same long-task state", () => {
@@ -20,12 +21,14 @@ test("switching boards preserves the same long-task state", () => {
   const original = workbench.createDemoState();
 
   const globalState = workbench.selectBoard(original, "global");
-  const decisionState = workbench.selectBoard(globalState, "decision");
+  const researchState = workbench.selectBoard(globalState, "research");
+  const decisionState = workbench.selectBoard(researchState, "decision");
 
   assert.equal(globalState.activeBoard, "global");
+  assert.equal(researchState.activeBoard, "research");
   assert.equal(decisionState.activeBoard, "decision");
   assert.deepEqual(decisionState.taskStates, original.taskStates);
-  assert.equal(workbench.selectBoard(original, "research").activeBoard, "work");
+  assert.equal(workbench.selectBoard(original, "unknown").activeBoard, "work");
 });
 
 test("human gates live on the decision board and release work after approval", () => {

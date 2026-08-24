@@ -27,7 +27,15 @@
   const PRIMARY_BOARDS = [
     { id: "global", label: "全局地图", summary: "系统如何接住长期工作" },
     { id: "work", label: "工作进度", summary: "任务现在推进到哪里" },
+    { id: "research", label: "研究脉络", summary: "问题、证据与结论如何收敛" },
     { id: "decision", label: "待我决定", summary: "哪些节点需要你的判断" },
+  ];
+
+  const RESEARCH_STAGES = [
+    { id: "scope", label: "问题边界", purpose: "明确研究问题、范围、排除项与成功条件。" },
+    { id: "evidence", label: "证据地图", purpose: "让主要主张逐项对应可追溯来源。" },
+    { id: "outline", label: "主张综合", purpose: "区分事实、推断与仍待验证的结论。" },
+    { id: "final", label: "结论核验", purpose: "复核引用、结论强度与不确定性。" },
   ];
 
   const GLOBAL_NODES = [
@@ -174,8 +182,37 @@
     };
   }
 
+  function researchView(state) {
+    const evidenceStatus = {
+      QUEUED: "WAITING",
+      IN_PROGRESS: "COLLECTING",
+      REVIEW: "UNDER_REVIEW",
+      DONE: "ACCEPTED",
+      BLOCKED: "BLOCKED",
+    };
+    const stages = RESEARCH_STAGES.map((stage) => {
+      const task = taskById(state, stage.id);
+      const taskStatus = state.taskStates[stage.id] || "QUEUED";
+      return {
+        ...stage,
+        title: task ? task.title : stage.label,
+        acceptance: task ? task.acceptance : "",
+        taskStatus,
+        evidenceStatus: evidenceStatus[taskStatus] || "WAITING",
+      };
+    });
+    return {
+      readOnly: true,
+      question: state.goal,
+      stages,
+      accepted: stages.filter((stage) => stage.evidenceStatus === "ACCEPTED").length,
+      total: stages.length,
+    };
+  }
+
   function workspaceView(state) {
     const work = viewModel(state);
+    const research = researchView(state);
     const pending = state.planApproved
       ? state.tasks
         .filter((task) => actionForTask(state, task.task_id) === "HUMAN_DECISION_REQUIRED")
@@ -207,6 +244,7 @@
         taskCount: state.tasks.length,
       },
       work,
+      research,
       decision: { pending, decided },
     };
   }
@@ -234,6 +272,14 @@
     REVIEW: "待验收",
     DONE: "已完成",
     BLOCKED: "已阻塞",
+  };
+
+  const EVIDENCE_STATUS_LABELS = {
+    WAITING: "等待前置证据",
+    COLLECTING: "证据收集中",
+    UNDER_REVIEW: "证据待核验",
+    ACCEPTED: "证据已接受",
+    BLOCKED: "研究已阻塞",
   };
 
   function renderTaskCard(task) {
@@ -304,6 +350,26 @@
     </article>`;
   }
 
+  function renderResearchCard(stage) {
+    return `<article class="review-card research-card evidence-${escapeHtml(stage.evidenceStatus.toLowerCase())}">
+      <div class="card-grid">
+        <div class="card-body">
+          <div class="card-meta">
+            <span class="evidence-pill evidence-${escapeHtml(stage.evidenceStatus.toLowerCase())}">${escapeHtml(EVIDENCE_STATUS_LABELS[stage.evidenceStatus] || stage.evidenceStatus)}</span>
+            <span>${escapeHtml(stage.label || stage.id)}</span>
+          </div>
+          <h3>${escapeHtml(stage.title)}</h3>
+          <p class="summary">${escapeHtml(stage.purpose)}</p>
+        </div>
+        <div class="card-side">
+          <strong>通过条件</strong>
+          <p>${escapeHtml(stage.acceptance)}</p>
+          <span class="task-chip">任务状态 · ${escapeHtml(STATUS_LABELS[stage.taskStatus] || stage.taskStatus)}</span>
+        </div>
+      </div>
+    </article>`;
+  }
+
   function renderHierarchy(state) {
     return state.tasks.map((task, index) => {
       const status = state.taskStates[task.task_id];
@@ -316,6 +382,19 @@
     return `<button class="system-node${selected ? " active" : ""}" type="button" data-global-node="${escapeHtml(node.id)}">
       <span>${escapeHtml(node.title)}</span><small>${escapeHtml(node.summary)}</small>
     </button>`;
+  }
+
+  function scrollActiveBoardIntoView(doc, board) {
+    const viewport = doc.defaultView;
+    if (!viewport || !viewport.matchMedia || !viewport.matchMedia("(max-width: 980px)").matches) {
+      return false;
+    }
+    const panel = Array.from(doc.querySelectorAll("[data-panel]"))
+      .find((item) => item.dataset.panel === board);
+    if (!panel || !panel.scrollIntoView) return false;
+    const reducedMotion = viewport.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panel.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+    return true;
   }
 
   function mount(doc) {
@@ -359,6 +438,9 @@
         ? view.decision.pending.map(renderDecisionCard).join("")
         : '<div class="empty-state"><span>✓</span><h3>当前没有待裁决事项</h3><p>任务会继续按依赖推进；新的关键决定会回到这里。</p></div>';
       byId("decision-visible-count").textContent = `${view.decision.pending.length} 项待处理`;
+      byId("research-question").textContent = view.research.question;
+      byId("research-visible-count").textContent = `${view.research.accepted} / ${view.research.total} 项证据阶段已接受`;
+      byId("research-stage-list").innerHTML = view.research.stages.map(renderResearchCard).join("");
       byId("global-node-list").innerHTML = view.global.nodes
         .map((node) => renderGlobalNode(node, node.id === selectedNode))
         .join('<span class="system-connector" aria-hidden="true">→</span>');
@@ -375,6 +457,7 @@
       if (boardButton) {
         state = selectBoard(state, boardButton.dataset.board);
         render();
+        scrollActiveBoardIntoView(doc, state.activeBoard);
         return;
       }
       const globalNode = event.target.closest && event.target.closest("[data-global-node]");
@@ -422,7 +505,9 @@
     progress,
     recordDecision,
     renderDecisionCard,
+    renderResearchCard,
     renderTaskCard,
+    scrollActiveBoardIntoView,
     selectBoard,
     viewModel,
     workspaceView,

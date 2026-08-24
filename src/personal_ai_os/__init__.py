@@ -10,7 +10,7 @@ from .routing import route_task
 from .truth import compile_truth
 from .workflow import transition_task
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "build_capsule",

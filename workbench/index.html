@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · 长期工作空间</title>
-  <meta name="description" content="把长期目标拆成短任务，在全局地图、工作进度和待我决定之间持续推进。">
+  <meta name="description" content="把长期目标拆成短任务，在全局地图、工作进度、研究脉络和待我决定之间持续推进。">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -39,13 +39,16 @@
     <section class="workspace">
       <aside class="workspace-rail" aria-label="工作空间导航">
         <fieldset>
-          <legend>三个主板</legend>
-          <nav class="board-switcher" role="tablist" aria-label="三个主板">
+          <legend>四个主板</legend>
+          <nav class="board-switcher" role="tablist" aria-label="四个主板">
             <button data-board="global" role="tab" aria-selected="false" type="button">
               <b>全局地图</b><span>系统如何接住长期工作</span>
             </button>
             <button data-board="work" class="active" role="tab" aria-selected="true" type="button">
               <b>工作进度</b><span>任务现在推进到哪里</span>
+            </button>
+            <button data-board="research" role="tab" aria-selected="false" type="button">
+              <b>研究脉络</b><span>问题、证据与结论如何收敛</span>
             </button>
             <button data-board="decision" role="tab" aria-selected="false" type="button">
               <b>待我决定 <em data-board-count></em></b><span>哪些节点需要你的判断</span>
@@ -61,7 +64,7 @@
 
         <div class="privacy-note">
           <strong>合成演示</strong>
-          <span>三个板读取同一份任务状态。页面不连接私人工作区，也不包含真实研究内容。</span>
+          <span>四个板读取同一份任务状态。页面不连接私人工作区，也不包含真实研究内容。</span>
         </div>
         <div class="context-note"><span>计划上下文</span><strong id="context-total">0k</strong></div>
       </aside>
@@ -84,6 +87,7 @@
           </article>
           <div class="map-boundaries">
             <article><b>工作进度</b><span>承接任务执行、路由、分派和验收状态。</span></article>
+            <article><b>研究脉络</b><span>从同一任务状态投影问题边界、证据阶段和结论核验。</span></article>
             <article><b>待我决定</b><span>集中处理计划确认与 Human Gate，不分散到各个对话。</span></article>
           </div>
         </section>
@@ -98,6 +102,23 @@
             <span>每项短任务可以选择不同执行层和执行者；人只在关键节点介入。</span>
           </div>
           <div class="item-list" id="work-task-list"></div>
+        </section>
+
+        <section class="board-panel" data-panel="research" role="tabpanel" aria-label="研究脉络" hidden>
+          <div class="feed-heading">
+            <div><span class="section-kicker">RESEARCH TRACE</span><h2>研究脉络</h2></div>
+            <span class="count-chip" id="research-visible-count"></span>
+          </div>
+          <div class="research-question">
+            <span>当前研究问题</span>
+            <h3 id="research-question"></h3>
+            <p>研究板读取工作进度中的同一任务状态，聚焦问题边界、证据来源、主张综合和结论强度。</p>
+          </div>
+          <div class="research-boundary">
+            <strong>结论边界</strong>
+            <span>阶段进入“证据已接受”后才计入研究进展；执行中、待核验和阻塞都不会被包装成科学结论。</span>
+          </div>
+          <div class="item-list" id="research-stage-list"></div>
         </section>
 
         <section class="board-panel" data-panel="decision" role="tabpanel" aria-label="待我决定" hidden>
