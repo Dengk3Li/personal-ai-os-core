@@ -1,0 +1,34 @@
+{
+  "required_claims": [
+    {
+      "field": "status",
+      "subject": "project:demo"
+    }
+  ],
+  "sources": [
+    {
+      "accepted": true,
+      "claims": [
+        {
+          "field": "status",
+          "subject": "project:demo",
+          "value": "ACTIVE"
+        }
+      ],
+      "id": "demo-receipt",
+      "kind": "acceptance_receipt"
+    },
+    {
+      "accepted": true,
+      "claims": [
+        {
+          "field": "status",
+          "subject": "project:demo",
+          "value": "PAUSED"
+        }
+      ],
+      "id": "demo-dashboard",
+      "kind": "status_view"
+    }
+  ]
+}
