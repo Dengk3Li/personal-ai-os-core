@@ -3,81 +3,119 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Personal AI OS · Long Task Workbench</title>
-  <meta name="description" content="把长期目标拆成可执行短任务，让人类在关键节点查看进度、分派工作并作出裁决。">
+  <meta name="color-scheme" content="light">
+  <title>Personal AI OS · 长期工作空间</title>
+  <meta name="description" content="把长期目标拆成短任务，在全局地图、工作进度和待我决定之间持续推进。">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="https://github.com/Dengk3Li/personal-ai-os-core" aria-label="Personal AI OS Core">
-      <span class="brand-mark" aria-hidden="true">P</span>
-      <span><b>Personal AI OS</b><small>Long Task Workbench</small></span>
+    <a class="brand-block" href="https://github.com/Dengk3Li/personal-ai-os-core" aria-label="Personal AI OS GitHub 仓库">
+      <span class="eyebrow">PERSONAL AI OS · LOCAL FIRST</span>
+      <h1>Long Work</h1>
+      <p>让长期 AI 工作跨对话持续推进。</p>
     </a>
-    <div class="topbar-actions">
-      <span id="plan-state" class="plan-state">等待你确认计划</span>
-      <button id="reset-demo" class="button secondary">重置演示</button>
-      <button id="approve-plan" class="button primary">确认任务计划</button>
+    <div class="top-actions">
+      <button class="ghost-button" data-board="global" type="button">系统地图</button>
+      <button class="primary-button" id="reset-demo" type="button">重置演示</button>
     </div>
   </header>
 
   <main>
-    <section class="hero">
+    <section class="overview" aria-labelledby="overview-title">
       <div>
-        <p class="eyebrow">Human-in-the-loop orchestration</p>
-        <h1>把长期目标变成一条<br>可查看、可介入的执行链</h1>
-        <p class="hero-copy">系统把长文本与科研工作拆成短任务，按依赖逐步开放。你可以确认计划、裁决关键节点、分派执行并验收结果。</p>
+        <span class="section-kicker">LONG-RUNNING WORK</span>
+        <h2 id="overview-title">长期工作空间</h2>
+        <p id="goal"></p>
       </div>
-      <div class="goal-card">
-        <span>当前长期目标</span>
-        <strong id="goal"></strong>
-        <div class="progress-track" aria-label="任务完成进度"><span id="progress-bar"></span></div>
-        <div class="progress-label"><b id="progress-percent">0%</b><span><span id="progress-text">0 / 5</span> 项完成</span></div>
+      <div class="metric-grid" aria-label="长期任务摘要">
+        <article class="metric"><strong id="metric-total">0</strong><span>短任务</span></article>
+        <article class="metric"><strong id="metric-active">0</strong><span>推进中</span></article>
+        <article class="metric"><strong id="metric-decisions">0</strong><span>待我决定</span></article>
+        <article class="metric"><strong id="metric-done">0</strong><span>已完成</span></article>
       </div>
-    </section>
-
-    <section class="metrics" aria-label="计划摘要">
-      <article><span>待你裁决</span><b id="human-gates">3</b><small>关键节点保留人工决定</small></article>
-      <article><span>预计上下文</span><b id="context-total">418k</b><small>Token Manager 的计划入口</small></article>
-      <article><span>执行策略</span><b>动态路由</b><small>按复杂度、能力与上下文预算分派</small></article>
     </section>
 
     <section class="workspace">
-      <aside class="plan-panel">
-        <div class="section-heading"><p class="eyebrow">Task hierarchy</p><h2>任务拆分</h2></div>
-        <ol id="task-tree" class="task-tree"></ol>
-        <div class="plan-note"><b>推进规则</b><p>前置任务完成后，下一项才进入可分派状态。Human Gate 会停在你的裁决界面。</p></div>
+      <aside class="workspace-rail" aria-label="工作空间导航">
+        <fieldset>
+          <legend>三个主板</legend>
+          <nav class="board-switcher" role="tablist" aria-label="三个主板">
+            <button data-board="global" role="tab" aria-selected="false" type="button">
+              <b>全局地图</b><span>系统如何接住长期工作</span>
+            </button>
+            <button data-board="work" class="active" role="tab" aria-selected="true" type="button">
+              <b>工作进度</b><span>任务现在推进到哪里</span>
+            </button>
+            <button data-board="decision" role="tab" aria-selected="false" type="button">
+              <b>待我决定 <em data-board-count></em></b><span>哪些节点需要你的判断</span>
+            </button>
+          </nav>
+        </fieldset>
+
+        <section class="plan-summary" aria-label="任务计划">
+          <div class="rail-heading"><b>任务拆分</b><span id="progress-copy">0 / 5 项完成</span></div>
+          <div class="progress-track"><span id="progress-bar"></span></div>
+          <ol id="task-tree" class="task-tree"></ol>
+        </section>
+
+        <div class="privacy-note">
+          <strong>合成演示</strong>
+          <span>三个板读取同一份任务状态。页面不连接私人工作区，也不包含真实研究内容。</span>
+        </div>
+        <div class="context-note"><span>计划上下文</span><strong id="context-total">0k</strong></div>
       </aside>
 
-      <section class="board-panel">
-        <div class="section-heading board-heading">
-          <div><p class="eyebrow">Live execution view</p><h2>执行进度</h2></div>
-          <p>点击卡片底部操作，模拟分派、送审和验收。</p>
-        </div>
-        <div class="board">
-          <section class="lane"><header><span class="lane-dot queued"></span><h3>待启动</h3><b data-count="QUEUED">5</b></header><div class="lane-body" data-lane="QUEUED"></div></section>
-          <section class="lane"><header><span class="lane-dot running"></span><h3>执行中</h3><b data-count="IN_PROGRESS">0</b></header><div class="lane-body" data-lane="IN_PROGRESS"></div></section>
-          <section class="lane"><header><span class="lane-dot review"></span><h3>待验收</h3><b data-count="REVIEW">0</b></header><div class="lane-body" data-lane="REVIEW"></div></section>
-          <section class="lane"><header><span class="lane-dot done"></span><h3>已完成</h3><b data-count="DONE">0</b></header><div class="lane-body" data-lane="DONE"></div></section>
-        </div>
-        <div class="blocked-row" data-lane="BLOCKED"></div>
+      <section class="feed" aria-live="polite">
+        <section class="board-panel" data-panel="global" role="tabpanel" aria-label="全局地图" hidden>
+          <div class="feed-heading">
+            <div><span class="section-kicker">READ-ONLY SYSTEM MAP</span><h2>全局地图</h2></div>
+            <span class="count-chip">只读 · 不推进任务</span>
+          </div>
+          <div class="global-intro">
+            <h3>一条能跨对话接续的执行链</h3>
+            <p>这里说明长期目标如何经过拆解、裁决、路由、分配和验收，重新释放下一项工作。</p>
+          </div>
+          <div class="system-flow" id="global-node-list"></div>
+          <article class="global-detail">
+            <span>当前环节</span>
+            <h3 id="global-detail-title"></h3>
+            <p id="global-detail-copy"></p>
+          </article>
+          <div class="map-boundaries">
+            <article><b>工作进度</b><span>承接任务执行、路由、分派和验收状态。</span></article>
+            <article><b>待我决定</b><span>集中处理计划确认与 Human Gate，不分散到各个对话。</span></article>
+          </div>
+        </section>
+
+        <section class="board-panel" data-panel="work" role="tabpanel" aria-label="工作进度">
+          <div class="feed-heading">
+            <div><span class="section-kicker">EXECUTION QUEUE</span><h2>工作进度</h2></div>
+            <span class="count-chip">依赖满足后逐项开放</span>
+          </div>
+          <div class="work-explainer">
+            <strong>研究综述 · 当前计划</strong>
+            <span>每项短任务可以选择不同执行层和执行者；人只在关键节点介入。</span>
+          </div>
+          <div class="item-list" id="work-task-list"></div>
+        </section>
+
+        <section class="board-panel" data-panel="decision" role="tabpanel" aria-label="待我决定" hidden>
+          <div class="feed-heading">
+            <div><span class="section-kicker">HUMAN DECISIONS</span><h2>待我决定</h2></div>
+            <span class="count-chip" id="decision-visible-count"></span>
+          </div>
+          <div class="decision-intro">
+            <strong>只有需要判断的节点才会来到这里</strong>
+            <span>决定一旦记录，相关任务会继续分派或保持阻塞，不需要回到旧对话重建上下文。</span>
+          </div>
+          <div class="item-list" id="decision-list"></div>
+        </section>
       </section>
     </section>
   </main>
 
-  <div id="decision-modal" class="modal-backdrop" hidden>
-    <section class="decision-modal" role="dialog" aria-modal="true" aria-labelledby="decision-heading">
-      <p class="eyebrow">Human Gate</p>
-      <h2 id="decision-heading">需要你的决定</h2>
-      <p id="decision-title" class="decision-title"></p>
-      <p>确认后任务可以进入动态分派；退回后任务保持阻塞，后续任务不会自动启动。</p>
-      <div class="decision-actions">
-        <button id="decision-reject" class="button secondary">退回</button>
-        <button id="decision-approve" class="button primary">批准并继续</button>
-      </div>
-    </section>
-  </div>
-
-  <footer>合成研究任务演示 · 所有状态只保存在当前页面</footer>
+  <footer>Personal AI OS · Synthetic long-work demo</footer>
   <script src="app.js"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>

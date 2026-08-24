@@ -9,7 +9,7 @@ test-python:
 	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 test-workbench:
-	node --test tests/workbench_demo_test.js
+	node --test tests/*workbench*_test.js
 
 workbench:
 	python3 -m http.server 8787 --directory workbench

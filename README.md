@@ -8,7 +8,7 @@ Personal AI OS adds that human-interactive operating layer. The system proposes 
 
 [中文说明](README.zh-CN.md)
 
-![Long Task Workbench](docs/assets/workbench.jpg)
+![Three-board workspace for long-running work](docs/assets/workbench.jpg)
 
 ## Operating loop
 
@@ -34,7 +34,7 @@ The loop provides four product behaviors:
 - Select an execution route and executor from task complexity, capabilities, and context budget.
 - Keep plan approval, consequential decisions, and result acceptance under human control.
 
-## Interactive workbench
+## Three-board workspace
 
 The repository includes an interactive demo backed by synthetic research tasks:
 
@@ -44,13 +44,15 @@ make workbench
 
 Open [http://127.0.0.1:8787](http://127.0.0.1:8787).
 
-The demo lets you:
+All three boards read the same long-task state:
 
-- approve an AI-proposed task plan;
-- inspect hierarchy, dependencies, and total progress;
-- approve or reject work at Human Gates;
-- watch tasks route by complexity and estimated context;
-- move work through execution, review, and acceptance, then release the next task.
+| Board | Responsibility |
+|---|---|
+| System map | Read-only view of the path from long goal through decomposition, human decisions, routing, assignment, review, and cross-conversation continuation. |
+| Work progress | Shows hierarchy, dependencies, executor, route, context estimate, and acceptance state. Completing prerequisites releases the next task. |
+| Decisions | Holds plan approval and Human Gates. Approval releases work; rejection keeps the task blocked. |
+
+Research, long-form writing, and other domains enter the work board as task content instead of adding more primary boards. The interface shares Cognitive Intake's paper surface, ink green, signal lime, serif headings, and split-card structure.
 
 Demo state stays in the current browser page and does not read a private workspace.
 
@@ -63,7 +65,7 @@ Demo state stays in the current browser page and does not read a private workspa
 | Dependency scheduling | Releases only tasks whose prerequisites and Human Gates are satisfied. |
 | Dynamic routing | Selects the smallest execution tier that meets complexity, capability, and context requirements. |
 | Task assignment | Chooses an executor with compatible capabilities, route support, and free capacity. |
-| Workbench projection | Produces hierarchy, operating lanes, assignments, and overall progress together. |
+| Three-board projection | Derives the read-only system map, work progress, and decision queue from one task state. |
 | Human judgment | Pauses at plan approval, consequential tasks, and result acceptance. |
 | Long-run reliability | Current truth, continuity capsules, Git closure, and asset freeze support recovery and verification. |
 
@@ -126,4 +128,4 @@ examples/             synthetic truth and task records
 
 This repository contains the reusable product skeleton and synthetic demonstrations. Private memory, business material, research results, personal paths, run receipts, model accounts, and local adapters stay outside the repository.
 
-Version `0.2.0` is a private preview. A license must be selected before publication; the repository currently grants no permission to copy, modify, or redistribute the code beyond rights provided by law.
+Version `0.3.0` is a private preview. A license must be selected before publication; the repository currently grants no permission to copy, modify, or redistribute the code beyond rights provided by law.
