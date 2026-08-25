@@ -93,7 +93,10 @@ def identifier_aliases(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
             [item.get("decision_id") for item in decisions], "decision", 3
         ),
         "domains": _ordered_aliases(
-            [task.get("domain_id") for task in tasks], "domain", 2
+            [task.get("domain_id") for task in tasks]
+            + [workflow.get("domain_id") for workflow in workflows],
+            "domain",
+            2,
         ),
         "groups": _ordered_aliases(
             [task.get("parallel_group") for task in tasks], "group", 2
@@ -122,6 +125,9 @@ def _anonymize_runtime_identifiers(
     for workflow in snapshot.get("workflows", []):
         workflow["workflow_id"] = _alias(
             workflow.get("workflow_id"), aliases["workflows"]
+        )
+        workflow["domain_id"] = _alias(
+            workflow.get("domain_id"), aliases["domains"]
         )
     for task in snapshot.get("tasks", []):
         task["task_id"] = _alias(task.get("task_id"), aliases["tasks"])

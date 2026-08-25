@@ -99,6 +99,23 @@ class RuntimeStoreTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_workflow_domain_survives_store_reopen_without_tasks(self):
+        store = RuntimeStore(self.database)
+        store.create_workflow(
+            {
+                "workflow_id": "empty-product-line",
+                "name": "空工作线",
+                "caption": "等待添加任务",
+                "layout": "custom",
+                "goal": "保留所属领域",
+                "domain_id": "product",
+            }
+        )
+
+        reopened = RuntimeStore(self.database)
+
+        self.assertEqual("product", reopened.get_workflow("empty-product-line")["domain_id"])
+
     def test_science_preset_is_persistent_and_supports_parallel_paths(self):
         store = RuntimeStore(self.database)
         installed = install_workflow_preset(store, "science")

@@ -106,6 +106,40 @@ test("module focus resolves complete upstream and downstream paths", () => {
   assert.ok(focus.downstream.includes("token-manager"));
 });
 
+test("module inspection explains incoming processing and outgoing connections", () => {
+  const graph = require("../workbench/architecture.js").systemGraph([]);
+  const connections = workbench.moduleConnectionModel(graph, "longtask-kernel");
+
+  assert.deepEqual(connections.incoming.map((item) => item.module_name), ["领域识别与抽象"]);
+  assert.deepEqual(connections.outgoing.map((item) => item.module_name), ["领域工作系统"]);
+  assert.ok(connections.processing.some((step) => /工作流结构编译/.test(step)));
+  assert.ok(connections.interfaces.some((item) => item.direction === "输入"));
+  assert.ok(connections.interfaces.some((item) => item.direction === "输出"));
+});
+
+test("module inspection derives honest connection details for every system node", () => {
+  const graph = require("../workbench/architecture.js").systemGraph([]);
+
+  graph.nodes.forEach((node) => {
+    const connections = workbench.moduleConnectionModel(graph, node.module_id);
+    assert.ok(connections.processing.length, `${node.module_id} needs processing copy`);
+    assert.ok(connections.interfaces.length, `${node.module_id} needs interface copy`);
+    connections.interfaces.forEach((item) => {
+      assert.ok(item.direction);
+      assert.ok(item.name);
+      assert.ok(item.protocol);
+    });
+  });
+});
+
+test("feedback connections stay separate from execution dependencies", () => {
+  const graph = require("../workbench/architecture.js").systemGraph([]);
+  const connections = workbench.moduleConnectionModel(graph, "personal-context");
+
+  assert.ok(!connections.incoming.some((item) => item.module_id === "learning-cycle"));
+  assert.ok(connections.feedback.some((item) => item.module_id === "learning-cycle"));
+});
+
 test("a module annotation becomes a bounded task candidate for the active workflow", () => {
   const state = workbench.createShowcaseState();
   const proposal = workbench.proposeTaskFromModuleAnnotation(

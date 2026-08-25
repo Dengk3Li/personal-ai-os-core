@@ -121,6 +121,7 @@ def _workflow_definition(workflow: dict[str, Any]) -> dict[str, Any]:
         "caption": str(workflow.get("caption") or ""),
         "layout": str(workflow.get("layout") or "custom"),
         "goal": str(workflow.get("goal") or ""),
+        "domain_id": str(workflow.get("domain_id") or workflow_id),
     }
 
 

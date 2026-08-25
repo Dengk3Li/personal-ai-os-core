@@ -21,7 +21,7 @@ from .truth import compile_truth
 from .workflow import transition_task
 from .workflow_structure import compile_workflow_structure, evaluate_workflow_structure
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 __all__ = [
     "build_capsule",

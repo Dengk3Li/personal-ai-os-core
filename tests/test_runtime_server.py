@@ -8,7 +8,7 @@ from pathlib import Path
 
 from personal_ai_os.runtime import RuntimeStore, install_workflow_preset
 from personal_ai_os.presentation import validate_presentation
-from personal_ai_os.server import create_runtime_server
+from personal_ai_os.server import RuntimeApplication, create_runtime_server
 
 
 class SuccessfulAdapter:
@@ -23,6 +23,27 @@ class SuccessfulAdapter:
             "external_run_id": "api-run-1",
             "status": "SUCCEEDED",
             "output_text": "API result",
+        }
+
+
+class NoisyProbeAdapter(SuccessfulAdapter):
+    def probe(self):
+        return {
+            "adapter_id": self.adapter_id,
+            "available": True,
+            "protocol": "test",
+            "debug": "token=PRIVATE_SENTINEL",
+        }
+
+
+class ClientNamedAdapter(SuccessfulAdapter):
+    adapter_id = "client-alpha-adapter"
+
+    def probe(self):
+        return {
+            "adapter_id": self.adapter_id,
+            "available": True,
+            "protocol": "client-alpha-protocol",
         }
 
 
@@ -80,6 +101,126 @@ class RuntimeServerTests(unittest.TestCase):
         task = next(item for item in after["state"]["tasks"] if item["task_id"] == "science:hypothesis")
         self.assertEqual("REVIEW", after["state"]["taskStates"][task["task_id"]])
         self.assertEqual(1, task["attempts"])
+
+    def test_empty_workflow_keeps_its_domain_in_the_runtime_projection(self):
+        created_status, created = self.request(
+            "/api/workflows",
+            {
+                "workflow_id": "empty-product-line",
+                "name": "空工作线",
+                "caption": "等待添加任务",
+                "layout": "custom",
+                "goal": "保留所属领域",
+                "domain_id": "product",
+            },
+        )
+
+        read_status, projection = self.request("/api/runtime")
+        line = next(
+            item
+            for item in projection["state"]["businessLines"]
+            if item["line_id"] == "empty-product-line"
+        )
+
+        self.assertEqual(200, created_status)
+        self.assertEqual("product", created["domain_id"])
+        self.assertEqual(200, read_status)
+        self.assertEqual("product", line["domain_id"])
+
+    def test_private_local_projection_keeps_private_task_copy_but_whitelists_adapter_probe(self):
+        self.store.create_task(
+            {
+                "task_id": "science:private",
+                "workflow_id": "science",
+                "line_id": "science",
+                "title": "私人任务原文",
+                "acceptance": "保留完整材料",
+                "depends_on": [],
+            }
+        )
+        self.server.app.broker.adapters = {"test-adapter": NoisyProbeAdapter()}
+
+        _, payload = self.request("/api/runtime")
+
+        self.assertIn("私人任务原文", json.dumps(payload, ensure_ascii=False))
+        self.assertNotIn("PRIVATE_SENTINEL", json.dumps(payload, ensure_ascii=False))
+        self.assertEqual("private-local", self.server.app.projection_mode)
+
+    def test_private_local_server_rejects_non_loopback_binding(self):
+        with self.assertRaisesRegex(ValueError, "loopback"):
+            create_runtime_server(
+                ("0.0.0.0", 0),
+                store=self.store,
+                adapters={"test-adapter": SuccessfulAdapter()},
+                default_model="model-a",
+                web_root=Path(__file__).resolve().parents[1] / "workbench",
+                projection_mode="private-local",
+            )
+
+    def test_public_safe_projection_aliases_execution_labels_and_resolves_them(self):
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={"client-alpha-adapter": ClientNamedAdapter()},
+            default_model="client-alpha-model",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            presentation={
+                "schema_version": "personal-ai-os.presentation/v1",
+                "workflows": {},
+                "tasks": {},
+            },
+            projection_mode="public-safe",
+        )
+
+        projection = app.projection()
+        dispatched = app.broker.dispatch(
+            "science:hypothesis",
+            adapter_id="client-alpha-adapter",
+            model="client-alpha-model",
+        )
+        after_dispatch = app.projection()
+        serialized = json.dumps(projection, ensure_ascii=False)
+        after_serialized = json.dumps(after_dispatch, ensure_ascii=False)
+
+        self.assertTrue(dispatched["ok"])
+        self.assertNotIn("client-alpha", serialized)
+        self.assertNotIn("client-alpha", after_serialized)
+        self.assertEqual("model-01", projection["default_model"])
+        self.assertEqual("adapter-01", projection["adapters"][0]["adapter_id"])
+        self.assertNotIn("protocol", projection["adapters"][0])
+        assignment = next(iter(after_dispatch["state"]["assignments"].values()))
+        self.assertEqual("model-01", assignment["model"])
+        self.assertEqual("adapter-01", assignment["executor"])
+        self.assertEqual(
+            "client-alpha-adapter", app.resolve_adapter_id("adapter-01")
+        )
+        self.assertEqual("client-alpha-model", app.resolve_model("model-01"))
+
+    def test_routes_only_projection_reports_automatic_advance_readiness(self):
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            runtime_routes=[
+                {
+                    "route": "deep-science",
+                    "adapter_id": "test-adapter",
+                    "model": "model-routed",
+                    "enabled": True,
+                }
+            ],
+        )
+
+        projection = app.projection()
+
+        self.assertEqual(
+            {
+                "task_dispatch_ready": False,
+                "advance_route_mode": "automatic",
+                "advance_ready": True,
+            },
+            projection["execution"],
+        )
 
     def test_api_advances_ready_work_with_a_bounded_request(self):
         status, advanced = self.request(
@@ -238,6 +379,7 @@ class RuntimeServerTests(unittest.TestCase):
                 },
             }
         )
+        self.server.app.projection_mode = "public-safe"
 
         _, initial = self.request("/api/runtime")
         task = initial["state"]["tasks"][0]
@@ -256,8 +398,8 @@ class RuntimeServerTests(unittest.TestCase):
             "/api/runs",
             {
                 "task_id": task["task_id"],
-                "adapter_id": "test-adapter",
-                "model": "model-a",
+                "adapter_id": initial["adapters"][0]["adapter_id"],
+                "model": initial["default_model"],
             },
         )
         transition_status, accepted = self.request(

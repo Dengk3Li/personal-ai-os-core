@@ -126,6 +126,88 @@ test("task dispatch controls stay disabled until an adapter is available", () =>
   assert.match(html, /<button class="task-action"[^>]*disabled/);
 });
 
+test("fixed task dispatch stays disabled until both model and adapter are ready", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "task-001",
+      public_label: "任务 01",
+      title: "公开任务",
+      status: "QUEUED",
+      action: "DISPATCH",
+      attempts: 0,
+      events: [],
+    },
+    {
+      runtime: true,
+      defaultModel: "",
+      adapters: [{ adapter_id: "adapter-01", available: true }],
+      execution: { task_dispatch_ready: false, advance_route_mode: "fixed", advance_ready: false },
+    },
+  );
+
+  assert.match(html, /配置模型后开始/);
+  assert.match(html, /<button class="task-action"[^>]*disabled/);
+});
+
+test("automatic advance readiness is independent from the fixed task model", () => {
+  const state = workbench.runtimeStateFromPayload({
+    status: "READY",
+    data_source: "runtime",
+    default_model: "",
+    adapters: [{ adapter_id: "adapter-01", available: true }],
+    execution: {
+      task_dispatch_ready: false,
+      advance_route_mode: "automatic",
+      advance_ready: true,
+    },
+    state: {
+      goal: "Persistent goal",
+      activeBoard: "work",
+      activeLineId: "science",
+      activeTaskId: null,
+      planApproved: true,
+      tasks: [],
+      businessLines: [{ line_id: "science", domain_id: "science", name: "Science", caption: "Loop", layout: "loop", stages: [] }],
+      taskStates: {},
+      decisions: {},
+      assignments: {},
+      onboarding: { status: "RUNTIME_READY", readOnly: false, detectedLines: ["science"] },
+    },
+  });
+
+  assert.deepEqual(workbench.executionReadiness(state), {
+    taskReady: false,
+    advanceReady: true,
+    advanceRouteMode: "automatic",
+    adapterReady: true,
+    modelReady: false,
+  });
+});
+
+test("execution settings stay collapsed until the user needs to configure them", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "task-001",
+      public_label: "任务 01",
+      title: "私人任务",
+      status: "QUEUED",
+      action: "DISPATCH",
+      attempts: 0,
+      events: [],
+    },
+    {
+      runtime: true,
+      defaultModel: "model-a",
+      adapters: [{ adapter_id: "local-adapter", available: true }],
+    },
+  );
+
+  assert.match(html, /<details class="execution-settings">/);
+  assert.match(html, /<summary>执行设置/);
+  assert.match(html, /data-runtime-model/);
+  assert.match(html, /data-runtime-adapter/);
+});
+
 
 test("runtime client calls finite task run transition and decision endpoints", async () => {
   const calls = [];

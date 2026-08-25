@@ -69,6 +69,7 @@ class RuntimeStore:
                     caption TEXT NOT NULL,
                     layout TEXT NOT NULL,
                     goal TEXT NOT NULL,
+                    domain_id TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -144,6 +145,33 @@ class RuntimeStore:
                 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status, created_at);
                 """
             )
+            workflow_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(workflows)").fetchall()
+            }
+            if "domain_id" not in workflow_columns:
+                connection.execute(
+                    "ALTER TABLE workflows ADD COLUMN domain_id TEXT NOT NULL DEFAULT 'general'"
+                )
+                for row in connection.execute(
+                    "SELECT workflow_id FROM workflows"
+                ).fetchall():
+                    domain = connection.execute(
+                        """
+                        SELECT domain_id, COUNT(*) AS task_count
+                        FROM tasks
+                        WHERE workflow_id = ?
+                        GROUP BY domain_id
+                        ORDER BY task_count DESC, domain_id
+                        LIMIT 1
+                        """,
+                        (row["workflow_id"],),
+                    ).fetchone()
+                    if domain is not None:
+                        connection.execute(
+                            "UPDATE workflows SET domain_id = ? WHERE workflow_id = ?",
+                            (domain["domain_id"], row["workflow_id"]),
+                        )
 
     def create_workflow(self, workflow: dict[str, Any]) -> dict[str, Any]:
         with self._connect() as connection:
@@ -160,13 +188,18 @@ class RuntimeStore:
             raise ValueError("workflow_id is required")
         now = _now()
         connection.execute(
-            "INSERT INTO workflows VALUES (?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO workflows (
+                workflow_id, name, caption, layout, goal, domain_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 workflow_id,
                 str(workflow.get("name") or workflow_id),
                 str(workflow.get("caption") or ""),
                 str(workflow.get("layout") or "custom"),
                 str(workflow.get("goal") or ""),
+                str(workflow.get("domain_id") or workflow_id),
                 now,
             ),
         )

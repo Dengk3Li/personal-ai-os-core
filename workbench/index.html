@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · Long Work</title>
   <meta name="description" content="把长期目标拆成可分配、可重复运行、可由人类裁决的短任务。">
-  <link rel="stylesheet" href="style.css?v=0.10.0">
+  <link rel="stylesheet" href="style.css?v=0.11.0">
 </head>
 <body>
   <header class="topbar">
@@ -112,7 +112,10 @@
                 <div><dt>提供的 capability</dt><dd id="module-provides"></dd></div>
                 <div><dt>需要的 capability</dt><dd id="module-requires"></dd></div>
                 <div><dt>外部输入</dt><dd id="module-inputs"></dd></div>
+                <div><dt>内部处理</dt><dd id="module-processing"></dd></div>
                 <div><dt>主要输出</dt><dd id="module-outputs"></dd></div>
+                <div><dt>连接协议</dt><dd id="module-interfaces"></dd></div>
+                <div><dt>反馈回路</dt><dd id="module-feedback"></dd></div>
                 <div><dt>运行控制</dt><dd id="module-control"></dd></div>
               </dl>
               <div class="module-detail-actions">
@@ -160,9 +163,10 @@
             <span class="count-chip" id="work-source-label">任务内容已匿名</span>
           </div>
 
-          <nav class="line-tabs" id="line-tabs" aria-label="工作流"></nav>
+          <nav class="domain-tabs" id="domain-tabs" role="tablist" aria-label="工作领域"></nav>
+          <nav class="line-tabs" id="line-tabs" role="tablist" aria-label="工作线"></nav>
 
-          <section class="execution-strip" aria-label="当前工作流运行摘要">
+          <section class="execution-strip" id="workflow-content" role="tabpanel" aria-label="当前工作线运行摘要">
             <div class="execution-copy"><strong id="active-line-name"></strong><span id="active-line-caption"></span></div>
             <div class="execution-values">
               <span><b id="workflow-total">0</b> 项任务</span>
@@ -172,9 +176,15 @@
             </div>
             <div class="execution-progress"><span id="workflow-progress-bar"></span></div>
             <div class="auto-advance-controls" id="auto-advance-controls" hidden>
-              <label><span>自动推进模型</span><input id="auto-advance-model" autocomplete="off"></label>
-              <label><span>执行适配器</span><select id="auto-advance-adapter"></select></label>
+              <span class="advance-readiness" id="advance-readiness">执行设置已就绪</span>
               <button class="primary-button" type="button" data-auto-advance>推进当前工作线</button>
+              <details class="execution-settings line-execution-settings">
+                <summary>执行设置</summary>
+                <div class="execution-settings-grid">
+                  <label><span>自动推进模型</span><input id="auto-advance-model" autocomplete="off"></label>
+                  <label><span>执行适配器</span><select id="auto-advance-adapter"></select></label>
+                </div>
+              </details>
             </div>
           </section>
 
@@ -211,9 +221,9 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · <span id="footer-mode">匿名结构演示</span> · v0.10.0</footer>
-  <script src="architecture.js?v=0.10.0"></script>
-  <script src="app.js?v=0.10.0"></script>
+  <footer>Personal AI OS · <span id="footer-mode">匿名结构演示</span> · v0.11.0</footer>
+  <script src="architecture.js?v=0.11.0"></script>
+  <script src="app.js?v=0.11.0"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>
 </html>

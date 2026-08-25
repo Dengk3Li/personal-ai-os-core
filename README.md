@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.10 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.10.md)
+[中文说明](README.zh-CN.md) · [v0.11 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.11.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -118,6 +118,26 @@ personal-ai-os runtime serve \
   --store .personal-ai-os/runtime.db \
   --model "your-model-id" \
   --presentation examples/presentation.zh-CN.json
+```
+
+## v0.11 focused worklines and explicit local projection
+
+Work Progress now groups worklines under a primary domain tab and keeps only the selected workline in view. Domain and workline tabs use one runtime state source; switching either changes only the projection and does not transition a task. Execution settings stay collapsed until needed, and unavailable Adapters leave both workflow and task actions visibly disabled.
+
+The Module Map inspector separates structural upstream and downstream dependencies from feedback relationships. A selected module explains its external inputs, internal process, main outputs, interface protocols, control boundary, and recursive child graph.
+
+Runtime serving now has two explicit projection modes:
+
+- `private-local` keeps real local task copy for a single user and can bind only to a loopback address;
+- `public-safe` requires a validated presentation pack; workflow, task, model, Adapter, route, and assignment identifiers become stable public aliases, while Adapter protocol details and private copy stay outside the browser projection.
+
+Both modes return a fixed Adapter catalog shape, the server's actual fixed/automatic routing readiness, and stable error reasons. `private-local` is a local trust boundary, not a publishing or network-sharing mode.
+
+```bash
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --model "your-model-id" \
+  --projection-mode private-local
 ```
 
 ## Operating model

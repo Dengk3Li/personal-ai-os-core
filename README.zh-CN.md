@@ -4,7 +4,7 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 
 单个 AI 对话适合处理边界清楚的小任务。任务一旦跨越多次对话，新的对话需要重新核验旧内容；计划生成后缺少稳定的推进方式；多个执行分支也很快变得难以检查。Personal AI OS 补上长期目标和单次 AI 运行之间的操作层。
 
-[English](README.md) · [v0.10 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.10.md)
+[English](README.md) · [v0.11 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.11.md)
 
 它不打算重复做一套通用 Agent 工具箱。浏览器、终端、定时任务、记忆、子 Agent 和远程运行已经有成熟产品。Personal AI OS 处理这些执行器之上的问题：工作区结构、可移交的任务现场、证据验收、人工决定和跨执行器连续性。
 
@@ -118,6 +118,26 @@ personal-ai-os runtime serve \
   --store .personal-ai-os/runtime.db \
   --model "你的模型 ID" \
   --presentation examples/presentation.zh-CN.json
+```
+
+## v0.11 单线路聚焦与本地投影边界
+
+工作进度现在先按 Domain 分组，再展示当前 Domain 下的工作线。页面只保留选中工作线的任务和运行轨迹；切换 Domain 或工作线只改变投影，不改变任务状态。执行设置默认收起；没有可用 Adapter 时，工作线和任务两个运行入口都会明确禁用。
+
+模块地图把结构依赖和反馈关系分开。选中模块后，可以直接查看外部输入、内部处理、主要输出、接口协议、运行边界和可下钻子图。
+
+本地服务使用两种明确的投影模式：
+
+- `private-local` 保留单人本地运行所需的真实任务文案，并且只允许绑定 loopback 地址；
+- `public-safe` 必须提供已验证的展示包；工作线、任务、模型、Adapter、路由和分配标识使用稳定公开别名，Adapter 协议细节与私人文案不进入浏览器投影。
+
+两种模式都只返回固定字段的 Adapter 目录、服务端真实的固定运行/自动路由就绪状态和稳定错误原因。`private-local` 是本机信任边界，不能作为局域网或公网发布模式。
+
+```bash
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --model "你的模型 ID" \
+  --projection-mode private-local
 ```
 
 ## 操作闭环

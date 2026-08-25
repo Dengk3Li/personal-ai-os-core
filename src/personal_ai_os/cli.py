@@ -256,6 +256,11 @@ def main(argv: list[str] | None = None) -> int:
     runtime_serve.add_argument("--model", default=os.environ.get("PERSONAL_AI_OS_DEFAULT_MODEL", ""))
     runtime_serve.add_argument("--routes")
     runtime_serve.add_argument("--presentation")
+    runtime_serve.add_argument(
+        "--projection-mode",
+        choices=("private-local", "public-safe"),
+        help="private-local keeps local task copy on loopback; public-safe requires a presentation pack",
+    )
     args = parser.parse_args(argv)
     if args.command == "demo":
         payload = demo_payload()
@@ -379,6 +384,10 @@ def main(argv: list[str] | None = None) -> int:
                             web_root=args.web_root,
                             runtime_routes=routes,
                             presentation=presentation,
+                            projection_mode=(
+                                args.projection_mode
+                                or ("public-safe" if presentation else "private-local")
+                            ),
                         )
                     except (OSError, json.JSONDecodeError, ValueError):
                         payload = {

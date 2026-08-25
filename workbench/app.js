@@ -19,15 +19,15 @@
   ];
 
   const BUSINESS_LINES = [
-    { line_id: "research", name: "科研线", caption: "科学假设、实验方案、自主实验、数据分析与反馈优化", layout: "loop", stages: ["科学假设", "实验方案设计", "自主实验", "分析与反馈"], traceStatus: "PRESET_READY", note: "科学假设、实验方案设计、自主实验执行、数据分析与反馈优化五类角色共用同一任务状态源。" },
-    { line_id: "product", name: "产品线", caption: "模块、能力与版本里程碑", layout: "milestones", stages: ["系统契约", "核心骨架", "交互实现", "版本验收"] },
-    { line_id: "writing", name: "写作线", caption: "资料、结构与长文交付", layout: "pipeline", stages: ["材料整理", "结构确认", "分段写作", "终稿验收"] },
+    { line_id: "research", domain_id: "research", name: "科研线", caption: "科学假设、实验方案、自主实验、数据分析与反馈优化", layout: "loop", stages: ["科学假设", "实验方案设计", "自主实验", "分析与反馈"], traceStatus: "PRESET_READY", note: "科学假设、实验方案设计、自主实验执行、数据分析与反馈优化五类角色共用同一任务状态源。" },
+    { line_id: "product", domain_id: "product", name: "产品线", caption: "模块、能力与版本里程碑", layout: "milestones", stages: ["系统契约", "核心骨架", "交互实现", "版本验收"] },
+    { line_id: "writing", domain_id: "writing", name: "写作线", caption: "资料、结构与长文交付", layout: "pipeline", stages: ["材料整理", "结构确认", "分段写作", "终稿验收"] },
   ];
 
   const SHOWCASE_WORKFLOWS = [
-    { line_id: "research", name: "科研线", caption: "五类角色协作 · 多实验路径 · 反馈进入下一轮", layout: "loop", stages: ["科学假设", "实验方案设计", "自主实验", "数据分析与反馈"] },
-    { line_id: "meeting-notes", name: "会议纪要", caption: "原始材料、信息抽取、初稿与内容审核", layout: "milestones", stages: ["获取原件", "信息抽取", "生成初稿", "审核定稿"] },
-    { line_id: "industry-report", name: "行业研究 / 专业报告", caption: "全网收集、证据池、报告规划、章节生产与视觉呈现", layout: "branch", stages: ["广泛收集", "证据池", "论证规划", "写作与视觉"] },
+    { line_id: "research", domain_id: "research", name: "科研线", caption: "五类角色协作 · 多实验路径 · 反馈进入下一轮", layout: "loop", stages: ["科学假设", "实验方案设计", "自主实验", "数据分析与反馈"] },
+    { line_id: "meeting-notes", domain_id: "writing", name: "会议纪要", caption: "原始材料、信息抽取、初稿与内容审核", layout: "milestones", stages: ["获取原件", "信息抽取", "生成初稿", "审核定稿"] },
+    { line_id: "industry-report", domain_id: "analysis", name: "行业研究 / 专业报告", caption: "全网收集、证据池、报告规划、章节生产与视觉呈现", layout: "branch", stages: ["广泛收集", "证据池", "论证规划", "写作与视觉"] },
   ];
 
   const SHOWCASE_TASKS = [
@@ -81,6 +81,16 @@
 
   const OPERATION_CHAIN = ["检查", "建图", "规划", "确认", "路由", "执行", "验收", "归档"];
   const PET_PREFERENCES = new Set(["blue-whale-maid", "model-animal", "off"]);
+  const DOMAIN_LABELS = {
+    research: "科研",
+    science: "科研",
+    product: "系统建设",
+    software: "系统建设",
+    analysis: "专业分析",
+    writing: "长文与文书",
+    general: "综合事务",
+  };
+  const DOMAIN_ORDER = ["research", "science", "product", "software", "analysis", "writing", "general"];
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -96,8 +106,30 @@
       dataSource: "runtime",
       defaultModel: payload.default_model || "",
       adapters: clone(payload.adapters || []),
+      execution: clone(payload.execution || {}),
       pendingDecisions: clone(payload.state.pendingDecisions || []),
       petPreference: "blue-whale-maid",
+    };
+  }
+
+  function executionReadiness(state) {
+    const availableAdapters = state && state.runtime
+      ? (state.adapters || []).filter((adapter) => adapter.available)
+      : [];
+    const execution = (state && state.execution) || {};
+    const advanceRouteMode = execution.advance_route_mode || "fixed";
+    const modelReady = Boolean(state && state.defaultModel);
+    const adapterReady = Boolean(availableAdapters.length);
+    return {
+      taskReady: execution.task_dispatch_ready === undefined
+        ? modelReady && adapterReady
+        : Boolean(execution.task_dispatch_ready),
+      advanceReady: execution.advance_ready === undefined
+        ? advanceRouteMode === "fixed" && modelReady && adapterReady
+        : Boolean(execution.advance_ready),
+      advanceRouteMode,
+      adapterReady,
+      modelReady,
     };
   }
 
@@ -156,6 +188,7 @@
     return {
       goal: "把一个复杂工作区变成可理解、可裁决、可持续推进的长期工作系统",
       activeBoard: "work",
+      activeDomainId: "research",
       activeLineId: "research",
       planApproved: false,
       tasks: clone(TASKS),
@@ -219,6 +252,7 @@
     return {
       goal: "把长期目标拆成可分配、可重复运行、可由人类裁决的短任务",
       activeBoard: "work",
+      activeDomainId: "research",
       activeLineId: "research",
       activeTaskId: "flow-a-03",
       planApproved: true,
@@ -241,9 +275,33 @@
     return next;
   }
 
+  function lineDomainId(state, line) {
+    if (line && line.domain_id) return String(line.domain_id);
+    const counts = {};
+    state.tasks.filter((task) => task.line_id === line.line_id).forEach((task) => {
+      const domainId = String(task.domain_id || "general");
+      counts[domainId] = (counts[domainId] || 0) + 1;
+    });
+    return Object.entries(counts).sort((left, right) => right[1] - left[1] || DOMAIN_ORDER.indexOf(left[0]) - DOMAIN_ORDER.indexOf(right[0]) || left[0].localeCompare(right[0]))[0]?.[0] || "general";
+  }
+
+  function selectDomain(state, domainId) {
+    const next = clone(state);
+    const line = next.businessLines.find((item) => lineDomainId(next, item) === domainId);
+    if (!line) return next;
+    next.activeDomainId = domainId;
+    next.activeLineId = line.line_id;
+    const lineTasks = next.tasks.filter((task) => task.line_id === line.line_id);
+    const active = lineTasks.find((task) => next.taskStates[task.task_id] === "IN_PROGRESS") || lineTasks[0];
+    next.activeTaskId = active ? active.task_id : null;
+    return next;
+  }
+
   function selectBusinessLine(state, lineId) {
     const next = clone(state);
     if (next.businessLines.some((line) => line.line_id === lineId)) {
+      const line = next.businessLines.find((item) => item.line_id === lineId);
+      next.activeDomainId = lineDomainId(next, line);
       next.activeLineId = lineId;
       const lineTasks = next.tasks.filter((task) => task.line_id === lineId);
       const active = lineTasks.find((task) => next.taskStates[task.task_id] === "IN_PROGRESS") || lineTasks[0];
@@ -264,9 +322,11 @@
       caption: "自定义工作流 · 等待添加任务",
       layout: "custom",
       stages: [],
+      domain_id: next.activeDomainId || "general",
       user_created: true,
     });
     next.activeLineId = lineId;
+    next.activeDomainId = next.activeDomainId || "general";
     next.activeTaskId = null;
     next.activeBoard = "work";
     return next;
@@ -486,7 +546,7 @@
     const known = new Set(moduleIds);
     const incoming = Object.fromEntries(moduleIds.map((moduleId) => [moduleId, 0]));
     const outgoing = Object.fromEntries(moduleIds.map((moduleId) => [moduleId, []]));
-    edges.forEach(([sourceId, targetId]) => {
+    edges.filter((edge) => (edge[2] || "dependency") !== "feedback").forEach(([sourceId, targetId]) => {
       if (!known.has(sourceId) || !known.has(targetId)) return;
       incoming[targetId] += 1;
       outgoing[sourceId].push(targetId);
@@ -547,8 +607,13 @@
   }
 
   function moduleNeighborhood(edges, moduleId) {
-    const directUpstream = edges.filter((edge) => edge[1] === moduleId).map((edge) => edge[0]);
-    const directDownstream = edges.filter((edge) => edge[0] === moduleId).map((edge) => edge[1]);
+    const structuralEdges = edges.filter((edge) => (edge[2] || "dependency") !== "feedback");
+    const feedback = edges.filter((edge) => edge[2] === "feedback" && (edge[0] === moduleId || edge[1] === moduleId)).map((edge) => ({
+      module_id: edge[0] === moduleId ? edge[1] : edge[0],
+      direction: edge[0] === moduleId ? "输出反馈" : "接收反馈",
+    }));
+    const directUpstream = structuralEdges.filter((edge) => edge[1] === moduleId).map((edge) => edge[0]);
+    const directDownstream = structuralEdges.filter((edge) => edge[0] === moduleId).map((edge) => edge[1]);
     function walk(seed, nextFor) {
       const pending = [...seed];
       const found = [];
@@ -563,8 +628,39 @@
     return {
       directUpstream,
       directDownstream,
-      upstream: walk(directUpstream, (current) => edges.filter((edge) => edge[1] === current).map((edge) => edge[0])),
-      downstream: walk(directDownstream, (current) => edges.filter((edge) => edge[0] === current).map((edge) => edge[1])),
+      feedback,
+      upstream: walk(directUpstream, (current) => structuralEdges.filter((edge) => edge[1] === current).map((edge) => edge[0])),
+      downstream: walk(directDownstream, (current) => structuralEdges.filter((edge) => edge[0] === current).map((edge) => edge[1])),
+    };
+  }
+
+  function moduleConnectionModel(graph, moduleId) {
+    const module = graph.modules ? graph.modules.find((item) => item.module_id === moduleId) : graph.nodes.find((item) => item.module_id === moduleId);
+    if (!module) return { incoming: [], outgoing: [], feedback: [], processing: [], interfaces: [] };
+    const modules = graph.modules || graph.nodes;
+    const names = Object.fromEntries(modules.map((item) => [item.module_id, item.name]));
+    const neighborhood = moduleNeighborhood(graph.edges || [], moduleId);
+    const relation = (item) => ({ ...item, module_name: names[item.module_id] || item.module_id });
+    const inputs = module.inputs && module.inputs.length ? module.inputs : (module.requires || []);
+    const outputs = module.outputs && module.outputs.length ? module.outputs : (module.provides || []);
+    const derivedInterfaces = [
+      ...inputs.map((name, index) => ({
+        direction: "输入",
+        name,
+        protocol: (module.requires || [])[index] || "module.input",
+      })),
+      ...outputs.map((name, index) => ({
+        direction: "输出",
+        name,
+        protocol: (module.provides || [])[index] || "module.output",
+      })),
+    ];
+    return {
+      incoming: neighborhood.directUpstream.map((id) => relation({ module_id: id })),
+      outgoing: neighborhood.directDownstream.map((id) => relation({ module_id: id })),
+      feedback: neighborhood.feedback.map(relation),
+      processing: clone(module.process && module.process.length ? module.process : [module.summary || module.control || "按模块合同处理输入并形成输出"]),
+      interfaces: clone(module.interfaces && module.interfaces.length ? module.interfaces : (derivedInterfaces.length ? derivedInterfaces : [{ direction: "内部", name: "模块边界", protocol: "module.contract" }])),
     };
   }
 
@@ -666,9 +762,22 @@
     const work = viewModel(state);
     const lines = state.businessLines.map((line) => {
       const tasks = state.tasks.filter((task) => task.line_id === line.line_id).map((task) => work.tasks[task.task_id]);
-      return { ...line, tasks, progress: progress(state, tasks.map((task) => task.task_id)) };
+      return { ...line, domain_id: lineDomainId(state, line), tasks, progress: progress(state, tasks.map((task) => task.task_id)) };
     });
     const activeLine = lines.find((line) => line.line_id === state.activeLineId) || lines[0];
+    const domainIds = [...new Set(lines.map((line) => line.domain_id))];
+    const domains = domainIds.map((domainId) => {
+      const domainLines = lines.filter((line) => line.domain_id === domainId);
+      const taskIds = domainLines.flatMap((line) => line.tasks.map((task) => task.task_id));
+      return {
+        domain_id: domainId,
+        name: DOMAIN_LABELS[domainId] || domainId,
+        lines: domainLines,
+        progress: progress(state, taskIds),
+      };
+    });
+    const activeDomain = domains.find((domain) => domain.domain_id === (activeLine && activeLine.domain_id)) || domains[0];
+    const domainLines = activeDomain ? activeDomain.lines : [];
     const persistedDecisions = (state.pendingDecisions || []).map((item) => ({
       ...item,
       kind: "runtime-decision",
@@ -691,7 +800,7 @@
       activeBoard: PRIMARY_BOARDS.some((board) => board.id === state.activeBoard) ? state.activeBoard : "work",
       boards: PRIMARY_BOARDS.map((board) => ({ ...board, count: board.id === "decision" ? pending.length : null })),
       global: moduleGraph(),
-      work: { ...work, lines, activeLine, operationChain: clone(OPERATION_CHAIN) },
+      work: { ...work, domains, activeDomain, domainLines, lines, activeLine, operationChain: clone(OPERATION_CHAIN) },
       decision: { pending },
       onboarding: clone(state.onboarding),
     };
@@ -818,7 +927,11 @@
   }
 
   function renderLineButton(line, active) {
-    return `<button class="line-tab${active ? " active" : ""}" type="button" data-line-id="${escapeHtml(line.line_id)}" aria-pressed="${active ? "true" : "false"}"><span><b>${escapeHtml(line.name)}</b><small>${escapeHtml(line.caption)}</small></span><em>${line.progress.done}/${line.progress.total}</em></button>`;
+    return `<button class="line-tab${active ? " active" : ""}" type="button" role="tab" data-line-id="${escapeHtml(line.line_id)}" data-domain-id="${escapeHtml(line.domain_id)}" aria-selected="${active ? "true" : "false"}" aria-controls="workflow-content" tabindex="${active ? "0" : "-1"}"><b>${escapeHtml(line.name)}</b><em>${line.progress.done}/${line.progress.total}</em></button>`;
+  }
+
+  function renderDomainButton(domain, active) {
+    return `<button class="domain-tab${active ? " active" : ""}" type="button" role="tab" data-domain-id="${escapeHtml(domain.domain_id)}" aria-selected="${active ? "true" : "false"}" aria-controls="line-tabs" tabindex="${active ? "0" : "-1"}"><b>${escapeHtml(domain.name)}</b><span>${domain.lines.length} 条工作线</span></button>`;
   }
 
   function petForTask(task, preference = "model-animal") {
@@ -886,13 +999,17 @@
     const availableAdapters = runtimeState && runtimeState.runtime
       ? (runtimeState.adapters || []).filter((adapter) => adapter.available)
       : [];
+    const readiness = executionReadiness(runtimeState || {});
     const needsAdapter = ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(task.action);
     const adapterUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && !availableAdapters.length);
-    const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action) || adapterUnavailable;
+    const modelUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && !readiness.modelReady);
+    const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action) || (needsAdapter && !readiness.taskReady);
     const runtimeControls = runtimeState && runtimeState.runtime && ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(task.action)
-      ? `<div class="runtime-controls"><label><span>模型</span><input data-runtime-model value="${escapeHtml(runtimeState.defaultModel || "")}" autocomplete="off"></label><label><span>执行适配器</span><select data-runtime-adapter ${adapterUnavailable ? "disabled" : ""}>${availableAdapters.length ? availableAdapters.map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}">${escapeHtml(adapter.adapter_id)}</option>`).join("") : '<option value="">暂无可用执行适配器</option>'}</select></label></div>`
+      ? `<details class="execution-settings"><summary>执行设置${assignment ? ` · ${escapeHtml(assignment.model)}` : ""}</summary><div class="runtime-controls"><label><span>模型</span><input data-runtime-model value="${escapeHtml(runtimeState.defaultModel || "")}" autocomplete="off"></label><label><span>执行适配器</span><select data-runtime-adapter ${adapterUnavailable ? "disabled" : ""}>${availableAdapters.length ? availableAdapters.map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}">${escapeHtml(adapter.adapter_id)}</option>`).join("") : '<option value="">暂无可用执行适配器</option>'}</select></label></div></details>`
       : "";
-    const actionLabel = adapterUnavailable
+    const actionLabel = modelUnavailable
+      ? "配置模型后开始"
+      : adapterUnavailable
       ? "配置执行适配器后开始"
       : (ACTION_LABELS[task.action] || task.action);
     return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || task.title || "自定义任务")}</h3></div>
@@ -1009,9 +1126,11 @@
     async function refreshRuntime() {
       if (!runtimeClient) return false;
       const activeBoard = state.activeBoard;
+      const activeLineId = state.activeLineId;
       const petPreference = state.petPreference;
       const payload = await runtimeClient.load();
       state = selectBoard(runtimeStateFromPayload(payload), activeBoard);
+      if (state.businessLines.some((line) => line.line_id === activeLineId)) state = selectBusinessLine(state, activeLineId);
       state.petPreference = petPreference || state.petPreference;
       render();
       announce("已读取本地运行库");
@@ -1023,7 +1142,8 @@
       const focusToken = focused && focused.dataset
         ? focused.dataset.moduleId ? ["moduleId", focused.dataset.moduleId]
           : focused.dataset.lineId ? ["lineId", focused.dataset.lineId]
-            : focused.dataset.workflowTask ? ["workflowTask", focused.dataset.workflowTask]
+            : focused.classList && focused.classList.contains("domain-tab") ? ["domainId", focused.dataset.domainId]
+              : focused.dataset.workflowTask ? ["workflowTask", focused.dataset.workflowTask]
               : null
         : null;
       const view = workspaceView(state);
@@ -1070,15 +1190,18 @@
       byId("module-unresolved-count").textContent = String(mapGraph.unresolved.length);
       byId("dependency-edge-list").innerHTML = mapGraph.edges.map((edge) => renderDependencyEdge(edge, moduleNames)).join("");
       const module = mapGraph.modules.find((item) => item.module_id === selectedModule) || mapGraph.modules[0];
-      const neighborhood = module ? moduleNeighborhood(mapGraph.edges, module.module_id) : { directUpstream: [], directDownstream: [] };
+      const connections = module ? moduleConnectionModel(mapGraph, module.module_id) : { incoming: [], outgoing: [], feedback: [], processing: [], interfaces: [] };
       byId("module-detail-name").textContent = module ? module.name : "没有已安装模块";
       byId("module-detail-summary").textContent = module ? module.summary : "把 module.json 放入模块目录后即可参与解析。";
       byId("module-provides").textContent = module ? module.provides.join(" · ") : "—";
       byId("module-requires").textContent = module && module.requires.length ? module.requires.join(" · ") : "无前置 capability";
-      byId("module-upstream-list").textContent = neighborhood.directUpstream.length ? neighborhood.directUpstream.map((moduleId) => moduleNames[moduleId] || moduleId).join(" · ") : "系统入口";
-      byId("module-downstream-list").textContent = neighborhood.directDownstream.length ? neighborhood.directDownstream.map((moduleId) => moduleNames[moduleId] || moduleId).join(" · ") : "没有下游模块";
+      byId("module-upstream-list").textContent = connections.incoming.length ? connections.incoming.map((item) => item.module_name).join(" · ") : "系统入口";
+      byId("module-downstream-list").textContent = connections.outgoing.length ? connections.outgoing.map((item) => item.module_name).join(" · ") : "没有下游模块";
       byId("module-inputs").textContent = module && module.inputs && module.inputs.length ? module.inputs.join(" · ") : "由 capability 合同定义";
+      byId("module-processing").textContent = connections.processing.length ? connections.processing.map((step, index) => `${index + 1}. ${step}`).join(" → ") : "进入内部结构查看处理步骤";
       byId("module-outputs").textContent = module && module.outputs && module.outputs.length ? module.outputs.join(" · ") : "由 capability 合同定义";
+      byId("module-interfaces").textContent = connections.interfaces.length ? connections.interfaces.map((item) => `${item.direction}：${item.name}（${item.protocol}）`).join(" · ") : "由 capability 合同定义";
+      byId("module-feedback").textContent = connections.feedback.length ? connections.feedback.map((item) => `${item.direction}：${item.module_name}`).join(" · ") : "没有反馈连接";
       byId("module-control").textContent = module && module.control ? module.control : "按模块合同运行";
       const drillButton = doc.querySelector("[data-map-drill]");
       drillButton.hidden = !(moduleMapMode === "system" && module && module.child_graph);
@@ -1101,7 +1224,8 @@
       byId("scan-status").textContent = view.onboarding.status === "CANDIDATE_READY" ? `已只读识别 ${view.onboarding.fileCount} 个文件信号，生成 ${view.onboarding.detectedLines.length} 条候选业务线。` : view.onboarding.status === "TEMPLATE_READY" ? `已载入${view.onboarding.workspaceName}模板；确认后生成对应任务。` : "首次运行先读取本地结构，再生成可编辑的模块图与工作计划。";
       doc.querySelectorAll("[data-template-line]").forEach((button) => button.classList.toggle("active", button.dataset.templateLine === state.activeTemplate));
 
-      byId("line-tabs").innerHTML = view.work.lines.map((line) => renderLineButton(line, line.line_id === view.work.activeLine.line_id)).join("") + (lineComposerOpen
+      byId("domain-tabs").innerHTML = view.work.domains.map((domain) => renderDomainButton(domain, domain.domain_id === view.work.activeDomain.domain_id)).join("");
+      byId("line-tabs").innerHTML = view.work.domainLines.map((line) => renderLineButton(line, line.line_id === view.work.activeLine.line_id)).join("") + (lineComposerOpen
         ? '<form class="line-create-form" data-line-form><label for="new-line-name">工作线名称</label><input id="new-line-name" data-line-name maxlength="40" placeholder="例如：新产品验证" required><span><button type="button" data-cancel-line>取消</button><button type="submit">创建</button></span></form>'
         : '<button class="line-tab-create" type="button" data-create-line aria-label="创建工作线"><b>＋</b><span>新建工作线</span></button>');
       byId("active-line-name").textContent = view.work.activeLine.name;
@@ -1125,8 +1249,16 @@
           : '<option value="">暂无可用执行适配器</option>';
         adapterSelect.disabled = !availableAdapters.length;
         const advanceButton = doc.querySelector("[data-auto-advance]");
-        advanceButton.disabled = !state.defaultModel || !availableAdapters.length;
-        advanceButton.textContent = !state.defaultModel
+        const readiness = executionReadiness(state);
+        advanceButton.disabled = !readiness.advanceReady;
+        byId("advance-readiness").textContent = readiness.advanceRouteMode === "automatic" && readiness.advanceReady
+          ? "自动路由已就绪"
+          : !state.defaultModel && readiness.advanceRouteMode === "fixed"
+          ? "尚未配置自动推进模型"
+          : !availableAdapters.length
+            ? "尚未连接执行适配器"
+            : "执行设置已就绪";
+        advanceButton.textContent = !state.defaultModel && readiness.advanceRouteMode === "fixed"
           ? "配置模型后推进"
           : !availableAdapters.length
             ? "配置执行适配器后推进"
@@ -1252,6 +1384,8 @@
         }, 180);
         return;
       }
+      const domainButton = event.target.closest && event.target.closest(".domain-tab[data-domain-id]");
+      if (domainButton) { state = selectDomain(state, domainButton.dataset.domainId); render(); return; }
       const lineButton = event.target.closest && event.target.closest("[data-line-id]");
       if (lineButton) { state = selectBusinessLine(state, lineButton.dataset.lineId); render(); return; }
       if (event.target.closest && event.target.closest("[data-create-line]")) {
@@ -1535,6 +1669,7 @@
             caption: createdLine.caption,
             layout: createdLine.layout,
             goal: createdLine.name,
+            domain_id: createdLine.domain_id,
           });
           await refreshRuntime();
           state = selectBusinessLine(state, createdLine.line_id);
@@ -1562,6 +1697,24 @@
       render();
       tabs[nextIndex].focus();
     });
+    function selectSiblingTab(event, selector, choose) {
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+      const tabs = Array.from(event.currentTarget.querySelectorAll(selector));
+      const current = tabs.indexOf(event.target);
+      if (current < 0 || !tabs.length) return;
+      event.preventDefault();
+      let nextIndex = current;
+      if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = tabs.length - 1;
+      else if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (current + 1) % tabs.length;
+      else nextIndex = (current - 1 + tabs.length) % tabs.length;
+      choose(tabs[nextIndex]);
+      render();
+      const target = Array.from(event.currentTarget.querySelectorAll(selector))[nextIndex];
+      if (target) target.focus();
+    }
+    byId("domain-tabs").addEventListener("keydown", (event) => selectSiblingTab(event, ".domain-tab", (tab) => { state = selectDomain(state, tab.dataset.domainId); }));
+    byId("line-tabs").addEventListener("keydown", (event) => selectSiblingTab(event, ".line-tab", (tab) => { state = selectBusinessLine(state, tab.dataset.lineId); }));
     byId("reset-demo").addEventListener("click", async () => {
       if (state.runtime && runtimeClient) {
         try { await refreshRuntime(); } catch (error) { announce(`状态未刷新：${error.message}`); }
@@ -1598,6 +1751,8 @@
     createRuntimeClient,
     createShowcaseState,
     createWorkline,
+    executionReadiness,
+    moduleConnectionModel,
     moduleGraph,
     moduleNeighborhood,
     moveModuleNode,
@@ -1617,6 +1772,7 @@
     scrollActiveBoardIntoView,
     selectBoard,
     selectBusinessLine,
+    selectDomain,
     viewModel,
     workflowProjection,
     workflowSummary,

@@ -86,6 +86,7 @@ def runtime_workbench_state(
             "name": item["name"],
             "caption": item["caption"],
             "layout": item["layout"],
+            "domain_id": item["domain_id"],
             "stages": [],
         }
         for item in snapshot["workflows"]
@@ -168,11 +169,21 @@ class RuntimeApplication:
         domain_profiles: dict[str, dict[str, Any]] | None = None,
         runtime_routes: list[dict[str, Any]] | None = None,
         presentation: dict[str, Any] | None = None,
+        projection_mode: str | None = None,
     ):
         self.store = store
         self.broker = ExecutionBroker(store, adapters, domain_profiles=domain_profiles)
         self.default_model = default_model
         self.runtime_routes = [dict(route) for route in runtime_routes or []]
+        self.projection_mode = projection_mode or (
+            "public-safe" if presentation is not None else "private-local"
+        )
+        if self.projection_mode not in {"private-local", "public-safe"}:
+            raise ValueError("projection_mode must be private-local or public-safe")
+        if self.projection_mode == "public-safe" and presentation is None:
+            raise ValueError("public-safe projection requires a presentation pack")
+        if self.projection_mode == "private-local" and presentation is not None:
+            raise ValueError("private-local projection cannot use a presentation pack")
         self.presentation = (
             validate_presentation(presentation) if presentation is not None else None
         )
@@ -191,28 +202,116 @@ class RuntimeApplication:
 
     def projection(self) -> dict[str, Any]:
         snapshot = self.store.snapshot()
+        adapter_catalog = self.broker.adapter_catalog()
         brief_snapshot = (
             apply_presentation(snapshot, self.presentation)
             if self.presentation is not None
             else snapshot
         )
+        state = runtime_workbench_state(self.store, self.presentation)
+        if self.projection_mode == "public-safe":
+            self._anonymize_execution_state(state, snapshot)
         return {
             "status": self.store.integrity()["status"],
             "data_source": "runtime",
-            "state": runtime_workbench_state(self.store, self.presentation),
+            "state": state,
             "brief": build_secretary_brief(brief_snapshot),
-            "adapters": self.public_adapter_catalog(),
-            "default_model": self.default_model,
+            "adapters": self.public_adapter_catalog(adapter_catalog),
+            "default_model": self._public_model(self.default_model),
+            "execution": self.execution_readiness(adapter_catalog),
         }
 
-    def public_adapter_catalog(self) -> list[dict[str, Any]]:
-        catalog = self.broker.adapter_catalog()
-        if self.presentation is None:
-            return catalog
+    @staticmethod
+    def _ordered_aliases(values: list[Any], prefix: str) -> dict[str, str]:
+        aliases: dict[str, str] = {}
+        for value in values:
+            text = str(value or "").strip()
+            if text and text not in aliases:
+                aliases[text] = f"{prefix}-{len(aliases) + 1:02d}"
+        return aliases
+
+    def _execution_aliases(
+        self, snapshot: dict[str, Any] | None = None
+    ) -> dict[str, dict[str, str]]:
+        assignments = (snapshot or self.store.snapshot()).get("assignments") or {}
+        adapter_values = list(sorted(self.broker.adapters))
+        adapter_values.extend(
+            assignment.get("executor") for assignment in assignments.values()
+        )
+        model_values = [self.default_model]
+        model_values.extend(route.get("model") for route in self.runtime_routes)
+        model_values.extend(
+            assignment.get("model") for assignment in assignments.values()
+        )
+        route_values = [route.get("route") for route in self.runtime_routes]
+        route_values.extend(
+            assignment.get("route") for assignment in assignments.values()
+        )
+        return {
+            "adapters": self._ordered_aliases(adapter_values, "adapter"),
+            "models": self._ordered_aliases(model_values, "model"),
+            "routes": self._ordered_aliases(route_values, "route"),
+        }
+
+    def _public_model(self, model: Any) -> str:
+        value = str(model or "")
+        if self.projection_mode != "public-safe" or not value:
+            return value
+        return self._execution_aliases()["models"][value]
+
+    def _anonymize_execution_state(
+        self, state: dict[str, Any], snapshot: dict[str, Any]
+    ) -> None:
+        aliases = self._execution_aliases(snapshot)
+        for assignment in (state.get("assignments") or {}).values():
+            executor = str(assignment.get("executor") or "")
+            model = str(assignment.get("model") or "")
+            route = str(assignment.get("route") or "")
+            if executor:
+                assignment["executor"] = aliases["adapters"].get(
+                    executor, "adapter-unknown"
+                )
+            if model:
+                assignment["model"] = aliases["models"].get(model, "model-unknown")
+            if route:
+                assignment["route"] = aliases["routes"].get(
+                    route, aliases["adapters"].get(route, "route-unknown")
+                )
+
+    def resolve_adapter_id(self, public_id: Any) -> str:
+        value = str(public_id or "")
+        if self.projection_mode != "public-safe":
+            return value
+        reverse = {
+            alias: raw for raw, alias in self._execution_aliases()["adapters"].items()
+        }
+        if value not in reverse:
+            raise ValueError("unknown public adapter")
+        return reverse[value]
+
+    def resolve_model(self, public_model: Any) -> str:
+        value = str(public_model or "")
+        if self.projection_mode != "public-safe":
+            return value
+        reverse = {
+            alias: raw for raw, alias in self._execution_aliases()["models"].items()
+        }
+        if value not in reverse:
+            raise ValueError("unknown public model")
+        return reverse[value]
+
+    def public_adapter_catalog(
+        self, catalog: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
+        catalog = catalog if catalog is not None else self.broker.adapter_catalog()
+        aliases = self._execution_aliases()["adapters"]
         projected = []
         for adapter_key, item in zip(sorted(self.broker.adapters), catalog):
-            adapter_id = validate_runtime_label(adapter_key)
-            protocol = validate_runtime_label(item.get("protocol"))
+            adapter_id = str(adapter_key)
+            protocol = str(item.get("protocol") or "")
+            if self.projection_mode == "public-safe":
+                adapter_id = aliases[adapter_id]
+                protocol = ""
             entry = {
                 "adapter_id": adapter_id,
                 "available": bool(item.get("available")),
@@ -221,6 +320,32 @@ class RuntimeApplication:
                 entry["protocol"] = protocol
             projected.append(entry)
         return projected
+
+    def execution_readiness(
+        self, catalog: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        catalog = catalog if catalog is not None else self.broker.adapter_catalog()
+        available_adapters = {
+            adapter_id
+            for adapter_id, item in zip(sorted(self.broker.adapters), catalog)
+            if item.get("available")
+        }
+        route_mode = (
+            "automatic" if self.runtime_routes and not self.default_model else "fixed"
+        )
+        if route_mode == "automatic":
+            advance_ready = any(
+                route.get("enabled", True)
+                and str(route.get("adapter_id") or "") in available_adapters
+                for route in self.runtime_routes
+            )
+        else:
+            advance_ready = bool(self.default_model and available_adapters)
+        return {
+            "task_dispatch_ready": bool(self.default_model and available_adapters),
+            "advance_route_mode": route_mode,
+            "advance_ready": advance_ready,
+        }
 
     def _resolve_identifier(self, kind: str, public_id: Any) -> str:
         value = str(public_id or "")
@@ -274,9 +399,7 @@ class RuntimeApplication:
     def error_payload(
         self, *, status: str, safe_reason: str, detail: Any
     ) -> dict[str, Any]:
-        if self.presentation is not None:
-            return {"status": status, "reason": safe_reason}
-        return {"status": status, "reason": str(detail)}
+        return {"status": status, "reason": safe_reason}
 
 
 class RuntimeHTTPServer(ThreadingHTTPServer):
@@ -366,15 +489,18 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
             elif path == "/api/workflows":
                 result = self.server.app.store.create_workflow(payload)
             elif path == "/api/runs":
-                if self.server.app.presentation is not None:
-                    validate_runtime_label(payload.get("adapter_id"))
-                    validate_runtime_label(
-                        payload.get("model") or self.server.app.default_model
-                    )
+                adapter_id = self.server.app.resolve_adapter_id(
+                    payload.get("adapter_id")
+                )
+                model = (
+                    self.server.app.resolve_model(payload.get("model"))
+                    if payload.get("model")
+                    else self.server.app.default_model
+                )
                 result = self.server.app.broker.dispatch(
                     self.server.app.resolve_task_id(payload.get("task_id")),
-                    adapter_id=str(payload.get("adapter_id") or ""),
-                    model=str(payload.get("model") or self.server.app.default_model),
+                    adapter_id=adapter_id,
+                    model=model,
                 )
                 if not result.get("ok"):
                     self._json(422, self.server.app.public_result(result))
@@ -404,8 +530,14 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     if route_mode == "automatic"
                     else AutoAdvanceEngine(
                         self.server.app.broker,
-                        adapter_id=str(payload.get("adapter_id") or ""),
-                        model=str(payload.get("model") or self.server.app.default_model),
+                        adapter_id=self.server.app.resolve_adapter_id(
+                            payload.get("adapter_id")
+                        ),
+                        model=(
+                            self.server.app.resolve_model(payload.get("model"))
+                            if payload.get("model")
+                            else self.server.app.default_model
+                        ),
                     )
                 )
                 result = engine.advance(
@@ -482,7 +614,17 @@ def create_runtime_server(
     domain_profiles: dict[str, dict[str, Any]] | None = None,
     runtime_routes: list[dict[str, Any]] | None = None,
     presentation: dict[str, Any] | None = None,
+    projection_mode: str | None = None,
 ) -> RuntimeHTTPServer:
+    resolved_mode = projection_mode or (
+        "public-safe" if presentation is not None else "private-local"
+    )
+    if resolved_mode == "private-local" and address[0].lower() not in {
+        "127.0.0.1",
+        "localhost",
+        "::1",
+    }:
+        raise ValueError("private-local runtime server binds to loopback only")
     application = RuntimeApplication(
         store=store,
         adapters=adapters,
@@ -491,6 +633,7 @@ def create_runtime_server(
         domain_profiles=domain_profiles,
         runtime_routes=runtime_routes,
         presentation=presentation,
+        projection_mode=resolved_mode,
     )
     server = RuntimeHTTPServer(address, RuntimeRequestHandler)
     server.app = application
