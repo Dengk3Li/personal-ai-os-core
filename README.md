@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.13 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.13.md)
+[中文说明](README.zh-CN.md) · [v0.14 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.14.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -122,7 +122,7 @@ personal-ai-os runtime serve \
 
 ## v0.11 focused worklines and explicit local projection
 
-Work Progress now groups worklines under a primary domain tab and keeps only the selected workline in view. Domain and workline tabs use one runtime state source; switching either changes only the projection and does not transition a task. Execution settings stay collapsed until needed, and unavailable Adapters leave both workflow and task actions visibly disabled.
+Work Progress now groups worklines under a primary domain tab and keeps only the selected workline in view. Domain and workline tabs use one runtime state source; switching either changes only the projection and does not transition a task. Unavailable execution settings leave workflow and task actions visibly disabled.
 
 The Module Map inspector separates structural upstream and downstream dependencies from feedback relationships. A selected module explains its external inputs, internal process, main outputs, interface protocols, control boundary, and recursive child graph.
 
@@ -181,6 +181,23 @@ personal-ai-os runtime memory-review \
 ```
 
 Private legacy-card ingestion is implemented outside this public repository as a read-only adapter. It projects existing task truth into the generic envelope, reports reconciliation issues, and performs no import or state transition during preview. Automatic dialogue mining, automatic memory approval, capability self-installation, and recursive repository understanding remain unimplemented boundaries. Design references and license conditions are recorded in [v0.13 reference project notes](docs/REFERENCE_PROJECT_LICENSES_V0.13.md).
+
+## v0.14 work protocols, backstage settings, and map boundaries
+
+Workflows can now require a versioned `personal-ai-os.work-protocols/v1` contract. The broker resolves that protocol before it claims a run or calls an Adapter. A missing required protocol returns `WORK_PROTOCOL_REQUIRED`; the task remains `QUEUED` with no run or model call. Protocols carry bounded instruction references, template references, execution rules, a person-or-team memory subject, and a learning-review policy.
+
+The built-in meeting workflow uses a source-first full-record protocol. It requires the raw transcript as the factual source, preserves the natural discussion order and complete information units, retains exact numbers and attribution, and never silently falls back to a concise summary. The protocol automatically loads approved working practices for its scoped team and domain. A successful run records a memory-review request; it does not approve or promote a habit. Evidence-backed candidates still require explicit review before they can enter a later model context.
+
+```bash
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --routes examples/runtime-routes.json \
+  --protocols .personal-ai-os/work-protocols.private.json
+```
+
+Model, route, Adapter, and API configuration now lives in a backstage **Settings** panel. Work Progress only exposes start, continue, review, and decision actions. Fixed mode uses one server-side default Adapter, while automatic mode selects from the route catalog; browser ordering cannot override that choice. Credentials remain server environment variables and are never returned to the browser. A route-only server can dispatch a selected task through its saved automatic route without asking the user to choose a model on the task card.
+
+The Module Map now distinguishes **System Overview** from **Component Dependencies**. System Overview describes the operating architecture and recursive internal graphs. Component Dependencies describes installed manifests and capability supply/requirement edges. Every drilled graph retains its parent module and its external input, output, and feedback handoffs, so an internal module never appears as an isolated island.
 
 ## Operating model
 

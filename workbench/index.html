@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · Long Work</title>
   <meta name="description" content="把长期目标拆成可分配、可重复运行、可由人类裁决的短任务。">
-  <link rel="stylesheet" href="style.css?v=0.13.0">
+  <link rel="stylesheet" href="style.css?v=0.14.0">
 </head>
 <body>
   <header class="topbar">
@@ -21,9 +21,15 @@
         <option value="off">关闭</option>
       </select></label>
       <button class="ghost-button" data-board="global" type="button">模块地图</button>
+      <button class="ghost-button" id="settings-toggle" type="button" aria-controls="settings-panel" aria-expanded="false">设置</button>
       <button class="primary-button" id="reset-demo" type="button">重置演示</button>
     </div>
   </header>
+
+  <aside class="settings-panel" id="settings-panel" aria-labelledby="settings-title" tabindex="-1" hidden>
+    <header><div><span>后台设置</span><h2 id="settings-title">执行与记忆</h2></div><button class="ghost-button" type="button" data-close-settings>关闭</button></header>
+    <div id="settings-content"></div>
+  </aside>
 
   <main>
     <section class="overview" aria-labelledby="overview-title">
@@ -89,7 +95,7 @@
               <div class="map-toolbar" aria-label="模块地图控制">
                 <div class="map-mode-switch" role="group" aria-label="地图视图">
                   <button class="active" type="button" data-map-mode="system">系统全景</button>
-                  <button type="button" data-map-mode="modules">运行模块</button>
+                  <button type="button" data-map-mode="modules">组件依赖</button>
                 </div>
                 <button type="button" data-map-zoom="out">缩小</button>
                 <output id="map-zoom-value" aria-live="polite">100%</output>
@@ -97,6 +103,7 @@
                 <button type="button" data-map-fit>适应画布</button>
                 <button type="button" data-map-reset>重置布局</button>
               </div>
+              <p class="map-description" id="module-map-description">系统全景呈现从目标输入到经验回流的顶层操作架构。</p>
               <nav class="map-breadcrumbs" id="module-breadcrumbs" aria-label="模块层级"></nav>
               <div class="map-viewport" id="module-map-viewport" tabindex="0" aria-label="可平移缩放的模块依赖地图">
                 <div class="module-scene" id="module-scene"></div>
@@ -106,6 +113,10 @@
 
             <aside class="module-detail" id="module-detail" aria-label="模块详情">
               <div class="module-detail-heading"><span>当前模块</span><h3 id="module-detail-name"></h3><p id="module-detail-summary"></p></div>
+              <section class="module-boundary" id="module-boundary" hidden>
+                <span>上层边界</span><strong id="module-boundary-owner"></strong><p id="module-boundary-parent"></p>
+                <dl><div><dt>外界输入</dt><dd id="module-boundary-incoming"></dd></div><div><dt>外界输出</dt><dd id="module-boundary-outgoing"></dd></div><div><dt>跨层反馈</dt><dd id="module-boundary-feedback"></dd></div></dl>
+              </section>
               <dl>
                 <div><dt>上游模块</dt><dd id="module-upstream-list"></dd></div>
                 <div><dt>下游模块</dt><dd id="module-downstream-list"></dd></div>
@@ -183,13 +194,6 @@
             <div class="auto-advance-controls" id="auto-advance-controls" hidden>
               <span class="advance-readiness" id="advance-readiness">执行设置已就绪</span>
               <button class="primary-button" type="button" data-auto-advance>推进当前工作线</button>
-              <details class="execution-settings line-execution-settings">
-                <summary>执行设置</summary>
-                <div class="execution-settings-grid">
-                  <label><span>自动推进模型</span><input id="auto-advance-model" autocomplete="off"></label>
-                  <label><span>执行适配器</span><select id="auto-advance-adapter"></select></label>
-                </div>
-              </details>
             </div>
           </section>
 
@@ -226,9 +230,9 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · <span id="footer-mode">匿名结构演示</span> · v0.13.0</footer>
-  <script src="architecture.js?v=0.13.0"></script>
-  <script src="app.js?v=0.13.0"></script>
+  <footer>Personal AI OS · <span id="footer-mode">匿名结构演示</span> · v0.14.0</footer>
+  <script src="architecture.js?v=0.14.0"></script>
+  <script src="app.js?v=0.14.0"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>
 </html>

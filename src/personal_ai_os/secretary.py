@@ -28,6 +28,7 @@ def build_context_pack(
     domain_profile: dict[str, Any] | None = None,
     *,
     upstream_artifacts: list[dict[str, Any]] | None = None,
+    work_protocol: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the smallest transferable task context without copying memory bodies."""
     profile = domain_profile or {}
@@ -56,6 +57,7 @@ def build_context_pack(
             "model_context": model_context,
             "operating_practices": operating_practices,
             "practice_evidence_refs": practice_evidence_refs,
+            "work_protocol": work_protocol or {},
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -81,6 +83,7 @@ def build_context_pack(
         "instruction_refs": list(profile.get("instruction_refs") or []),
         "operating_practices": operating_practices,
         "practice_evidence_refs": practice_evidence_refs,
+        "work_protocol": dict(work_protocol or {}),
     }
 
 

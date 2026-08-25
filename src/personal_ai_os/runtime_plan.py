@@ -40,6 +40,7 @@ def _validated_plan(plan: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(workflow, dict):
             raise ValueError("runtime plan workflow must be an object")
         workflow_id = _required_text(workflow.get("workflow_id"), "workflow_id")
+        workflow_domain_id = str(workflow.get("domain_id") or workflow_id)
         if workflow_id in workflow_ids:
             raise ValueError(f"duplicate runtime plan workflow: {workflow_id}")
         workflow_ids.add(workflow_id)
@@ -84,6 +85,7 @@ def _validated_plan(plan: dict[str, Any]) -> list[dict[str, Any]]:
                     "context": dict(context),
                     "required_capabilities": list(capabilities),
                     "module_links": module_links,
+                    "domain_id": str(task.get("domain_id") or workflow_domain_id),
                 }
             )
 
@@ -128,6 +130,7 @@ def _workflow_definition(workflow: dict[str, Any]) -> dict[str, Any]:
         "layout": str(workflow.get("layout") or "custom"),
         "goal": str(workflow.get("goal") or ""),
         "domain_id": str(workflow.get("domain_id") or workflow_id),
+        "protocol_id": str(workflow.get("protocol_id") or "").strip(),
     }
 
 

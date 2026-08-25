@@ -15,6 +15,8 @@ from .secretary import build_context_pack, model_context_for_task
 from .states import TASK_STATES
 from .task_links import validate_task_module_link
 from .workflow import transition_task
+from .work_protocols import SCHEMA_VERSION as WORK_PROTOCOL_SCHEMA_VERSION
+from .work_protocols import validate_work_protocols, work_protocol_catalog
 
 
 def _now() -> str:
@@ -98,6 +100,7 @@ class RuntimeStore:
                     layout TEXT NOT NULL,
                     goal TEXT NOT NULL,
                     domain_id TEXT NOT NULL,
+                    protocol_id TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -264,6 +267,14 @@ class RuntimeStore:
                             "UPDATE workflows SET domain_id = ? WHERE workflow_id = ?",
                             (domain["domain_id"], row["workflow_id"]),
                         )
+            if "protocol_id" not in workflow_columns:
+                connection.execute(
+                    "ALTER TABLE workflows ADD COLUMN protocol_id TEXT NOT NULL DEFAULT ''"
+                )
+            connection.execute(
+                """UPDATE workflows SET protocol_id = 'meeting-source-first-v1'
+                   WHERE workflow_id = 'meeting-notes' AND protocol_id = ''"""
+            )
 
     def create_workflow(self, workflow: dict[str, Any]) -> dict[str, Any]:
         with self._connect() as connection:
@@ -282,8 +293,8 @@ class RuntimeStore:
         connection.execute(
             """
             INSERT INTO workflows (
-                workflow_id, name, caption, layout, goal, domain_id, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                workflow_id, name, caption, layout, goal, domain_id, protocol_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 workflow_id,
@@ -292,6 +303,7 @@ class RuntimeStore:
                 str(workflow.get("layout") or "custom"),
                 str(workflow.get("goal") or ""),
                 str(workflow.get("domain_id") or workflow_id),
+                str(workflow.get("protocol_id") or "").strip(),
                 now,
             ),
         )
@@ -639,9 +651,10 @@ class RuntimeStore:
         if not isinstance(context, dict):
             raise ValueError("task context must be an object")
         model_context_for_task({"context": context})
-        if connection.execute(
-            "SELECT 1 FROM workflows WHERE workflow_id = ?", (workflow_id,)
-        ).fetchone() is None:
+        workflow = connection.execute(
+            "SELECT domain_id FROM workflows WHERE workflow_id = ?", (workflow_id,)
+        ).fetchone()
+        if workflow is None:
             raise KeyError(f"workflow not found: {workflow_id}")
         dependencies = [str(item).strip() for item in task.get("depends_on") or []]
         if any(not item for item in dependencies):
@@ -675,7 +688,7 @@ class RuntimeStore:
             str(task.get("parallel_group") or "main"),
             _json(list(task.get("required_capabilities") or [])),
             str(task.get("complexity") or "standard"),
-            str(task.get("domain_id") or workflow_id),
+            str(task.get("domain_id") or workflow["domain_id"] or workflow_id),
             _json(dict(context)),
             int(bool(task.get("requires_git_closure", False))),
             _json({}),
@@ -1476,7 +1489,14 @@ def install_workflow_preset(store: RuntimeStore, preset_id: str) -> dict[str, An
     preset = get_workflow_preset(preset_id)
     store.create_workflow(preset)
     for task in preset["tasks"]:
-        store.create_task({**task, "workflow_id": preset["workflow_id"], "line_id": preset["workflow_id"]})
+        store.create_task(
+            {
+                **task,
+                "workflow_id": preset["workflow_id"],
+                "line_id": preset["workflow_id"],
+                "domain_id": preset.get("domain_id") or preset["workflow_id"],
+            }
+        )
     return store.get_workflow(preset["workflow_id"])
 
 
@@ -1489,10 +1509,18 @@ class ExecutionBroker:
         adapters: dict[str, Any],
         *,
         domain_profiles: dict[str, dict[str, Any]] | None = None,
+        work_protocols: list[dict[str, Any]] | None = None,
     ):
         self.store = store
         self.adapters = dict(adapters)
         self.domain_profiles = domain_profiles or {}
+        protocols = work_protocol_catalog() if work_protocols is None else work_protocols
+        protocols = validate_work_protocols(
+            {"schema_version": WORK_PROTOCOL_SCHEMA_VERSION, "protocols": protocols}
+        )
+        self.work_protocols = {
+            str(item["protocol_id"]): dict(item) for item in protocols
+        }
 
     def adapter_catalog(self) -> list[dict[str, Any]]:
         return [self.adapters[key].probe() for key in sorted(self.adapters)]
@@ -1584,6 +1612,20 @@ class ExecutionBroker:
                 return {"ok": False, "reason": "DEPENDENCY_NOT_DONE", "dependency": dependency}
             if dependency_task.get("result_ref"):
                 dependency_result_refs.add(dependency_task["result_ref"])
+        workflow = self.store.get_workflow(task["workflow_id"])
+        protocol_id = str(workflow.get("protocol_id") or "").strip()
+        work_protocol = self.work_protocols.get(protocol_id) if protocol_id else None
+        if protocol_id and work_protocol is None:
+            return {"ok": False, "status": "QUEUED", "reason": "WORK_PROTOCOL_REQUIRED"}
+        if work_protocol and (
+            task["workflow_id"] not in work_protocol.get("workflow_ids", [])
+            or task["domain_id"] != work_protocol.get("domain_id")
+        ):
+            return {
+                "ok": False,
+                "status": "QUEUED",
+                "reason": "WORK_PROTOCOL_SCOPE_MISMATCH",
+            }
         if task["human_gate"]:
             task_decisions = [
                 item
@@ -1638,9 +1680,23 @@ class ExecutionBroker:
             if not probe.get("available"):
                 return {"ok": False, "reason": "ADAPTER_UNAVAILABLE"}
         profile = dict(self.domain_profiles.get(task["domain_id"]) or {})
-        practice_subject = (
+        task_practice_subject = (
             (task.get("context") or {}).get("model_context") or {}
         ).get("practice_subject")
+        protocol_practice_subject = (
+            work_protocol.get("memory_subject") if work_protocol is not None else None
+        )
+        if (
+            protocol_practice_subject is not None
+            and task_practice_subject is not None
+            and task_practice_subject != protocol_practice_subject
+        ):
+            return {
+                "ok": False,
+                "status": "QUEUED",
+                "reason": "WORK_PROTOCOL_MEMORY_SCOPE_MISMATCH",
+            }
+        practice_subject = protocol_practice_subject or task_practice_subject
         if practice_subject is not None:
             if not isinstance(practice_subject, dict):
                 return {"ok": False, "reason": "PRACTICE_SCOPE_INVALID"}
@@ -1663,6 +1719,7 @@ class ExecutionBroker:
                 task,
                 profile,
                 upstream_artifacts=upstream_artifacts,
+                work_protocol=work_protocol,
             )
         except ValueError as exc:
             message = str(exc).lower()
@@ -1752,6 +1809,14 @@ class ExecutionBroker:
                     event_type="RUN_SUCCEEDED",
                     payload={"artifact_id": artifact["artifact_id"]},
                 )
+                if work_protocol and work_protocol.get("learning_review") == "candidate":
+                    self.store._record_event(
+                        connection,
+                        task_id=task_id,
+                        run_id=run["run_id"],
+                        event_type="MEMORY_REVIEW_REQUESTED",
+                        payload={"protocol_id": work_protocol["protocol_id"]},
+                    )
             review = self.store.transition(
                 task_id,
                 "REVIEW",

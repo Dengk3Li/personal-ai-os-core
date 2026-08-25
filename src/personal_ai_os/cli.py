@@ -21,6 +21,7 @@ from .goals import GoalController, load_goal_definition
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .route_config import load_runtime_routes
+from .work_protocols import load_work_protocols, work_protocol_catalog
 from .secretary import build_secretary_brief
 from .server import create_runtime_server
 from .presentation import load_presentation
@@ -310,7 +311,9 @@ def _main(argv: list[str] | None = None) -> int:
     runtime_serve.add_argument("--host", default="127.0.0.1")
     runtime_serve.add_argument("--port", type=int, default=8787)
     runtime_serve.add_argument("--model", default=os.environ.get("PERSONAL_AI_OS_DEFAULT_MODEL", ""))
+    runtime_serve.add_argument("--adapter", default="openai-compatible")
     runtime_serve.add_argument("--routes")
+    runtime_serve.add_argument("--protocols")
     runtime_serve.add_argument("--presentation")
     runtime_serve.add_argument(
         "--projection-mode",
@@ -482,6 +485,10 @@ def _main(argv: list[str] | None = None) -> int:
                     payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
             else:
                 routes = load_runtime_routes(args.routes) if args.routes else None
+                protocols = work_protocol_catalog()
+                if args.protocols:
+                    configured = load_work_protocols(args.protocols)
+                    protocols = list({item["protocol_id"]: item for item in [*protocols, *configured]}.values())
                 if args.host not in {"127.0.0.1", "localhost", "::1"}:
                     payload = {
                         "status": "BLOCKED",
@@ -505,7 +512,9 @@ def _main(argv: list[str] | None = None) -> int:
                             adapters=adapters,
                             default_model=args.model,
                             web_root=args.web_root,
+                            default_adapter_id=args.adapter,
                             runtime_routes=routes,
+                            work_protocols=protocols,
                             presentation=presentation,
                             projection_mode=(
                                 args.projection_mode

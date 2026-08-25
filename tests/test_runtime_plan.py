@@ -78,6 +78,17 @@ class RuntimePlanTests(unittest.TestCase):
             self.store.get_task("self-hosting:intake")["context"]["workspace_refs"][0]["path"],
         )
 
+    def test_task_domain_inherits_from_workflow_on_every_plan_sync(self):
+        plan = self._plan()
+        plan["workflows"][0]["domain_id"] = "writing"
+
+        first = sync_runtime_plan(self.store, plan)
+        second = sync_runtime_plan(self.store, plan)
+
+        self.assertEqual(2, first["created_tasks"])
+        self.assertEqual(2, second["existing_tasks"])
+        self.assertEqual("writing", self.store.get_task("self-hosting:intake")["domain_id"])
+
     def test_invalid_plan_is_rejected_before_any_runtime_write(self):
         plan = self._plan()
         plan["workflows"][0]["tasks"][1]["depends_on"] = ["missing:task"]

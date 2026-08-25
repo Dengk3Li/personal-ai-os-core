@@ -32,6 +32,7 @@ def runtime_workbench_state(
         "ADAPTER_STARTED": "执行适配器已启动",
         "ARTIFACT_CREATED": "阶段产物已登记",
         "RUN_SUCCEEDED": "本轮运行已完成",
+        "MEMORY_REVIEW_REQUESTED": "本轮经验等待复核",
         "REVIEW_REQUESTED": "结果等待验收",
         "BLOCKED": "运行需要处理",
         "DECISION_REQUESTED": "已请求人工决定",
@@ -231,14 +232,29 @@ class RuntimeApplication:
         adapters: dict[str, Any],
         default_model: str,
         web_root: str | Path,
+        default_adapter_id: str | None = None,
         domain_profiles: dict[str, dict[str, Any]] | None = None,
         runtime_routes: list[dict[str, Any]] | None = None,
+        work_protocols: list[dict[str, Any]] | None = None,
         presentation: dict[str, Any] | None = None,
         projection_mode: str | None = None,
     ):
         self.store = store
-        self.broker = ExecutionBroker(store, adapters, domain_profiles=domain_profiles)
+        self.broker = ExecutionBroker(
+            store,
+            adapters,
+            domain_profiles=domain_profiles,
+            work_protocols=work_protocols,
+        )
         self.default_model = default_model
+        if default_adapter_id:
+            if default_adapter_id not in adapters:
+                raise ValueError("default adapter is not registered")
+            self.default_adapter_id = str(default_adapter_id)
+        elif len(adapters) == 1:
+            self.default_adapter_id = str(next(iter(adapters)))
+        else:
+            self.default_adapter_id = ""
         self.runtime_routes = [dict(route) for route in runtime_routes or []]
         self.projection_mode = projection_mode or (
             "public-safe" if presentation is not None else "private-local"
@@ -284,6 +300,43 @@ class RuntimeApplication:
             "adapters": self.public_adapter_catalog(adapter_catalog),
             "default_model": self._public_model(self.default_model),
             "execution": self.execution_readiness(adapter_catalog),
+            "execution_settings": self.public_execution_settings(),
+        }
+
+    def public_execution_settings(self) -> dict[str, Any]:
+        aliases = self._execution_aliases()
+        capability_aliases = self._ordered_aliases(
+            [capability for route in self.runtime_routes for capability in (route.get("capabilities") or [])],
+            "capability",
+        )
+        routes = []
+        for route in self.runtime_routes:
+            route_id = str(route.get("route") or "")
+            adapter_id = str(route.get("adapter_id") or "")
+            model = str(route.get("model") or "")
+            capabilities = [str(item) for item in (route.get("capabilities") or [])]
+            if self.projection_mode == "public-safe":
+                route_id = aliases["routes"].get(route_id, "route-unknown")
+                adapter_id = aliases["adapters"].get(adapter_id, "adapter-unknown")
+                model = aliases["models"].get(model, "model-unknown")
+                capabilities = [capability_aliases[item] for item in capabilities]
+            routes.append(
+                {
+                    "route": route_id,
+                    "adapter_id": adapter_id,
+                    "model": model,
+                    "capabilities": capabilities,
+                    "enabled": bool(route.get("enabled", True)),
+                }
+            )
+        return {
+            "routes": routes,
+            "default_adapter_id": (
+                aliases["adapters"].get(self.default_adapter_id, "adapter-unknown")
+                if self.projection_mode == "public-safe" and self.default_adapter_id
+                else self.default_adapter_id
+            ),
+            "credential_source": "server-environment",
         }
 
     @staticmethod
@@ -354,6 +407,21 @@ class RuntimeApplication:
             raise ValueError("unknown public adapter")
         return reverse[value]
 
+    def fixed_execution_binding(
+        self, *, requested_adapter: Any = None, requested_model: Any = None
+    ) -> tuple[str, str]:
+        if not self.default_adapter_id or not self.default_model:
+            raise ValueError("fixed execution settings are incomplete")
+        if requested_adapter:
+            adapter_id = self.resolve_adapter_id(requested_adapter)
+            if adapter_id != self.default_adapter_id:
+                raise ValueError("client cannot override the configured adapter")
+        if requested_model:
+            model = self.resolve_model(requested_model)
+            if model != self.default_model:
+                raise ValueError("client cannot override the configured model")
+        return self.default_adapter_id, self.default_model
+
     def resolve_model(self, public_model: Any) -> str:
         value = str(public_model or "")
         if self.projection_mode != "public-safe":
@@ -405,9 +473,13 @@ class RuntimeApplication:
                 for route in self.runtime_routes
             )
         else:
-            advance_ready = bool(self.default_model and available_adapters)
+            advance_ready = bool(
+                self.default_model
+                and self.default_adapter_id
+                and self.default_adapter_id in available_adapters
+            )
         return {
-            "task_dispatch_ready": bool(self.default_model and available_adapters),
+            "task_dispatch_ready": advance_ready,
             "advance_route_mode": route_mode,
             "advance_ready": advance_ready,
         }
@@ -558,19 +630,22 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
             elif path == "/api/workflows":
                 result = self.server.app.store.create_workflow(payload)
             elif path == "/api/runs":
-                adapter_id = self.server.app.resolve_adapter_id(
-                    payload.get("adapter_id")
-                )
-                model = (
-                    self.server.app.resolve_model(payload.get("model"))
-                    if payload.get("model")
-                    else self.server.app.default_model
-                )
-                result = self.server.app.broker.dispatch(
-                    self.server.app.resolve_task_id(payload.get("task_id")),
-                    adapter_id=adapter_id,
-                    model=model,
-                )
+                task_id = self.server.app.resolve_task_id(payload.get("task_id"))
+                if self.server.app.runtime_routes and not self.server.app.default_model:
+                    result = self.server.app.broker.dispatch_routed(
+                        task_id,
+                        routes=self.server.app.runtime_routes,
+                    )
+                else:
+                    adapter_id, model = self.server.app.fixed_execution_binding(
+                        requested_adapter=payload.get("adapter_id"),
+                        requested_model=payload.get("model"),
+                    )
+                    result = self.server.app.broker.dispatch(
+                        task_id,
+                        adapter_id=adapter_id,
+                        model=model,
+                    )
                 if not result.get("ok"):
                     self._json(422, self.server.app.public_result(result))
                     return
@@ -590,6 +665,14 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     validate_runtime_label(
                         payload.get("model") or self.server.app.default_model
                     )
+                fixed_binding = (
+                    self.server.app.fixed_execution_binding(
+                        requested_adapter=payload.get("adapter_id"),
+                        requested_model=payload.get("model"),
+                    )
+                    if route_mode == "fixed"
+                    else None
+                )
                 engine = (
                     AutoAdvanceEngine(
                         self.server.app.broker,
@@ -599,14 +682,8 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     if route_mode == "automatic"
                     else AutoAdvanceEngine(
                         self.server.app.broker,
-                        adapter_id=self.server.app.resolve_adapter_id(
-                            payload.get("adapter_id")
-                        ),
-                        model=(
-                            self.server.app.resolve_model(payload.get("model"))
-                            if payload.get("model")
-                            else self.server.app.default_model
-                        ),
+                        adapter_id=fixed_binding[0],
+                        model=fixed_binding[1],
                     )
                 )
                 result = engine.advance(
@@ -633,6 +710,14 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                 route_mode = str(payload.get("route_mode") or default_route_mode)
                 if route_mode not in {"fixed", "automatic"}:
                     raise ValueError("route_mode must be fixed or automatic")
+                fixed_binding = (
+                    self.server.app.fixed_execution_binding(
+                        requested_adapter=payload.get("adapter_id"),
+                        requested_model=payload.get("model"),
+                    )
+                    if route_mode == "fixed"
+                    else None
+                )
                 controller = (
                     GoalController(
                         self.server.app.broker,
@@ -642,14 +727,8 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     if route_mode == "automatic"
                     else GoalController(
                         self.server.app.broker,
-                        adapter_id=self.server.app.resolve_adapter_id(
-                            payload.get("adapter_id")
-                        ),
-                        model=(
-                            self.server.app.resolve_model(payload.get("model"))
-                            if payload.get("model")
-                            else self.server.app.default_model
-                        ),
+                        adapter_id=fixed_binding[0],
+                        model=fixed_binding[1],
                     )
                 )
                 result = controller.continue_goal(goal_id)
@@ -724,8 +803,10 @@ def create_runtime_server(
     adapters: dict[str, Any],
     default_model: str,
     web_root: str | Path,
+    default_adapter_id: str | None = None,
     domain_profiles: dict[str, dict[str, Any]] | None = None,
     runtime_routes: list[dict[str, Any]] | None = None,
+    work_protocols: list[dict[str, Any]] | None = None,
     presentation: dict[str, Any] | None = None,
     projection_mode: str | None = None,
 ) -> RuntimeHTTPServer:
@@ -743,8 +824,10 @@ def create_runtime_server(
         adapters=adapters,
         default_model=default_model,
         web_root=web_root,
+        default_adapter_id=default_adapter_id,
         domain_profiles=domain_profiles,
         runtime_routes=runtime_routes,
+        work_protocols=work_protocols,
         presentation=presentation,
         projection_mode=resolved_mode,
     )

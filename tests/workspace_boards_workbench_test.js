@@ -94,6 +94,15 @@ test("the module topology grows for many plug-ins instead of assuming seven card
   assert.ok(topology.height > 1200);
 });
 
+test("module topology accepts recursive graph layers and feedback edges", () => {
+  const graph = require("../workbench/architecture.js").systemGraph(["personal-context"]);
+  const topology = workbench.buildModuleTopology(graph.nodes, graph.edges);
+
+  assert.equal(topology.nodes.length, graph.nodes.length);
+  assert.ok(topology.lanes.some((lane) => lane.label === "规则"));
+  assert.ok(topology.lanes.some((lane) => lane.label === "编译"));
+});
+
 test("module focus resolves complete upstream and downstream paths", () => {
   assert.equal(typeof workbench.moduleNeighborhood, "function");
   const graph = workbench.moduleGraph();
@@ -115,6 +124,24 @@ test("module inspection explains incoming processing and outgoing connections", 
   assert.ok(connections.processing.some((step) => /工作流结构编译/.test(step)));
   assert.ok(connections.interfaces.some((item) => item.direction === "输入"));
   assert.ok(connections.interfaces.some((item) => item.direction === "输出"));
+});
+
+test("drilled module inspection exposes its parent and external handoffs", () => {
+  const graph = require("../workbench/architecture.js").systemGraph(["longtask-kernel"]);
+  const connections = workbench.moduleConnectionModel(graph, "task-state");
+
+  assert.equal(connections.boundary.owner_module.module_id, "longtask-kernel");
+  assert.equal(connections.boundary.parent_graph.name, "个人 AI 操作系统");
+  assert.deepEqual(connections.boundary.incoming.map((item) => item.module_name), ["领域识别与抽象"]);
+  assert.deepEqual(connections.boundary.outgoing.map((item) => item.module_name), ["领域工作系统"]);
+});
+
+test("the secondary map is named as a component dependency view", () => {
+  const html = require("node:fs").readFileSync(require("node:path").join(__dirname, "../workbench/index.html"), "utf8");
+
+  assert.match(html, />组件依赖</);
+  assert.match(html, /id="module-map-description"/);
+  assert.doesNotMatch(html, />运行模块</);
 });
 
 test("module inspection derives honest connection details for every system node", () => {

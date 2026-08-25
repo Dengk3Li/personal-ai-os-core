@@ -52,6 +52,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .primary-button { color: white; background: var(--ink); border-color: var(--ink); }
 .ghost-button:hover, .primary-button:hover, .card-action:hover, .task-action:hover:not(:disabled), .scan-button:hover { transform: translateY(-1px); }
 
+.settings-panel { position: fixed; top: 5.3rem; right: clamp(1.25rem, 4vw, 4.5rem); z-index: 20; width: min(32rem, calc(100vw - 2.5rem)); max-height: calc(100vh - 6.5rem); padding: var(--space-4); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 1.25rem 4rem rgba(22, 33, 31, .18); }
+.settings-panel > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
+.settings-panel > header span, .settings-group > span { color: var(--accent); font-size: .62rem; font-weight: 850; letter-spacing: .06em; }
+.settings-panel h2, .settings-group h3 { margin: .2rem 0 0; font-family: Georgia, "Songti SC", serif; font-weight: 500; }
+.settings-layout { display: grid; gap: var(--space-3); padding-top: var(--space-3); }
+.settings-group { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: .75rem; background: var(--paper); }
+.settings-group p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.55; }
+.settings-list { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.settings-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: .65rem .7rem; border-radius: .55rem; background: var(--surface); font-size: .68rem; }
+.settings-list li div { display: grid; gap: .16rem; min-width: 0; }
+.settings-list li strong, .settings-list li span { overflow-wrap: anywhere; }
+.settings-list li span, .settings-list li small { color: var(--muted); }
+.settings-status { padding: .25rem .5rem; border-radius: 99px; color: var(--accent-dark); background: var(--accent-soft); font-size: .58rem; font-weight: 800; }
+
 main { padding: 0 clamp(1.25rem, 4vw, 4.5rem) 5rem; }
 .overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(28rem, .9fr); gap: var(--space-5); align-items: end; padding: 2.25rem 0 1.75rem; }
 .overview h2 { max-width: 12ch; margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(2.45rem, 5vw, 4.7rem); font-weight: 500; line-height: .98; letter-spacing: -.035em; }
@@ -175,6 +189,11 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .module-work-links button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .65rem; }
 .module-work-links button b { flex: 0 0 auto; color: var(--accent); font-size: .58rem; }
 .module-work-links p { margin: 0; color: var(--muted); font-size: .65rem; }
+.map-description { margin: 0; padding: .65rem var(--space-3); border-top: 1px solid var(--line); color: var(--muted); background: rgba(255, 255, 255, .4); font-size: .66rem; line-height: 1.45; }
+.module-boundary { display: grid; gap: .35rem; margin: var(--space-3) 0; padding: var(--space-3); border: 1px solid var(--accent-soft); border-radius: .7rem; background: var(--accent-soft); }
+.module-boundary > span { color: var(--accent); font-size: .58rem; font-weight: 850; letter-spacing: .06em; }
+.module-boundary > p { margin: 0; color: var(--muted); font-size: .66rem; }
+.module-boundary dl { margin-top: .4rem; }
 .map-drill-button { min-height: 44px; padding: .55rem .75rem; border: 1px solid var(--accent); border-radius: 99px; color: white; background: var(--accent); font-size: .66rem; cursor: pointer; }
 .map-drill-button[hidden] { display: none; }
 .first-run-card.compact { align-items: center; margin-top: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: .8rem; }
@@ -306,18 +325,10 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .event-trace li:last-child::after { display: none; }
 .event-trace time { color: var(--ink); font-variant-numeric: tabular-nums; }
 .empty-trace { margin: 0 0 var(--space-3); color: var(--muted); font-size: .7rem; line-height: 1.5; }
-.execution-settings { margin: 0 0 var(--space-3); border: 1px solid var(--line); border-radius: .65rem; background: rgba(255, 255, 255, .42); }
-.execution-settings summary { display: flex; align-items: center; min-height: 44px; padding: .55rem .72rem; color: var(--accent); font-size: .72rem; font-weight: 800; cursor: pointer; }
-.runtime-controls, .execution-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); padding: 0 .72rem .72rem; }
-.runtime-controls label, .execution-settings-grid label { display: grid; gap: .35rem; min-width: 0; color: var(--muted); font-size: .75rem; }
-.runtime-controls input, .runtime-controls select, .execution-settings-grid input, .execution-settings-grid select { min-width: 0; width: 100%; min-height: 44px; padding: .58rem .62rem; border: 1px solid var(--line); border-radius: .55rem; color: var(--ink); background: var(--surface); font: inherit; font-size: .75rem; }
 .auto-advance-controls { display: grid; grid-template-columns: minmax(10rem, 1fr) auto; gap: var(--space-2); align-items: center; width: 100%; padding-top: var(--space-2); border-top: 1px solid rgba(255, 255, 255, .16); }
 .auto-advance-controls[hidden] { display: none; }
 .advance-readiness { color: rgba(255, 255, 255, .82); font-size: .75rem; }
 .auto-advance-controls .primary-button:disabled { color: rgba(255, 255, 255, .65); background: transparent; border-color: rgba(255, 255, 255, .34); }
-.line-execution-settings { grid-column: 1 / -1; margin: 0; border-color: rgba(255, 255, 255, .18); background: rgba(255, 255, 255, .06); }
-.line-execution-settings summary { color: rgba(255, 255, 255, .88); }
-.line-execution-settings .execution-settings-grid label { color: rgba(255, 255, 255, .82); }
 .task-action { width: 100%; color: white; background: var(--accent); border-color: var(--accent); font-size: .68rem; }
 .task-action:disabled { color: var(--muted); background: transparent; border-color: var(--line); cursor: default; }
 
@@ -403,7 +414,6 @@ footer { padding: var(--space-4); color: var(--muted); text-align: center; font-
   .execution-values { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); white-space: normal; }
   .workflow-nodes { grid-template-columns: 1fr; }
   .workflow-node { min-height: auto; }
-  .runtime-controls { grid-template-columns: 1fr; }
   .auto-advance-controls { grid-template-columns: 1fr; }
   .task-composer > div { flex-direction: column; }
   .task-composer button { width: 100%; }

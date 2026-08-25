@@ -100,6 +100,8 @@ _PRESETS = {
     },
     "meeting-notes": {
         "workflow_id": "meeting-notes",
+        "domain_id": "writing",
+        "protocol_id": "meeting-source-first-v1",
         "name": "会议纪要工作线",
         "caption": "材料登记、信息抽取、初稿、审核与交付",
         "layout": "milestones",

@@ -110,6 +110,7 @@
       defaultModel: payload.default_model || "",
       adapters: clone(payload.adapters || []),
       execution: clone(payload.execution || {}),
+      executionSettings: clone(payload.execution_settings || {}),
       pendingDecisions: clone(payload.state.pendingDecisions || []),
       petPreference: "blue-whale-maid",
     };
@@ -527,7 +528,8 @@
   const SYSTEM_LANES = ["入口", "认知", "理解", "编排", "结构", "领域", "执行", "验收", "裁决", "交付", "记忆", "学习", "输出"];
 
   function moduleLaneLabel(layer) {
-    const value = String(layer || "").toLowerCase();
+    const original = String(layer || "").trim();
+    const value = original.toLowerCase();
     const systemLabel = SYSTEM_LANES.find((label) => label.toLowerCase() === value);
     if (systemLabel) return systemLabel;
     if (value === "输入" || value === "input") return "输入";
@@ -535,15 +537,20 @@
     if (value === "编排" || value === "orchestration") return "编排";
     if (value === "执行" || value === "execution") return "执行";
     if (["记忆", "观测", "memory", "observation", "observability"].includes(value)) return "记忆与观测";
-    return "记忆与观测";
+    return original || "记忆与观测";
   }
 
   function moduleLaneOrder(modules) {
-    const requested = new Set(modules.map((module) => String(module.layer || "")));
-    const systemOnly = ["入口", "认知", "结构", "领域", "验收", "裁决", "交付", "学习", "输出"];
-    if (!systemOnly.some((label) => requested.has(label))) return MODULE_LANES;
-    const system = SYSTEM_LANES.filter((label) => requested.has(label));
-    return system;
+    const requested = [];
+    modules.forEach((module) => {
+      const label = moduleLaneLabel(module.layer);
+      if (!requested.includes(label)) requested.push(label);
+    });
+    const componentLabels = requested.map((label) => label === "记忆" ? "记忆与观测" : label);
+    if (componentLabels.every((label) => MODULE_LANES.includes(label))) {
+      return MODULE_LANES.filter((label) => componentLabels.includes(label));
+    }
+    return requested;
   }
 
   function topologicalModuleOrder(modules, edges) {
@@ -586,7 +593,8 @@
     const grouped = Object.fromEntries(laneOrder.map((label) => [label, []]));
     modules.forEach((module) => {
       const requestedLane = moduleLaneLabel(module.layer);
-      const lane = grouped[requestedLane] ? requestedLane : "记忆与观测";
+      const compatibleLane = requestedLane === "记忆" && grouped["记忆与观测"] ? "记忆与观测" : requestedLane;
+      const lane = grouped[compatibleLane] ? compatibleLane : laneOrder[0];
       grouped[lane].push(module);
     });
     laneOrder.forEach((label) => grouped[label].sort((left, right) => orderIndex[left.module_id] - orderIndex[right.module_id]));
@@ -641,7 +649,7 @@
 
   function moduleConnectionModel(graph, moduleId) {
     const module = graph.modules ? graph.modules.find((item) => item.module_id === moduleId) : graph.nodes.find((item) => item.module_id === moduleId);
-    if (!module) return { incoming: [], outgoing: [], feedback: [], processing: [], interfaces: [] };
+    if (!module) return { incoming: [], outgoing: [], feedback: [], processing: [], interfaces: [], boundary: graph.boundary || null };
     const modules = graph.modules || graph.nodes;
     const names = Object.fromEntries(modules.map((item) => [item.module_id, item.name]));
     const neighborhood = moduleNeighborhood(graph.edges || [], moduleId);
@@ -666,6 +674,7 @@
       feedback: neighborhood.feedback.map(relation),
       processing: clone(module.process && module.process.length ? module.process : [module.summary || module.control || "按模块合同处理输入并形成输出"]),
       interfaces: clone(module.interfaces && module.interfaces.length ? module.interfaces : (derivedInterfaces.length ? derivedInterfaces : [{ direction: "内部", name: "模块边界", protocol: "module.contract" }])),
+      boundary: clone(graph.boundary || null),
     };
   }
 
@@ -1080,9 +1089,6 @@
     const adapterUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && !availableAdapters.length);
     const modelUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && !readiness.modelReady);
     const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action) || (needsAdapter && !readiness.taskReady);
-    const runtimeControls = runtimeState && runtimeState.runtime && ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(task.action)
-      ? `<details class="execution-settings"><summary>执行设置${assignment ? ` · ${escapeHtml(assignment.model)}` : ""}</summary><div class="runtime-controls"><label><span>模型</span><input data-runtime-model value="${escapeHtml(runtimeState.defaultModel || "")}" autocomplete="off"></label><label><span>执行适配器</span><select data-runtime-adapter ${adapterUnavailable ? "disabled" : ""}>${availableAdapters.length ? availableAdapters.map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}">${escapeHtml(adapter.adapter_id)}</option>`).join("") : '<option value="">暂无可用执行适配器</option>'}</select></label></div></details>`
-      : "";
     const actionLabel = modelUnavailable
       ? "配置模型后开始"
       : adapterUnavailable
@@ -1091,8 +1097,31 @@
     return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || task.title || "自定义任务")}</h3></div>
       <dl class="run-detail-meta"><div><dt>模型</dt><dd>${escapeHtml(assignment ? assignment.model : "等待选择")}</dd></div><div><dt>执行适配器</dt><dd>${escapeHtml(assignment ? assignment.executor : "尚未分配")}</dd></div><div><dt>运行轮次</dt><dd>${task.attempts ? `第 ${String(task.attempts).padStart(2, "0")} 次` : "尚未运行"}</dd></div><div><dt>节点类型</dt><dd>${escapeHtml(({ sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" })[inferFlowKind(task)] || "顺序")}</dd></div></dl>
       ${events}
-      ${runtimeControls}
+      ${runtimeState && runtimeState.runtime && needsAdapter ? '<p class="empty-trace">使用已保存的执行策略；模型、路由与 API 在设置中统一管理。</p>' : ""}
       <div data-task-id="${escapeHtml(task.task_id)}"><button class="task-action" type="button" data-action="task" ${disabled ? "disabled" : ""}>${escapeHtml(actionLabel)}</button></div>`;
+  }
+
+  function renderSettings(runtimeState) {
+    if (!runtimeState || !runtimeState.runtime) {
+      return '<div class="settings-layout"><section class="settings-group"><span>本地运行</span><h3>尚未连接运行服务</h3><p>启动本地运行服务后，这里会显示已保存的模型路由、执行适配器与记忆候选。</p></section></div>';
+    }
+    const execution = runtimeState.execution || {};
+    const settings = runtimeState.executionSettings || {};
+    const routes = settings.routes || [];
+    const adapters = runtimeState.adapters || [];
+    const learning = runtimeState.cognitiveLearning || { proposed: 0, approved: 0 };
+    const mode = execution.advance_route_mode === "automatic" ? "自动路由" : "固定执行策略";
+    const routeRows = routes.length
+      ? routes.map((route) => `<li><div><strong>${escapeHtml(route.route)}</strong><span>${escapeHtml(route.model)} · ${escapeHtml(route.adapter_id)}</span><small>${escapeHtml((route.capabilities || []).join(" · ") || "通用能力")}</small></div><b class="settings-status">${route.enabled === false ? "已停用" : "已启用"}</b></li>`).join("")
+      : '<li><div><strong>尚未保存路由</strong><span>通过本地版本化路由文件配置模型与任务能力。</span></div><b class="settings-status">待配置</b></li>';
+    const adapterRows = adapters.length
+      ? adapters.map((adapter) => `<li><div><strong>${escapeHtml(adapter.adapter_id)}</strong><span>${escapeHtml(adapter.protocol || "执行协议")}</span></div><b class="settings-status">${adapter.available ? "可用" : "未连接"}</b></li>`).join("")
+      : '<li><div><strong>尚未连接执行适配器</strong><span>执行端点与凭据由本地服务加载。</span></div><b class="settings-status">未连接</b></li>';
+    return `<div class="settings-layout">
+      <section class="settings-group"><span>任务路由</span><h3>${mode}</h3><p>工作区按已保存的任务能力与模型策略运行，台前只保留“开始”和“继续”。</p><ul class="settings-list">${routeRows}</ul></section>
+      <section class="settings-group"><span>执行连接</span><h3>适配器与 API</h3><p>API 凭据只从服务端环境变量读取，不进入浏览器、任务卡或运行事件。</p><ul class="settings-list">${adapterRows}</ul><p>凭据来源：${settings.credential_source === "server-environment" ? "服务端环境变量" : "本地运行服务"}</p></section>
+      <section class="settings-group"><span>个人认知</span><h3>经验候选与已确认习惯</h3><p>${Number(learning.proposed || 0)} 项等待确认 · ${Number(learning.approved || 0)} 项已进入任务上下文。工作结果只发起经验复核；候选经证据整理后创建，明确确认后才进入后续任务。</p></section>
+    </div>`;
   }
 
   function renderProposal(proposal, lines) {
@@ -1130,6 +1159,7 @@
     const dragClickGuard = createDragClickGuard();
     let proposal = null;
     let lineComposerOpen = false;
+    let settingsOpen = false;
     const byId = (id) => doc.getElementById(id);
 
     function activeModuleGraph(view) {
@@ -1142,6 +1172,7 @@
         modules: graph.nodes,
         edges: graph.edges,
         unresolved: [],
+        boundary: graph.boundary || null,
       };
     }
 
@@ -1266,13 +1297,16 @@
       if (!mapGraph.modules.some((item) => item.module_id === selectedModule)) selectedModule = mapGraph.modules[0] ? mapGraph.modules[0].module_id : null;
       byId("module-scene").innerHTML = renderModuleTopology(moduleTopology, selectedModule, view.global.moduleWork, view.global.cognitiveLearning);
       byId("module-map-viewport").dataset.focused = moduleFocusEnabled ? "true" : "false";
-      byId("module-map-title").textContent = mapGraph.name || "运行模块";
+      byId("module-map-title").textContent = mapGraph.name || "组件依赖";
+      byId("module-map-description").textContent = moduleMapMode === "system"
+        ? "系统全景呈现从目标输入到经验回流的顶层操作架构；下钻后保留与上层的输入、输出和反馈关系。"
+        : "组件依赖呈现实际安装模块的 capability 供需、运行连接与可替换插槽。";
       byId("module-count").textContent = String(mapGraph.modules.length);
       byId("module-edge-count").textContent = String(mapGraph.edges.length);
       byId("module-unresolved-count").textContent = String(mapGraph.unresolved.length);
       byId("dependency-edge-list").innerHTML = mapGraph.edges.map((edge) => renderDependencyEdge(edge, moduleNames)).join("");
       const module = mapGraph.modules.find((item) => item.module_id === selectedModule) || mapGraph.modules[0];
-      const connections = module ? moduleConnectionModel(mapGraph, module.module_id) : { incoming: [], outgoing: [], feedback: [], processing: [], interfaces: [] };
+      const connections = module ? moduleConnectionModel(mapGraph, module.module_id) : { incoming: [], outgoing: [], feedback: [], processing: [], interfaces: [], boundary: null };
       byId("module-detail-name").textContent = module ? module.name : "没有已安装模块";
       byId("module-detail-summary").textContent = module ? module.summary : "把 module.json 放入模块目录后即可参与解析。";
       byId("module-provides").textContent = module ? module.provides.join(" · ") : "—";
@@ -1285,6 +1319,15 @@
       byId("module-interfaces").textContent = connections.interfaces.length ? connections.interfaces.map((item) => `${item.direction}：${item.name}（${item.protocol}）`).join(" · ") : "由 capability 合同定义";
       byId("module-feedback").textContent = connections.feedback.length ? connections.feedback.map((item) => `${item.direction}：${item.module_name}`).join(" · ") : "没有反馈连接";
       byId("module-control").textContent = module && module.control ? module.control : "按模块合同运行";
+      const boundary = connections.boundary;
+      byId("module-boundary").hidden = !boundary;
+      if (boundary) {
+        byId("module-boundary-owner").textContent = boundary.owner_module.name;
+        byId("module-boundary-parent").textContent = `属于${boundary.parent_graph.name}，内部处理完成后仍按上层接口交接。`;
+        byId("module-boundary-incoming").textContent = boundary.incoming.length ? boundary.incoming.map((item) => item.module_name).join(" · ") : "上层入口";
+        byId("module-boundary-outgoing").textContent = boundary.outgoing.length ? boundary.outgoing.map((item) => item.module_name).join(" · ") : "没有跨层输出";
+        byId("module-boundary-feedback").textContent = boundary.feedback.length ? boundary.feedback.map((item) => `${item.direction}：${item.module_name}`).join(" · ") : "没有跨层反馈";
+      }
       const moduleWork = module ? ((view.global.moduleWork.by_module || {})[module.module_id] || {}) : {};
       const linkedTasks = (moduleWork.task_ids || []).map((taskId) => state.tasks.find((task) => task.task_id === taskId)).filter(Boolean);
       byId("module-work-links").innerHTML = linkedTasks.length
@@ -1298,7 +1341,7 @@
         button.classList.toggle("active", active);
         button.setAttribute("aria-pressed", active ? "true" : "false");
       });
-      const crumbs = moduleMapMode === "system" && architecture ? architecture.systemBreadcrumbs(modulePath) : [{ label: "运行模块", depth: 0 }];
+      const crumbs = moduleMapMode === "system" && architecture ? architecture.systemBreadcrumbs(modulePath) : [{ label: "组件依赖", depth: 0 }];
       byId("module-breadcrumbs").innerHTML = crumbs.map((crumb, index) => `<button type="button" data-map-depth="${index}" ${index === crumbs.length - 1 ? 'aria-current="page"' : ""}>${escapeHtml(crumb.label)}</button>`).join('<span aria-hidden="true">›</span>');
       const focusButton = doc.querySelector("[data-map-focus-toggle]");
       focusButton.classList.toggle("active", moduleFocusEnabled);
@@ -1328,13 +1371,7 @@
       const autoControls = byId("auto-advance-controls");
       autoControls.hidden = !state.runtime;
       if (state.runtime) {
-        byId("auto-advance-model").value = state.defaultModel || "";
         const availableAdapters = (state.adapters || []).filter((adapter) => adapter.available);
-        const adapterSelect = byId("auto-advance-adapter");
-        adapterSelect.innerHTML = availableAdapters.length
-          ? (state.adapters || []).map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}" ${adapter.available ? "" : "disabled"}>${escapeHtml(adapter.adapter_id)}${adapter.available ? "" : " · 未配置"}</option>`).join("")
-          : '<option value="">暂无可用执行适配器</option>';
-        adapterSelect.disabled = !availableAdapters.length;
         const advanceButton = doc.querySelector("[data-auto-advance]");
         const readiness = executionReadiness(state);
         advanceButton.disabled = !readiness.advanceReady;
@@ -1345,12 +1382,13 @@
           : !availableAdapters.length
             ? "尚未连接执行适配器"
             : "执行设置已就绪";
-        advanceButton.textContent = !state.defaultModel && readiness.advanceRouteMode === "fixed"
-          ? "配置模型后推进"
-          : !availableAdapters.length
-            ? "配置执行适配器后推进"
+        advanceButton.textContent = !readiness.advanceReady
+          ? "前往设置完成执行配置"
             : "推进当前工作线";
       }
+      byId("settings-content").innerHTML = renderSettings(state);
+      byId("settings-panel").hidden = !settingsOpen;
+      byId("settings-toggle").setAttribute("aria-expanded", settingsOpen ? "true" : "false");
       const projection = workflowProjection(state, view.work.activeLine.line_id);
       const projectedTasks = projection ? projection.groups.flatMap((group) => group.nodes) : [];
       let selectedTask = projectedTasks.find((task) => task.task_id === state.activeTaskId);
@@ -1385,6 +1423,18 @@
     } catch (_error) {}
 
     doc.addEventListener("click", async (event) => {
+      if (event.target.closest && event.target.closest("#settings-toggle")) {
+        settingsOpen = !settingsOpen;
+        render();
+        if (settingsOpen) byId("settings-panel").focus({ preventScroll: true });
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-close-settings]")) {
+        settingsOpen = false;
+        render();
+        byId("settings-toggle").focus();
+        return;
+      }
       const boardButton = event.target.closest && event.target.closest("[data-board]");
       if (boardButton) {
         state = selectBoard(state, boardButton.dataset.board);
@@ -1402,7 +1452,7 @@
         moduleTopologySignature = "";
         moduleViewFitted = false;
         render();
-        announce(moduleMapMode === "system" ? "已切换到系统全景" : "已切换到运行模块");
+        announce(moduleMapMode === "system" ? "已切换到系统全景" : "已切换到组件依赖");
         return;
       }
       const breadcrumb = event.target.closest && event.target.closest("[data-map-depth]");
@@ -1543,12 +1593,11 @@
         return;
       }
       if (event.target.closest && event.target.closest("[data-auto-advance]") && state.runtime && runtimeClient) {
-        const adapter = byId("auto-advance-adapter");
-        const model = byId("auto-advance-model");
+        const adapterId = state.executionSettings.default_adapter_id || "";
         try {
           announce("正在推进当前可运行任务");
           const result = await runTaskWithPolling(
-            () => runtimeClient.advance(adapter ? adapter.value : "", model ? model.value : state.defaultModel, 25, state.activeLineId),
+            () => runtimeClient.advance(adapterId, state.defaultModel, 25, state.activeLineId),
             refreshRuntime,
           );
           announce(`当前工作线已推进 ${result.advanced_count || 0} 项，停在 ${result.stop_reason || "UNKNOWN"}`);
@@ -1557,12 +1606,11 @@
       }
       const continueGoal = event.target.closest && event.target.closest("[data-goal-continue]");
       if (continueGoal && state.runtime && runtimeClient) {
-        const adapter = byId("auto-advance-adapter");
-        const model = byId("auto-advance-model");
+        const adapterId = state.executionSettings.default_adapter_id || "";
         try {
           announce("正在继续当前长期目标");
           const result = await runTaskWithPolling(
-            () => runtimeClient.continueGoal(continueGoal.dataset.goalContinue, adapter ? adapter.value : "", model ? model.value : state.defaultModel),
+            () => runtimeClient.continueGoal(continueGoal.dataset.goalContinue, adapterId, state.defaultModel),
             refreshRuntime,
           );
           announce(`长期目标已推进 ${result.steps_used || 0} 步，停在 ${result.stop_reason || "UNKNOWN"}`);
@@ -1605,11 +1653,10 @@
           } else if (action === "RESUME") {
             await runtimeClient.transitionTask(taskId, "QUEUED", "Resumed by owner");
           } else if (["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(action)) {
-            const adapter = doc.querySelector("[data-runtime-adapter]");
-            const model = doc.querySelector("[data-runtime-model]");
+            const adapterId = state.executionSettings.default_adapter_id || "";
             announce("正在连接执行适配器");
             await runTaskWithPolling(
-              () => runtimeClient.runTask(taskId, adapter ? adapter.value : "", model ? model.value : state.defaultModel),
+              () => runtimeClient.runTask(taskId, adapterId, state.defaultModel),
               refreshRuntime,
             );
             refreshAfterAction = false;
@@ -1885,6 +1932,7 @@
     recordDecision,
     renderDecisionCard,
     renderRunDetail,
+    renderSettings,
     renderDurableGoal,
     renderWorkflowNode,
     renderModuleTopology,

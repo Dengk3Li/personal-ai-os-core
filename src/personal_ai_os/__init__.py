@@ -23,8 +23,9 @@ from .task_links import module_work_projection, validate_task_module_link
 from .truth import compile_truth
 from .workflow import transition_task
 from .workflow_structure import compile_workflow_structure, evaluate_workflow_structure
+from .work_protocols import load_work_protocols, work_protocol_catalog
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 __all__ = [
     "build_capsule",
@@ -48,6 +49,7 @@ __all__ = [
     "install_workflow_preset",
     "load_runtime_plan",
     "load_runtime_routes",
+    "load_work_protocols",
     "load_goal_definition",
     "load_presentation",
     "module_catalog",
@@ -67,4 +69,5 @@ __all__ = [
     "verify_freeze",
     "get_workflow_preset",
     "workflow_preset_catalog",
+    "work_protocol_catalog",
 ]

@@ -47,6 +47,16 @@ class ClientNamedAdapter(SuccessfulAdapter):
         }
 
 
+class CountingAdapter(SuccessfulAdapter):
+    def __init__(self, adapter_id):
+        self.adapter_id = adapter_id
+        self.calls = 0
+
+    def start(self, task, *, model, context_pack):
+        self.calls += 1
+        return super().start(task, model=model, context_pack=context_pack)
+
+
 class RuntimeServerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -210,6 +220,15 @@ class RuntimeServerTests(unittest.TestCase):
             adapters={"client-alpha-adapter": ClientNamedAdapter()},
             default_model="client-alpha-model",
             web_root=Path(__file__).resolve().parents[1] / "workbench",
+            runtime_routes=[
+                {
+                    "route": "client-alpha-route",
+                    "adapter_id": "client-alpha-adapter",
+                    "model": "client-alpha-model",
+                    "capabilities": ["client-alpha-writing"],
+                    "enabled": True,
+                }
+            ],
             presentation={
                 "schema_version": "personal-ai-os.presentation/v1",
                 "workflows": {},
@@ -234,6 +253,8 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("model-01", projection["default_model"])
         self.assertEqual("adapter-01", projection["adapters"][0]["adapter_id"])
         self.assertNotIn("protocol", projection["adapters"][0])
+        self.assertEqual("route-01", projection["execution_settings"]["routes"][0]["route"])
+        self.assertEqual("capability-01", projection["execution_settings"]["routes"][0]["capabilities"][0])
         assignment = next(iter(after_dispatch["state"]["assignments"].values()))
         self.assertEqual("model-01", assignment["model"])
         self.assertEqual("adapter-01", assignment["executor"])
@@ -262,12 +283,14 @@ class RuntimeServerTests(unittest.TestCase):
 
         self.assertEqual(
             {
-                "task_dispatch_ready": False,
+                "task_dispatch_ready": True,
                 "advance_route_mode": "automatic",
                 "advance_ready": True,
             },
             projection["execution"],
         )
+        self.assertEqual("server-environment", projection["execution_settings"]["credential_source"])
+        self.assertEqual("deep-science", projection["execution_settings"]["routes"][0]["route"])
 
     def test_api_advances_ready_work_with_a_bounded_request(self):
         status, advanced = self.request(
@@ -343,6 +366,73 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertTrue(advanced["ok"])
         self.assertEqual("deep-science", advanced["actions"][0]["route"])
+
+    def test_routes_only_server_dispatches_one_task_from_saved_settings(self):
+        self.server.app.default_model = ""
+        self.server.app.runtime_routes = [
+            {
+                "route": "deep-science",
+                "tier": "deep",
+                "capabilities": ["reasoning", "evidence"],
+                "max_context_tokens": 160000,
+                "adapter_id": "test-adapter",
+                "model": "model-routed",
+                "enabled": True,
+            }
+        ]
+
+        status, result = self.request(
+            "/api/runs",
+            {"task_id": "science:hypothesis"},
+        )
+
+        self.assertEqual(200, status)
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            "model-routed",
+            self.store.snapshot()["assignments"]["science:hypothesis"]["model"],
+        )
+
+    def test_fixed_server_dispatches_only_through_its_saved_default_adapter(self):
+        unrelated = CountingAdapter("a-unrelated")
+        configured = CountingAdapter("z-configured")
+        server = create_runtime_server(
+            ("127.0.0.1", 0),
+            store=self.store,
+            adapters={unrelated.adapter_id: unrelated, configured.adapter_id: configured},
+            default_model="model-a",
+            default_adapter_id=configured.adapter_id,
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                urllib.request.Request(
+                    base + "/api/runs",
+                    data=json.dumps(
+                        {
+                            "task_id": "science:hypothesis",
+                        }
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                ),
+                timeout=3,
+            ) as response:
+                result = json.loads(response.read())
+            projection = server.app.projection()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(0, unrelated.calls)
+        self.assertEqual(1, configured.calls)
+        self.assertEqual("z-configured", projection["execution_settings"]["default_adapter_id"])
+        self.assertTrue(projection["execution"]["task_dispatch_ready"])
 
     def test_private_runtime_projects_and_continues_a_durable_goal(self):
         self.store.create_goal(
@@ -576,7 +666,7 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertNotIn("/Users/", serialized)
         self.assertEqual("DONE", self.store.get_task("science:hypothesis")["status"])
 
-    def test_server_blocks_path_traversal_and_unknown_adapter(self):
+    def test_server_blocks_path_traversal_and_client_adapter_override(self):
         with self.assertRaises(urllib.error.HTTPError) as traversal:
             urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
                 self.base + "/../README.md", timeout=3
@@ -589,6 +679,7 @@ class RuntimeServerTests(unittest.TestCase):
 
         self.assertEqual(404, traversal.exception.code)
         self.assertEqual(422, adapter.exception.code)
+        self.assertEqual([], self.store.snapshot()["runs"])
 
     def test_write_api_rejects_cross_site_and_non_json_requests(self):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

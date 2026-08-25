@@ -139,8 +139,8 @@ test("task dispatch controls stay disabled until an adapter is available", () =>
     },
   );
 
-  assert.match(html, /<select data-runtime-adapter disabled>/);
-  assert.match(html, /暂无可用执行适配器/);
+  assert.doesNotMatch(html, /data-runtime-adapter/);
+  assert.match(html, /使用已保存的执行策略/);
   assert.match(html, /配置执行适配器后开始/);
   assert.doesNotMatch(html, /openai-compatible/);
   assert.match(html, /<button class="task-action"[^>]*disabled/);
@@ -204,7 +204,7 @@ test("automatic advance readiness is independent from the fixed task model", () 
   });
 });
 
-test("execution settings stay collapsed until the user needs to configure them", () => {
+test("task detail uses saved execution settings without exposing configuration controls", () => {
   const html = workbench.renderRunDetail(
     {
       task_id: "task-001",
@@ -222,10 +222,31 @@ test("execution settings stay collapsed until the user needs to configure them",
     },
   );
 
-  assert.match(html, /<details class="execution-settings">/);
-  assert.match(html, /<summary>执行设置/);
-  assert.match(html, /data-runtime-model/);
-  assert.match(html, /data-runtime-adapter/);
+  assert.doesNotMatch(html, /execution-settings/);
+  assert.doesNotMatch(html, /data-runtime-model/);
+  assert.doesNotMatch(html, /data-runtime-adapter/);
+  assert.match(html, /使用已保存的执行策略/);
+});
+
+test("settings explain saved routing and keep credentials on the server", () => {
+  const html = workbench.renderSettings({
+    runtime: true,
+    execution: { advance_route_mode: "automatic", task_dispatch_ready: true },
+    adapters: [{ adapter_id: "adapter-01", available: true, protocol: "chat-completions" }],
+    executionSettings: {
+      routes: [{ route: "route-01", model: "model-01", adapter_id: "adapter-01", capabilities: ["writing"], enabled: true }],
+      default_adapter_id: "adapter-01",
+      credential_source: "server-environment",
+    },
+    cognitiveLearning: { proposed: 1, approved: 2 },
+  });
+
+  assert.match(html, /自动路由/);
+  assert.match(html, /route-01/);
+  assert.match(html, /服务端环境变量/);
+  assert.match(html, /只发起经验复核/);
+  assert.doesNotMatch(html, /工作结果只生成候选/);
+  assert.doesNotMatch(html, /api_key|Bearer|password/i);
 });
 
 

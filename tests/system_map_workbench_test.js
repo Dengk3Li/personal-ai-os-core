@@ -17,11 +17,22 @@ test("the system map covers the whole operating loop and exposes recursive drill
 
   const kernel = root.nodes.find((node) => node.module_id === "longtask-kernel");
   assert.equal(kernel.child_graph, "longtask-kernel");
+  assert.equal(root.nodes.find((node) => node.module_id === "personal-context").child_graph, "personal-context");
   assert.equal(architecture.systemGraph(["longtask-kernel"]).graph_id, "longtask-kernel");
   assert.deepEqual(
     architecture.systemBreadcrumbs(["longtask-kernel"]).map((item) => item.label),
     ["个人 AI 操作系统", "长期工作内核"],
   );
+});
+
+test("a drilled graph keeps its parent and external handoff boundary", () => {
+  const graph = architecture.systemGraph(["longtask-kernel"]);
+
+  assert.equal(graph.boundary.parent_graph.graph_id, "personal-ai-os");
+  assert.equal(graph.boundary.owner_module.module_id, "longtask-kernel");
+  assert.deepEqual(graph.boundary.incoming.map((item) => item.module_id), ["domain-routing"]);
+  assert.deepEqual(graph.boundary.outgoing.map((item) => item.module_id), ["domain-systems"]);
+  assert.deepEqual(graph.boundary.feedback.map((item) => item.module_id), ["learning-cycle"]);
 });
 
 
@@ -96,6 +107,6 @@ test("the report-facing workbench surface uses Chinese action language", () => {
     assert.doesNotMatch(visibleSurface, pattern);
   });
   assert.doesNotMatch(visibleSurface, /配置 Adapter 后推进/);
-  assert.match(visibleSurface, /暂无可用执行适配器/);
-  assert.match(html, /v0\.13\.0/);
+  assert.match(visibleSurface, /尚未连接执行适配器/);
+  assert.match(html, /v0\.14\.0/);
 });
