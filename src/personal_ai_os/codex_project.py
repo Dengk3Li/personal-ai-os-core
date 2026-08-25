@@ -13,6 +13,15 @@ def _decode(row: sqlite3.Row) -> dict[str, Any]:
     result = dict(row)
     result["project"] = json.loads(result.pop("project_json"))
     result["context_pack"] = json.loads(result.pop("context_json"))
+    for raw_key, public_key in (
+        ("thread_verification_json", "thread_verification"),
+        ("completion_receipt_json", "completion_receipt"),
+    ):
+        raw = result.pop(raw_key, "{}")
+        try:
+            result[public_key] = json.loads(raw or "{}")
+        except (TypeError, json.JSONDecodeError):
+            result[public_key] = {}
     return result
 
 
@@ -56,12 +65,29 @@ class CodexProjectAdapter:
                 WHERE status IN ('PENDING', 'CLAIMED', 'RUNNING');
                 """
             )
+            columns = {
+                row[1]
+                for row in connection.execute(
+                    "PRAGMA table_info(codex_project_dispatches)"
+                ).fetchall()
+            }
+            if "thread_verification_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE codex_project_dispatches "
+                    "ADD COLUMN thread_verification_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            if "completion_receipt_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE codex_project_dispatches "
+                    "ADD COLUMN completion_receipt_json TEXT NOT NULL DEFAULT '{}'"
+                )
 
     @staticmethod
     def _binding(value: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(value, dict):
             raise ValueError("Codex project binding must be an object")
         project_key = str(value.get("project_key") or "").strip()
+        configured_project_id = str(value.get("project_id") or "").strip()
         label = str(value.get("label") or "").strip()
         path = Path(str(value.get("path") or "")).expanduser().resolve()
         workflow_ids = [str(item).strip() for item in value.get("workflow_ids") or []]
@@ -77,6 +103,7 @@ class CodexProjectAdapter:
             raise ValueError("Codex project environment must be local or worktree")
         return {
             "project_key": project_key,
+            **({"project_id": configured_project_id} if configured_project_id else {}),
             "label": label,
             "path": str(path),
             "workflow_ids": workflow_ids,
@@ -229,12 +256,26 @@ class CodexProjectAdapter:
         thread_id: str,
         project_id: str,
         host_id: str,
+        verification: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         thread_id = str(thread_id or "").strip()
         project_id = str(project_id or "").strip()
         host_id = str(host_id or "").strip()
         if not thread_id or not project_id or not host_id:
             raise ValueError("Codex thread, project, and host ids are required")
+        if not isinstance(verification, dict):
+            raise ValueError("Codex thread/project verification is required")
+        source = str(verification.get("source") or "").strip()
+        if source not in {"task-project", "thread-project-assignments"}:
+            raise ValueError("Codex thread/project verification source is invalid")
+        if verification.get("verified") is not True:
+            raise ValueError("Codex thread/project verification is not confirmed")
+        if str(verification.get("project_id") or "").strip() != project_id:
+            raise ValueError("Codex thread/project verification does not match project id")
+        project_path = str(verification.get("project_path") or "").strip()
+        environment = str(verification.get("environment") or "").strip()
+        if not project_path or not environment:
+            raise ValueError("Codex thread/project verification lacks project path or environment")
         now = _now()
         with self.store._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -251,12 +292,24 @@ class CodexProjectAdapter:
             ).fetchone()
             if run is None:
                 raise ValueError("Codex project dispatch run is unavailable")
+            project = json.loads(dispatch["project_json"])
+            configured_project_id = str(project.get("project_id") or "").strip()
+            if configured_project_id and configured_project_id != project_id:
+                raise ValueError("Codex thread project id does not match configured Codex project")
+            if str(Path(project_path).expanduser().resolve()) != str(Path(project["path"]).resolve()):
+                raise ValueError("Codex thread project path does not match configured Codex project")
+            if environment != project["environment"]:
+                raise ValueError("Codex thread project environment does not match configured Codex project")
             cursor = connection.execute(
                 """UPDATE codex_project_dispatches
                    SET status = 'RUNNING', run_id = ?, thread_id = ?, project_id = ?,
-                       host_id = ?, lease_until = '', updated_at = ?
+                       host_id = ?, lease_until = '', thread_verification_json = ?, updated_at = ?
                    WHERE dispatch_id = ? AND status = 'CLAIMED'""",
-                (run["run_id"], thread_id, project_id, host_id, now, dispatch_id),
+                (
+                    run["run_id"], thread_id, project_id, host_id,
+                    json.dumps(verification, ensure_ascii=False, sort_keys=True),
+                    now, dispatch_id,
+                ),
             )
             if cursor.rowcount != 1:
                 raise ValueError("Codex project dispatch claim changed")
@@ -280,17 +333,33 @@ class CodexProjectAdapter:
         *,
         output_text: str,
         usage: dict[str, Any] | None = None,
+        completion_receipt: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         dispatch = self.get_dispatch(dispatch_id)
         if dispatch["status"] != "RUNNING":
             raise ValueError("Codex project dispatch is not running")
+        if not str(output_text or "").strip():
+            raise ValueError("Codex final output is required")
+        if not isinstance(completion_receipt, dict):
+            raise ValueError("Codex terminal receipt is required")
+        if str(completion_receipt.get("status") or "").strip() != "completed":
+            raise ValueError("Codex terminal receipt is not completed")
+        if completion_receipt.get("verified") is not True:
+            raise ValueError("Codex terminal receipt is not confirmed")
+        if completion_receipt.get("needs_user_input") is not False:
+            raise ValueError("Codex terminal receipt still needs user input")
+        if completion_receipt.get("human_gate") is not False:
+            raise ValueError("Codex terminal receipt is waiting at a human gate")
         with self.store._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
                 """UPDATE codex_project_dispatches
-                   SET status = 'COMPLETING', updated_at = ?
+                   SET status = 'COMPLETING', completion_receipt_json = ?, updated_at = ?
                    WHERE dispatch_id = ? AND status = 'RUNNING'""",
-                (_now(), dispatch_id),
+                (
+                    json.dumps(completion_receipt, ensure_ascii=False, sort_keys=True),
+                    _now(), dispatch_id,
+                ),
             )
             if cursor.rowcount != 1:
                 raise ValueError("Codex project dispatch is not running")

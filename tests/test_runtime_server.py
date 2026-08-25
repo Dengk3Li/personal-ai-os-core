@@ -783,11 +783,24 @@ class RuntimeServerTests(unittest.TestCase):
         dispatch_id = claimed["dispatch_id"]
         bind_status, bound = self.request(
             f"/api/codex-project/dispatches/{dispatch_id}/bind",
-            {"thread_id": "codex-thread-1", "project_id": "codex-project-1", "host_id": "local"},
+            {
+                "thread_id": "codex-thread-1", "project_id": "codex-project-1", "host_id": "local",
+                "verification": {
+                    "source": "task-project", "verified": True,
+                    "project_id": "codex-project-1", "project_path": str(project),
+                    "environment": "worktree",
+                },
+            },
         )
         complete_status, completed = self.request(
             f"/api/codex-project/dispatches/{dispatch_id}/complete",
-            {"output_text": "项目线程已完成任务。", "usage": {"input_tokens": 10}},
+            {
+                "output_text": "项目线程已完成任务。", "usage": {"input_tokens": 10},
+                "completion_receipt": {
+                    "status": "completed", "verified": True,
+                    "needs_user_input": False, "human_gate": False,
+                },
+            },
         )
 
         self.assertEqual(200, advanced_status)
@@ -812,6 +825,11 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("SUCCEEDED", reviewed_task["codex_dispatch"]["status"])
         self.assertEqual("codex-thread-1", reviewed_task["codex_dispatch"]["thread_id"])
         self.assertEqual("codex-project-1", reviewed_task["codex_dispatch"]["project_id"])
+        self.assertEqual(
+            "task-project",
+            reviewed_task["codex_dispatch"]["thread_verification"]["source"],
+        )
+        self.assertFalse(reviewed_task["codex_dispatch"]["completion_receipt"]["human_gate"])
 
     def test_runtime_projection_surfaces_codex_project_queue_and_bound_thread(self):
         project = Path(self.temp.name) / "science-project"
@@ -856,7 +874,14 @@ class RuntimeServerTests(unittest.TestCase):
         )
         bind_status, bound = self.request(
             f"/api/codex-project/dispatches/{claimed['dispatch_id']}/bind",
-            {"thread_id": "codex-thread-projection", "project_id": "codex-project-1", "host_id": "local"},
+            {
+                "thread_id": "codex-thread-projection", "project_id": "codex-project-1", "host_id": "local",
+                "verification": {
+                    "source": "thread-project-assignments", "verified": True,
+                    "project_id": "codex-project-1", "project_path": str(project),
+                    "environment": "worktree",
+                },
+            },
         )
         _, bound_projection = self.request("/api/runtime")
         bound_task = next(

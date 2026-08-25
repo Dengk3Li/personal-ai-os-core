@@ -242,6 +242,8 @@ def runtime_workbench_state(
                         "thread_id": str(dispatch.get("thread_id") or "") or None,
                         "project_id": str(dispatch.get("project_id") or "") or None,
                         "host_id": str(dispatch.get("host_id") or "") or None,
+                        "thread_verification": dict(dispatch.get("thread_verification") or {}),
+                        "completion_receipt": dict(dispatch.get("completion_receipt") or {}),
                     }
                 }
                 if presentation is None and (dispatch := codex_dispatch_by_task.get(task["task_id"]))
@@ -1241,6 +1243,7 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     thread_id=str(payload.get("thread_id") or ""),
                     project_id=str(payload.get("project_id") or ""),
                     host_id=str(payload.get("host_id") or ""),
+                    verification=payload.get("verification"),
                 )
             elif path.startswith("/api/codex-project/dispatches/") and path.endswith("/complete"):
                 dispatch_id = path[
@@ -1253,6 +1256,7 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     dispatch_id,
                     output_text=str(payload.get("output_text") or ""),
                     usage=usage,
+                    completion_receipt=payload.get("completion_receipt"),
                 )
             elif path.startswith("/api/goals/") and path.endswith("/continue"):
                 if self.server.app.presentation is not None:

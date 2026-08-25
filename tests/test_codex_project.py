@@ -20,6 +20,7 @@ class CodexProjectAdapterTests(unittest.TestCase):
             project_bindings=[
                 {
                     "project_key": "science-workspace",
+                    "project_id": "codex-project-expected",
                     "label": "科研项目",
                     "path": str(self.project),
                     "workflow_ids": ["science"],
@@ -73,8 +74,13 @@ class CodexProjectAdapterTests(unittest.TestCase):
         bound = self.adapter.bind_thread(
             claimed["dispatch_id"],
             thread_id="codex-thread-1",
-            project_id="codex-project-1",
+            project_id="codex-project-expected",
             host_id="local",
+            verification={
+                "source": "task-project", "verified": True,
+                "project_id": "codex-project-expected", "project_path": str(self.project),
+                "environment": "worktree",
+            },
         )
         self.assertEqual("RUNNING", bound["status"])
         self.assertEqual("local", bound["host_id"])
@@ -82,6 +88,10 @@ class CodexProjectAdapterTests(unittest.TestCase):
             claimed["dispatch_id"],
             output_text="已形成可核对的科学假设。",
             usage={"input_tokens": 120, "output_tokens": 30},
+            completion_receipt={
+                "status": "completed", "verified": True,
+                "needs_user_input": False, "human_gate": False,
+            },
         )
 
         self.assertTrue(completed["ok"])
@@ -92,6 +102,102 @@ class CodexProjectAdapterTests(unittest.TestCase):
         self.assertEqual(1, len(snapshot["artifacts"]))
         self.assertEqual("已形成可核对的科学假设。", snapshot["artifacts"][0]["content"])
         self.assertEqual("SUCCEEDED", self.adapter.get_dispatch(claimed["dispatch_id"])["status"])
+
+    def test_bind_rejects_a_thread_from_a_different_codex_project(self):
+        broker = ExecutionBroker(self.store, {self.adapter.adapter_id: self.adapter})
+        broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+        claimed = self.adapter.claim_next(worker_id="manager-thread")
+
+        with self.assertRaisesRegex(ValueError, "does not match configured Codex project"):
+            self.adapter.bind_thread(
+                claimed["dispatch_id"],
+                thread_id="codex-thread-1",
+                project_id="codex-project-wrong",
+                host_id="local",
+                verification={
+                    "source": "thread-project-assignments", "verified": True,
+                    "project_id": "codex-project-wrong", "project_path": str(self.project),
+                    "environment": "worktree",
+                },
+            )
+
+        self.assertEqual("CLAIMED", self.adapter.get_dispatch(claimed["dispatch_id"])["status"])
+
+    def test_completion_requires_a_nonempty_final_output_and_terminal_receipt(self):
+        broker = ExecutionBroker(self.store, {self.adapter.adapter_id: self.adapter})
+        broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+        claimed = self.adapter.claim_next(worker_id="manager-thread")
+        self.adapter.bind_thread(
+            claimed["dispatch_id"],
+            thread_id="codex-thread-1",
+            project_id="codex-project-expected",
+            host_id="local",
+            verification={
+                "source": "task-project", "verified": True,
+                "project_id": "codex-project-expected", "project_path": str(self.project),
+                "environment": "worktree",
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "final output"):
+            self.adapter.complete(
+                claimed["dispatch_id"],
+                output_text="",
+            )
+        with self.assertRaisesRegex(ValueError, "terminal receipt"):
+            self.adapter.complete(
+                claimed["dispatch_id"],
+                output_text="结果",
+            )
+        self.assertEqual("RUNNING", self.adapter.get_dispatch(claimed["dispatch_id"])["status"])
+
+    def test_completion_keeps_a_human_gate_or_user_question_open(self):
+        broker = ExecutionBroker(self.store, {self.adapter.adapter_id: self.adapter})
+        broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+        claimed = self.adapter.claim_next(worker_id="manager-thread")
+        self.adapter.bind_thread(
+            claimed["dispatch_id"],
+            thread_id="codex-thread-1",
+            project_id="codex-project-expected",
+            host_id="local",
+            verification={
+                "source": "thread-project-assignments", "verified": True,
+                "project_id": "codex-project-expected", "project_path": str(self.project),
+                "environment": "worktree",
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "human gate"):
+            self.adapter.complete(
+                claimed["dispatch_id"],
+                output_text="阶段结果",
+                completion_receipt={
+                    "status": "completed", "verified": True,
+                    "needs_user_input": False, "human_gate": True,
+                },
+            )
+        with self.assertRaisesRegex(ValueError, "user input"):
+            self.adapter.complete(
+                claimed["dispatch_id"],
+                output_text="阶段结果",
+                completion_receipt={
+                    "status": "completed", "verified": True,
+                    "needs_user_input": True, "human_gate": False,
+                },
+            )
+        self.assertEqual("RUNNING", self.adapter.get_dispatch(claimed["dispatch_id"])["status"])
 
     def test_expired_claim_is_recovered_without_creating_a_second_dispatch(self):
         broker = ExecutionBroker(self.store, {self.adapter.adapter_id: self.adapter})
@@ -124,10 +230,22 @@ class CodexProjectAdapterTests(unittest.TestCase):
         self.adapter.bind_thread(
             claimed["dispatch_id"],
             thread_id="codex-thread-1",
-            project_id="codex-project-1",
+            project_id="codex-project-expected",
             host_id="local",
+            verification={
+                "source": "task-project", "verified": True,
+                "project_id": "codex-project-expected", "project_path": str(self.project),
+                "environment": "worktree",
+            },
         )
-        self.adapter.complete(claimed["dispatch_id"], output_text="唯一结果")
+        self.adapter.complete(
+            claimed["dispatch_id"],
+            output_text="唯一结果",
+            completion_receipt={
+                "status": "completed", "verified": True,
+                "needs_user_input": False, "human_gate": False,
+            },
+        )
 
         with self.assertRaisesRegex(ValueError, "not running"):
             self.adapter.complete(claimed["dispatch_id"], output_text="重复结果")
