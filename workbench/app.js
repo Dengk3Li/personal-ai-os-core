@@ -329,6 +329,30 @@
     return next;
   }
 
+  function selectWorkflowTask(state, taskId) {
+    const next = clone(state);
+    const task = taskById(next, taskId);
+    if (!task) return next;
+    next.activeTaskId = task.task_id;
+    next.activeBoard = "work";
+    if (task.line_id && next.businessLines.some((line) => line.line_id === task.line_id)) {
+      const line = next.businessLines.find((item) => item.line_id === task.line_id);
+      next.activeLineId = task.line_id;
+      next.activeDomainId = lineDomainId(next, line);
+    }
+    return next;
+  }
+
+  function restoreWorkflowSelection(state, lineId, taskId) {
+    let next = state;
+    if (lineId && next.businessLines.some((line) => line.line_id === lineId)) next = selectBusinessLine(next, lineId);
+    if (taskId && next.tasks.some((task) => task.task_id === taskId && task.line_id === next.activeLineId)) {
+      next = clone(next);
+      next.activeTaskId = taskId;
+    }
+    return next;
+  }
+
   function createWorkline(state, requestedName) {
     const next = clone(state);
     const sequence = next.businessLines.filter((line) => line.user_created).length + 1;
@@ -1471,10 +1495,11 @@
       if (!runtimeClient) return false;
       const activeBoard = state.activeBoard;
       const activeLineId = state.activeLineId;
+      const activeTaskId = state.activeTaskId;
       const petPreference = state.petPreference;
       const payload = await runtimeClient.load();
       state = selectBoard(runtimeStateFromPayload(payload), activeBoard);
-      if (state.businessLines.some((line) => line.line_id === activeLineId)) state = selectBusinessLine(state, activeLineId);
+      state = restoreWorkflowSelection(state, activeLineId, activeTaskId);
       state.petPreference = petPreference || state.petPreference;
       preserveViewportPosition(doc.defaultView, render);
       announce("已读取本地运行库");
@@ -1670,6 +1695,14 @@
     try {
       state = setPetPreference(state, doc.defaultView.localStorage.getItem("personal-ai-os.pet-preference"));
     } catch (_error) {}
+
+    doc.addEventListener("keydown", (event) => {
+      const workflowTask = event.target.closest && event.target.closest("[data-workflow-task]");
+      if (!workflowTask || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      state = selectWorkflowTask(state, workflowTask.dataset.workflowTask);
+      render();
+    });
 
     doc.addEventListener("click", async (event) => {
       if (event.target.closest && event.target.closest("#settings-toggle")) {
@@ -1961,7 +1994,7 @@
       if (event.target.dataset.planAction === "approve") { state = approvePlan(state); render(); return; }
       const workflowTask = event.target.closest && event.target.closest("[data-workflow-task]");
       if (workflowTask) {
-        state.activeTaskId = workflowTask.dataset.workflowTask;
+        state = selectWorkflowTask(state, workflowTask.dataset.workflowTask);
         render();
         return;
       }
@@ -2246,6 +2279,7 @@
     renderRunDetail,
     renderSettings,
     renderDurableGoal,
+    renderWorkflowCanvas,
     renderWorkflowNode,
     renderModuleTopology,
     renderTaskCard,
@@ -2255,6 +2289,8 @@
     scrollActiveBoardIntoView,
     selectBoard,
     selectBusinessLine,
+    selectWorkflowTask,
+    restoreWorkflowSelection,
     selectDomain,
     viewModel,
     workflowProjection,

@@ -103,6 +103,44 @@ test("runtime workflow nodes use the persisted task title as their stage", () =>
   assert.doesNotMatch(html, /自定义任务/);
 });
 
+test("workflow task selection updates the active task and selected node", () => {
+  const state = workbench.runtimeStateFromPayload({
+    status: "READY",
+    data_source: "runtime",
+    default_model: "model-a",
+    adapters: [],
+    state: {
+      goal: "Persistent goal",
+      activeBoard: "work",
+      activeLineId: "research",
+      activeTaskId: "PLT-020",
+      planApproved: true,
+      tasks: [
+        { task_id: "PLT-020", line_id: "research", public_label: "任务 20", title: "上游任务", status: "DONE", depends_on: [] },
+        { task_id: "PLT-021", line_id: "research", public_label: "任务 21", title: "当前任务", status: "REVIEW", depends_on: ["PLT-020"] },
+      ],
+      businessLines: [{ line_id: "research", domain_id: "research", name: "科研线", caption: "", layout: "loop", stages: [] }],
+      taskStates: { "PLT-020": "DONE", "PLT-021": "REVIEW" },
+      decisions: {},
+      assignments: {},
+      onboarding: { status: "RUNTIME_READY", readOnly: false, detectedLines: [] },
+    },
+  });
+
+  const selected = workbench.selectWorkflowTask(state, "PLT-021");
+  assert.equal(selected.activeTaskId, "PLT-021");
+  assert.equal(selected.activeLineId, "research");
+  const projection = workbench.workflowProjection(selected, "research");
+  const html = workbench.renderWorkflowCanvas(projection, selected.activeTaskId);
+  assert.match(html, /data-workflow-task="PLT-021"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-workflow-task="PLT-020"[^>]*aria-pressed="false"/);
+  const detail = workbench.renderRunDetail(
+    { ...state.tasks[1], status: "REVIEW", action: "ACCEPT", attempts: 1, events: [] },
+    { runtime: true, defaultModel: "model-a", adapters: [] },
+  );
+  assert.match(detail, /当前任务/);
+});
+
 test("task cards expose confirmed module links as compact navigation chips", () => {
   const html = workbench.renderWorkflowNode({
     task_id: "system:task",
