@@ -1277,6 +1277,23 @@
           ? "LEGACY_MISSING"
           : "PENDING"
     );
+    const ownership = dispatch.ownership && typeof dispatch.ownership === "object"
+      ? dispatch.ownership
+      : {};
+    const ownershipCopy = ownership.project_id
+      ? `<small class="${ownership.verified ? "codex-receipt-ok" : "codex-receipt-warning"}">项目归属${ownership.verified ? "已核验" : "待核验"}：${escapeHtml(ownership.project_id)}</small>`
+      : "";
+    const reviewReasonLabels = {
+      TERMINAL_RECEIPT_MISSING: "历史终态回执缺失，需人工复核",
+      TERMINAL_RECEIPT_UNVERIFIED: "终态回执未通过核验，需人工复核",
+      HUMAN_GATE_REQUIRED: "任务停在人工裁决，需人工处理",
+      USER_INPUT_REQUIRED: "任务等待用户输入，暂不收口",
+      PROJECT_THREAD_OWNERSHIP_UNVERIFIED: "项目与线程归属未核验，需人工复核",
+      TASK_ACCEPTANCE_REQUIRED: "结果已登记，等待任务验收",
+    };
+    const reviewCopy = dispatch.manual_review_reason && reviewReasonLabels[dispatch.manual_review_reason]
+      ? `<small class="${dispatch.manual_review_reason === "TASK_ACCEPTANCE_REQUIRED" ? "codex-receipt-ok" : "codex-receipt-warning"}">${reviewReasonLabels[dispatch.manual_review_reason]}</small>`
+      : "";
     const receiptCopy = receiptState === "VERIFIED"
       ? '<small class="codex-receipt-ok">终态回执已验证</small>'
       : receiptState === "LEGACY_MISSING"
@@ -1287,7 +1304,9 @@
       <p>${escapeHtml(project.label || "Codex 项目")} · ${escapeHtml(environment)}</p>
       ${receipt}
       ${projectReceipt}
+      ${ownershipCopy}
       ${receiptCopy}
+      ${reviewCopy}
       ${thread}
     </section>`;
   }

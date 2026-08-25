@@ -124,6 +124,96 @@ class RuntimeServerTests(unittest.TestCase):
         task = next(item for item in projection["tasks"] if item["task_id"] == "science:hypothesis")
         self.assertEqual("LEGACY_MISSING", task["codex_dispatch"]["receipt_state"])
 
+    def test_codex_projection_exposes_ownership_and_review_reason_for_unverified_receipt(self):
+        projection = runtime_workbench_state(
+            self.store,
+            codex_dispatches=[
+                {
+                    "task_id": "science:hypothesis",
+                    "status": "SUCCEEDED",
+                    "dispatch_id": "dispatch-gated",
+                    "project": {
+                        "label": "科研项目",
+                        "project_id": "project-1",
+                        "path": "/tmp/science-project",
+                        "environment": "worktree",
+                    },
+                    "thread_id": "thread-gated",
+                    "project_id": "project-1",
+                    "host_id": "local",
+                    "thread_verification": {
+                        "source": "thread-project-assignments",
+                        "verified": True,
+                        "project_id": "project-1",
+                        "project_path": "/tmp/science-project",
+                        "environment": "worktree",
+                    },
+                    "completion_receipt": {
+                        "status": "completed",
+                        "verified": True,
+                        "needs_user_input": True,
+                        "human_gate": False,
+                    },
+                }
+            ],
+        )
+
+        task = next(item for item in projection["tasks"] if item["task_id"] == "science:hypothesis")
+        dispatch = task["codex_dispatch"]
+        self.assertEqual(
+            {
+                "project_id": "project-1",
+                "project_path": "/tmp/science-project",
+                "environment": "worktree",
+                "thread_id": "thread-gated",
+                "host_id": "local",
+                "verified": True,
+                "verification_source": "thread-project-assignments",
+            },
+            dispatch["ownership"],
+        )
+        self.assertEqual("UNVERIFIED", dispatch["receipt_state"])
+        self.assertEqual("USER_INPUT_REQUIRED", dispatch["manual_review_reason"])
+
+    def test_codex_projection_exposes_pending_project_ownership_before_thread_bind(self):
+        projection = runtime_workbench_state(
+            self.store,
+            codex_dispatches=[
+                {
+                    "task_id": "science:hypothesis",
+                    "status": "PENDING",
+                    "dispatch_id": "dispatch-pending",
+                    "project": {
+                        "label": "科研项目",
+                        "project_id": "project-1",
+                        "path": "/tmp/science-project",
+                        "environment": "worktree",
+                    },
+                    "thread_id": "",
+                    "project_id": "",
+                    "host_id": "",
+                    "thread_verification": {},
+                    "completion_receipt": {},
+                }
+            ],
+        )
+
+        task = next(item for item in projection["tasks"] if item["task_id"] == "science:hypothesis")
+        self.assertEqual(
+            {
+                "project_id": "project-1",
+                "project_path": "/tmp/science-project",
+                "environment": "worktree",
+                "thread_id": None,
+                "host_id": None,
+                "verified": False,
+                "verification_source": None,
+            },
+            task["codex_dispatch"]["ownership"],
+        )
+        self.assertEqual("PENDING", task["codex_dispatch"]["receipt_state"])
+        self.assertIsNone(task["codex_dispatch"]["manual_review_reason"])
+
     def test_api_reads_runtime_and_dispatches_a_real_adapter(self):
         status, initial = self.request("/api/runtime")
         run_status, dispatched = self.request(
@@ -850,6 +940,19 @@ class RuntimeServerTests(unittest.TestCase):
         )
         self.assertFalse(reviewed_task["codex_dispatch"]["completion_receipt"]["human_gate"])
         self.assertEqual("VERIFIED", reviewed_task["codex_dispatch"]["receipt_state"])
+        self.assertEqual("TASK_ACCEPTANCE_REQUIRED", reviewed_task["codex_dispatch"]["manual_review_reason"])
+        self.assertEqual(
+            {
+                "project_id": "codex-project-1",
+                "project_path": str(project),
+                "environment": "worktree",
+                "thread_id": "codex-thread-1",
+                "host_id": "local",
+                "verified": True,
+                "verification_source": "task-project",
+            },
+            reviewed_task["codex_dispatch"]["ownership"],
+        )
 
     def test_runtime_projection_surfaces_codex_project_queue_and_bound_thread(self):
         project = Path(self.temp.name) / "science-project"

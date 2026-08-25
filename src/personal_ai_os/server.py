@@ -28,6 +28,86 @@ from .presentation import (
 )
 
 
+def _codex_dispatch_projection(
+    dispatch: dict[str, Any],
+    *,
+    task_status: str,
+) -> dict[str, Any]:
+    """Project Codex ownership and receipt state without upgrading legacy data.
+
+    The browser needs enough identity to explain where work is running, but a
+    durable ``SUCCEEDED`` row is not proof of a verified terminal receipt.
+    Keep those two concerns explicit so an old or gated row remains visible as
+    a manual-review case instead of looking complete.
+    """
+    project = dispatch.get("project") if isinstance(dispatch.get("project"), dict) else {}
+    verification = (
+        dispatch.get("thread_verification")
+        if isinstance(dispatch.get("thread_verification"), dict)
+        else {}
+    )
+    text = lambda value: str(value or "").strip()
+    project_id = text(dispatch.get("project_id")) or text(project.get("project_id")) or None
+    project_path = text(verification.get("project_path")) or text(project.get("path")) or None
+    environment = text(verification.get("environment")) or text(project.get("environment")) or None
+    thread_id = text(dispatch.get("thread_id")) or None
+    host_id = text(dispatch.get("host_id")) or None
+    verification_source = text(verification.get("source")) or None
+    ownership_verified = bool(
+        thread_id
+        and project_id
+        and verification.get("verified") is True
+        and text(verification.get("project_id")) == project_id
+    )
+    ownership = {
+        "project_id": project_id,
+        "project_path": project_path,
+        "environment": environment,
+        "thread_id": thread_id,
+        "host_id": host_id,
+        "verified": ownership_verified,
+        "verification_source": verification_source,
+    }
+
+    receipt = dispatch.get("completion_receipt")
+    receipt = receipt if isinstance(receipt, dict) else {}
+    terminal_verified = bool(
+        receipt.get("status") == "completed"
+        and receipt.get("verified") is True
+        and receipt.get("needs_user_input") is False
+        and receipt.get("human_gate") is False
+    )
+    dispatch_status = text(dispatch.get("status"))
+    if terminal_verified:
+        receipt_state = "VERIFIED"
+    elif dispatch_status == "SUCCEEDED":
+        receipt_state = "LEGACY_MISSING" if not receipt else "UNVERIFIED"
+    else:
+        receipt_state = "PENDING"
+
+    manual_review_reason = None
+    if receipt_state == "VERIFIED":
+        if task_status == "REVIEW":
+            manual_review_reason = "TASK_ACCEPTANCE_REQUIRED"
+    elif receipt_state == "LEGACY_MISSING":
+        manual_review_reason = "TERMINAL_RECEIPT_MISSING"
+    elif receipt_state == "UNVERIFIED":
+        if receipt.get("human_gate") is True:
+            manual_review_reason = "HUMAN_GATE_REQUIRED"
+        elif receipt.get("needs_user_input") is True:
+            manual_review_reason = "USER_INPUT_REQUIRED"
+        else:
+            manual_review_reason = "TERMINAL_RECEIPT_UNVERIFIED"
+    elif dispatch_status in {"CLAIMED", "RUNNING"} and thread_id and not ownership_verified:
+        manual_review_reason = "PROJECT_THREAD_OWNERSHIP_UNVERIFIED"
+
+    return {
+        "ownership": ownership,
+        "receipt_state": receipt_state,
+        "manual_review_reason": manual_review_reason,
+    }
+
+
 def runtime_workbench_state(
     store: RuntimeStore,
     presentation: dict[str, Any] | None = None,
@@ -244,18 +324,9 @@ def runtime_workbench_state(
                         "host_id": str(dispatch.get("host_id") or "") or None,
                         "thread_verification": dict(dispatch.get("thread_verification") or {}),
                         "completion_receipt": dict(dispatch.get("completion_receipt") or {}),
-                        "receipt_state": (
-                            "VERIFIED"
-                            if (
-                                isinstance(dispatch.get("completion_receipt"), dict)
-                                and dispatch["completion_receipt"].get("status") == "completed"
-                                and dispatch["completion_receipt"].get("verified") is True
-                                and dispatch["completion_receipt"].get("needs_user_input") is False
-                                and dispatch["completion_receipt"].get("human_gate") is False
-                            )
-                            else "LEGACY_MISSING"
-                            if str(dispatch.get("status") or "") == "SUCCEEDED"
-                            else "PENDING"
+                        **_codex_dispatch_projection(
+                            dispatch,
+                            task_status=str(task.get("status") or ""),
                         ),
                     }
                 }

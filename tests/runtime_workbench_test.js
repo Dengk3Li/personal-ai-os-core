@@ -651,6 +651,48 @@ test("task detail does not verify a receipt that still needs a user decision", (
   assert.doesNotMatch(html, /终态回执已验证/);
 });
 
+test("task detail exposes Codex ownership and the reason a receipt needs review", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "science:hypothesis",
+      public_label: "任务 01",
+      title: "科研任务",
+      status: "REVIEW",
+      action: "ACCEPT",
+      attempts: 1,
+      events: [],
+      codex_dispatch: {
+        status: "SUCCEEDED",
+        project: { label: "科研项目", environment: "worktree" },
+        ownership: {
+          project_id: "codex-project-1",
+          project_path: "/tmp/science-project",
+          environment: "worktree",
+          thread_id: "codex-thread-gated",
+          host_id: "local",
+          verified: true,
+          verification_source: "thread-project-assignments",
+        },
+        thread_id: "codex-thread-gated",
+        project_id: "codex-project-1",
+        manual_review_reason: "USER_INPUT_REQUIRED",
+        receipt_state: "UNVERIFIED",
+        completion_receipt: {
+          status: "completed",
+          verified: true,
+          needs_user_input: true,
+          human_gate: false,
+        },
+      },
+    },
+    { runtime: true, defaultModel: "model-a", adapters: [{ adapter_id: "codex-project", available: true }] },
+  );
+
+  assert.match(html, /项目归属已核验/);
+  assert.match(html, /等待用户输入/);
+  assert.doesNotMatch(html, /终态回执已验证/);
+});
+
 test("Codex project binding replaces only the active workline mapping", () => {
   const payload = workbench.codexProjectSettingsPayload({
     activeLineId: "science",
