@@ -1,5 +1,6 @@
 """Public core primitives for an authority-aware personal AI control plane."""
 
+from .acceptance_projection import build_acceptance_snapshot
 from .continuity import build_capsule
 from .cognition import compile_operating_practices, validate_memory_candidate
 from .dispatching import assign_task, select_execution_route
@@ -46,6 +47,7 @@ __version__ = "0.15.0"
 
 __all__ = [
     "build_capsule",
+    "build_acceptance_snapshot",
     "AutoAdvanceEngine",
     "build_candidate_plan",
     "build_module_graph",

@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from .adapters import OpenAICompatibleAdapter
+from .acceptance_projection import build_acceptance_snapshot
 from .codex_adapter import CodexAppServerAdapter
 from .codex_project import CodexProjectAdapter
 from .route_config import RUNTIME_ROUTES_SCHEMA, validate_runtime_routes
@@ -41,6 +42,11 @@ def runtime_workbench_state(
         if item.get("task_id")
     }
     events_by_task: dict[str, list[dict[str, Any]]] = {}
+    acceptance_events_by_task: dict[str, list[dict[str, Any]]] = {}
+    acceptance_artifacts_by_task: dict[str, list[dict[str, Any]]] = {}
+    artifacts_by_task: dict[str, list[dict[str, Any]]] = {}
+    latest_runs_by_task: dict[str, dict[str, Any]] = {}
+    downstream_by_task: dict[str, list[dict[str, Any]]] = {}
     attempts_by_run = {
         str(run.get("run_id")): int(run.get("attempt") or 1)
         for run in snapshot.get("runs", [])
@@ -60,6 +66,7 @@ def runtime_workbench_state(
         "AUTO_ADVANCE_FINISHED": "自动推进步骤已结束",
     }
     for event in snapshot["events"]:
+        acceptance_events_by_task.setdefault(event["task_id"], []).append(event)
         projected_event = {
             "event_id": str(event["event_id"]),
             "kind": event["event_type"].lower(),
@@ -94,8 +101,8 @@ def runtime_workbench_state(
                 # upgraded into a misleading run receipt.
                 pass
         events_by_task.setdefault(event["task_id"], []).append(projected_event)
-    artifacts_by_task: dict[str, list[dict[str, Any]]] = {}
     for artifact in snapshot.get("artifacts", []):
+        acceptance_artifacts_by_task.setdefault(artifact["task_id"], []).append(artifact)
         result = {
             "status": "REGISTERED",
             "artifact_id": artifact.get("artifact_id"),
@@ -108,6 +115,83 @@ def runtime_workbench_state(
         else:
             result["summary"] = "阶段产物已登记"
         artifacts_by_task.setdefault(artifact["task_id"], []).append(result)
+    for run in snapshot.get("runs", []):
+        task_id = str(run.get("task_id") or "")
+        if not task_id:
+            continue
+        previous = latest_runs_by_task.get(task_id)
+        if previous is None or (
+            int(run.get("attempt") or 0),
+            str(run.get("started_at") or ""),
+        ) >= (
+            int(previous.get("attempt") or 0),
+            str(previous.get("started_at") or ""),
+        ):
+            latest_runs_by_task[task_id] = run
+    for task in snapshot.get("tasks", []):
+        for dependency_id in task.get("depends_on") or []:
+            downstream_by_task.setdefault(str(dependency_id), []).append(task)
+
+    def acceptance_card(task: dict[str, Any]) -> dict[str, Any]:
+        task_id = str(task.get("task_id") or "")
+        dependencies = [
+            item for item in snapshot.get("tasks", [])
+            if item.get("task_id") in (task.get("depends_on") or [])
+        ]
+        downstream = downstream_by_task.get(task_id, [])
+        if dependencies:
+            background = "承接上游任务结果：" + "、".join(
+                str(item.get("public_label") or item.get("title") or "已登记任务")
+                for item in dependencies
+            )
+        else:
+            background = "当前工作线入口任务，直接承接工作线目标。"
+        status = str(task.get("status") or "QUEUED")
+        current = {
+            "QUEUED": "等待分配执行者。",
+            "IN_PROGRESS": "任务正在执行，等待运行回执。",
+            "REVIEW": "阶段产物已形成，等待人工验收。",
+            "DONE": "任务已通过验收。",
+            "ARCHIVED": "任务已归档。",
+            "BLOCKED": "任务已阻塞，需要处理阻断原因。",
+            "PAUSED": "任务已暂停，等待恢复决定。",
+        }.get(status, "当前阶段状态已登记。")
+        if downstream:
+            next_copy = "当前任务收口后影响下游：" + "、".join(
+                str(item.get("public_label") or item.get("title") or "已登记任务")
+                for item in downstream
+            )
+        else:
+            next_copy = "当前没有已登记下游，由工作线继续编排下一步。"
+        return {
+            **task,
+            "line": task.get("line_id") or task.get("workflow_id"),
+            "presentation": {
+                "why": background,
+                "now": current,
+                "next": next_copy,
+                "relationship": (
+                    f"已登记 {len(dependencies)} 个上游依赖，"
+                    f"影响 {len(downstream)} 个下游任务。"
+                ),
+            },
+        }
+
+    def acceptance_run(task_id: str) -> dict[str, Any] | None:
+        run = latest_runs_by_task.get(task_id)
+        if run is None:
+            return None
+        run = dict(run)
+        # Codex binding is private-local execution metadata.  It is attached
+        # only when the private projection is explicitly selected.
+        if presentation is None:
+            dispatch = codex_dispatch_by_task.get(task_id)
+            if dispatch and dispatch.get("thread_id"):
+                run["thread_id"] = dispatch.get("thread_id")
+                run["binding"] = {
+                    "conversation_id": dispatch.get("thread_id"),
+                }
+        return run
     browser_task_fields = (
         "task_id",
         "workflow_id",
@@ -140,6 +224,12 @@ def runtime_workbench_state(
             **{field: task.get(field) for field in browser_task_fields},
             "events": events_by_task.get(task["task_id"], []),
             "result": (artifacts_by_task.get(task["task_id"]) or [None])[-1],
+            "acceptance_snapshot": build_acceptance_snapshot(
+                acceptance_card(task),
+                acceptance_run(str(task["task_id"])),
+                events=acceptance_events_by_task.get(task["task_id"], []),
+                artifacts=acceptance_artifacts_by_task.get(task["task_id"], []),
+            ),
             **(
                 {
                     "codex_dispatch": {
@@ -713,6 +803,17 @@ class RuntimeApplication:
         self, state: dict[str, Any], snapshot: dict[str, Any]
     ) -> None:
         aliases = self._execution_aliases(snapshot)
+        runtime_aliases = identifier_aliases(snapshot)
+
+        def runtime_alias(kind: str, value: Any, fallback: str) -> str:
+            text = str(value or "")
+            mapping = runtime_aliases[kind]
+            if text in mapping:
+                return mapping[text]
+            if text in mapping.values():
+                return text
+            return fallback
+
         for assignment in (state.get("assignments") or {}).values():
             executor = str(assignment.get("executor") or "")
             model = str(assignment.get("model") or "")
@@ -727,6 +828,51 @@ class RuntimeApplication:
                 assignment["route"] = aliases["routes"].get(
                     route, aliases["adapters"].get(route, "route-unknown")
                 )
+        for task in state.get("tasks") or []:
+            acceptance = task.get("acceptance_snapshot") or {}
+            execution = acceptance.get("execution") or {}
+            executor = str(execution.get("executor") or "")
+            model = str(execution.get("model_id") or "")
+            run_id = str(execution.get("run_id") or "")
+            if executor:
+                execution["executor"] = aliases["adapters"].get(
+                    executor, "adapter-unknown"
+                )
+            if execution.get("adapter"):
+                execution["adapter"] = aliases["adapters"].get(
+                    str(execution["adapter"]), "adapter-unknown"
+                )
+            if model:
+                execution["model_id"] = aliases["models"].get(model, "model-unknown")
+            if run_id:
+                execution["run_id"] = runtime_alias("runs", run_id, "run-unknown")
+            # A public projection exposes that an execution occurred, but not
+            # the Codex thread, turn, adapter internals, or result text.
+            execution["thread_id"] = None
+            execution["turn_id"] = None
+            for item in acceptance.get("timeline") or []:
+                if item.get("run_id"):
+                    item["run_id"] = runtime_alias("runs", item["run_id"], "run-unknown")
+                if item.get("artifact_ref"):
+                    item["artifact_ref"] = runtime_alias(
+                        "artifacts", item["artifact_ref"], "artifact-unknown"
+                    )
+                item.pop("summary", None)
+            for item in acceptance.get("stage_artifacts") or []:
+                if item.get("artifact_ref"):
+                    item["artifact_ref"] = runtime_alias(
+                        "artifacts", item["artifact_ref"], "artifact-unknown"
+                    )
+                item["summary"] = "阶段产物已登记"
+                item.pop("source", None)
+            review = acceptance.get("review") or {}
+            review["summary"] = ""
+            review["next_action"] = ""
+            review["at"] = ""
+            review["evidence"] = [
+                runtime_alias("artifacts", value, "artifact-unknown")
+                for value in review.get("evidence") or []
+            ]
 
     def resolve_adapter_id(self, public_id: Any) -> str:
         value = str(public_id or "")

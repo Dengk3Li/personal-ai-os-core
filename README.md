@@ -242,6 +242,8 @@ Inspection and planning produce read-only candidates. Workspace changes begin af
 
 Task detail is an acceptance surface, not only a status card: a completed run exposes its registered artifact summary and production time, while a private-local projection may include a bounded preview. The causal sidebar follows the persisted dependency graph (前因 → 本轮结果 → 后果与下一步); public-safe projections keep the result generic and omit private artifact content.
 
+The server also exposes a read-only `personal-ai-os.acceptance/v1` snapshot on each projected task. It joins the task card, latest execution, correlated event timeline, stage-artifact references, causality, and review boundary in one bounded contract. A terminal run can become `READY_FOR_REVIEW`, but only the persisted task decision can become `ACCEPTED`; public-safe mode aliases execution identifiers and removes result text.
+
 This is an operating interface, not a management dashboard. The product proves execution through state transitions, run events, artifacts, and human acceptance. Feature count and presentation do not substitute for a working loop.
 
 ## Plug-in module contract
