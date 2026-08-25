@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from personal_ai_os import apply_presentation, load_presentation
+from personal_ai_os.modules import module_catalog
 from personal_ai_os.runtime import RuntimeStore
 from personal_ai_os.server import RuntimeApplication, runtime_workbench_state
 
@@ -180,6 +181,110 @@ class PresentationTests(unittest.TestCase):
             self.assertEqual("safe-task", application.resolve_task_id("task-001"))
             self.assertEqual(
                 "safe-workflow", application.resolve_workflow_id("line-01")
+            )
+
+    def test_presentation_mode_anonymizes_module_link_identifiers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = RuntimeStore(Path(directory) / "runtime.db")
+            store.create_workflow({
+                "workflow_id": "private-line",
+                "name": "Private",
+                "caption": "Private",
+                "layout": "custom",
+                "goal": "Private",
+            })
+            store.create_task({
+                "task_id": "private-task",
+                "workflow_id": "private-line",
+                "title": "Private",
+                "acceptance": "Private",
+                "module_links": [{
+                    "module_id": "/Users/example/private-module",
+                    "relation": "USES",
+                    "source": "EXPLICIT",
+                    "status": "CONFIRMED",
+                }],
+            })
+            projected = runtime_workbench_state(
+                store,
+                {
+                    "schema_version": "personal-ai-os.presentation/v1",
+                    "workflows": {"private-line": {"name": "公开线"}},
+                    "tasks": {"private-task": {"title": "公开任务"}},
+                },
+            )
+            serialized = json.dumps(projected, ensure_ascii=False)
+
+            self.assertNotIn("/Users", serialized)
+            self.assertIn("module-01", serialized)
+
+    def test_public_system_module_links_keep_their_graph_identity(self) -> None:
+        snapshot = {
+            "workflows": [{"workflow_id": "private-line", "name": "Private"}],
+            "tasks": [{
+                "task_id": "private-task",
+                "workflow_id": "private-line",
+                "title": "Private",
+                "module_links": [{
+                    "task_id": "private-task",
+                    "module_id": "longtask-kernel",
+                    "relation": "BUILDS",
+                    "source": "EXPLICIT",
+                    "status": "CONFIRMED",
+                }],
+            }],
+            "module_links": [{
+                "task_id": "private-task",
+                "module_id": "longtask-kernel",
+                "relation": "BUILDS",
+                "source": "EXPLICIT",
+                "status": "CONFIRMED",
+            }],
+        }
+
+        projected = apply_presentation(
+            snapshot,
+            {"schema_version": "personal-ai-os.presentation/v1"},
+        )
+
+        self.assertEqual(
+            "longtask-kernel", projected["tasks"][0]["module_links"][0]["module_id"]
+        )
+        self.assertEqual(
+            "longtask-kernel", projected["module_links"][0]["module_id"]
+        )
+
+    def test_builtin_runtime_module_links_keep_their_catalog_identity(self) -> None:
+        for module in module_catalog():
+            module_id = module["module_id"]
+            projected = apply_presentation(
+                {
+                    "workflows": [{"workflow_id": "private-line", "name": "Private"}],
+                    "tasks": [{
+                        "task_id": "private-task",
+                        "workflow_id": "private-line",
+                        "title": "Private",
+                        "module_links": [{
+                            "task_id": "private-task",
+                            "module_id": module_id,
+                            "relation": "BUILDS",
+                            "source": "EXPLICIT",
+                            "status": "CONFIRMED",
+                        }],
+                    }],
+                    "module_links": [{
+                        "task_id": "private-task",
+                        "module_id": module_id,
+                        "relation": "BUILDS",
+                        "source": "EXPLICIT",
+                        "status": "CONFIRMED",
+                    }],
+                },
+                {"schema_version": "personal-ai-os.presentation/v1"},
+            )
+
+            self.assertEqual(
+                module_id, projected["module_links"][0]["module_id"]
             )
 
     def test_unmapped_items_use_safe_display_copy_when_a_pack_is_active(self) -> None:

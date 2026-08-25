@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · Long Work</title>
   <meta name="description" content="把长期目标拆成可分配、可重复运行、可由人类裁决的短任务。">
-  <link rel="stylesheet" href="style.css?v=0.12.0">
+  <link rel="stylesheet" href="style.css?v=0.13.0">
 </head>
 <body>
   <header class="topbar">
@@ -122,6 +122,10 @@
                 <button class="map-focus-button" type="button" data-map-focus-toggle>只看上下游</button>
                 <button class="map-drill-button" type="button" data-map-drill hidden>进入内部结构</button>
               </div>
+              <section class="module-work-links" aria-labelledby="module-work-links-title">
+                <h4 id="module-work-links-title">关联工作</h4>
+                <div id="module-work-links"></div>
+              </section>
               <form class="module-annotation" id="module-annotation-form">
                 <label for="module-annotation"><b>模块批注</b><span>批注会生成一项可分派的修正任务。</span></label>
                 <textarea id="module-annotation" maxlength="500" placeholder="记录接口、依赖或流程问题" required></textarea>
@@ -222,9 +226,9 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · <span id="footer-mode">匿名结构演示</span> · v0.12.0</footer>
-  <script src="architecture.js?v=0.12.0"></script>
-  <script src="app.js?v=0.12.0"></script>
+  <footer>Personal AI OS · <span id="footer-mode">匿名结构演示</span> · v0.13.0</footer>
+  <script src="architecture.js?v=0.13.0"></script>
+  <script src="app.js?v=0.13.0"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>
 </html>

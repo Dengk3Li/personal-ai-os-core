@@ -102,6 +102,24 @@ test("runtime workflow nodes use the persisted task title as their stage", () =>
   assert.doesNotMatch(html, /自定义任务/);
 });
 
+test("task cards expose confirmed module links as compact navigation chips", () => {
+  const html = workbench.renderWorkflowNode({
+    task_id: "system:task",
+    public_label: "任务 01",
+    title: "建设长期工作内核",
+    status: "QUEUED",
+    attempts: 0,
+    module_links: [
+      { module_id: "longtask-kernel", relation: "BUILDS", status: "CONFIRMED" },
+      { module_id: "personal-context", relation: "USES", status: "PROPOSED" },
+    ],
+  }, false);
+
+  assert.match(html, /data-task-module="longtask-kernel"/);
+  assert.match(html, /建设模块/);
+  assert.doesNotMatch(html, /personal-context/);
+});
+
 
 test("task dispatch controls stay disabled until an adapter is available", () => {
   const html = workbench.renderRunDetail(

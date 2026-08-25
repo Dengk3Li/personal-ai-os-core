@@ -4,7 +4,7 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 
 单个 AI 对话适合处理边界清楚的小任务。任务一旦跨越多次对话，新的对话需要重新核验旧内容；计划生成后缺少稳定的推进方式；多个执行分支也很快变得难以检查。Personal AI OS 补上长期目标和单次 AI 运行之间的操作层。
 
-[English](README.md) · [v0.12 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.12.md)
+[English](README.md) · [v0.13 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.13.md)
 
 它不打算重复做一套通用 Agent 工具箱。浏览器、终端、定时任务、记忆、子 Agent 和远程运行已经有成熟产品。Personal AI OS 处理这些执行器之上的问题：工作区结构、可移交的任务现场、证据验收、人工决定和跨执行器连续性。
 
@@ -162,6 +162,26 @@ personal-ai-os runtime goal-continue \
 
 本切片在研究 Prime Agent、LangGraph、OpenHands、Letta Code 和 LoopX 后独立实现通用机制，不复制第三方源码、界面、商标或品牌素材。许可证边界见[参考项目许可证说明](docs/REFERENCE_PROJECT_LICENSES_V0.12.md)。
 
+## v0.13 工作方式与模块—任务勾稽
+
+“脑”的通用底座现在可以保存个人或团队在某个领域下的工作方式候选。候选必须带证据并从 `PROPOSED` 开始；只有记录了审核主体的显式审核才能成为 `APPROVED`，审核决定会追加保存。模型上下文只加载与当前任务主体和领域同时匹配的已确认规则；规则数量、单条长度和合并后的模型上下文均有上限。公开内核不会从对话自动推断人格，也不会自动提升记忆。
+
+“手”的任务卡现在可以通过版本化关系连接到正在建设、修改、使用、验证或阻塞它的系统模块。已确认关系同时进入工作进度和模块地图；自动分析只生成候选关系，未关联任务保持单独可见。用户从模块批注创建任务时，选中的模块标识会一直保留。
+
+```bash
+personal-ai-os runtime memory-propose \
+  --store .personal-ai-os/runtime.db \
+  --candidate ./memory-candidate.private.json
+
+personal-ai-os runtime memory-review \
+  --store .personal-ai-os/runtime.db \
+  --candidate-id candidate:writing:001 \
+  --decision APPROVED \
+  --by owner
+```
+
+私人旧任务卡的接入保留在私人仓库中，由只读适配器生成通用 envelope、去重键和状态差异清单；预览阶段不会写入运行库或改变卡片状态。对话自动采集、经验自动批准、能力自安装和整仓递归理解仍未交付。竞品机制与许可证条件见 [v0.13 参考项目说明](docs/REFERENCE_PROJECT_LICENSES_V0.13.md)。
+
 ## 操作闭环
 
 ```mermaid
@@ -240,6 +260,8 @@ personal-ai-os spec
 | 逐任务执行路由 | 自动推进按能力、层级和上下文要求选择最小可用路线，并与成功取得执行权的 run 原子绑定。 |
 | 递归系统认知 | 从总管入口一直读到交付与反馈，支持真实连线、拖动、缩放、面包屑和模块内部下钻。 |
 | 结构化工作流 | 校验并计算任务、顺序、分支、汇合、条件和有界循环，不执行任意代码。 |
+| 有证据的工作方式 | 保存个人或团队的经验候选，只在人工确认且主体、领域匹配时加载。 |
+| 模块—任务勾稽 | 用明确关系连接任务与系统模块，并派生已关联工作和孤立任务。 |
 | 本地展示投影 | 通过严格白名单替换工作线和任务文案，不把私人运行事实写进公开仓或浏览器载荷。 |
 | Domain Context 编译 | 按固定引用白名单只加载一个领域；歧义和未知层级直接停止。 |
 | 任务分配 | 选择能力兼容且仍有容量的执行者。 |

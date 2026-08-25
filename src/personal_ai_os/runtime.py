@@ -8,10 +8,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .cognition import compile_operating_practices, validate_memory_candidate
 from .dispatching import select_execution_route
 from .presets import get_workflow_preset
 from .secretary import build_context_pack, model_context_for_task
 from .states import TASK_STATES
+from .task_links import validate_task_module_link
 from .workflow import transition_task
 
 
@@ -191,10 +193,48 @@ class RuntimeStore:
                     payload_json TEXT NOT NULL,
                     at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS memory_candidates (
+                    candidate_id TEXT PRIMARY KEY,
+                    subject_kind TEXT NOT NULL,
+                    subject_id TEXT NOT NULL,
+                    domain_id TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    statement TEXT NOT NULL,
+                    evidence_refs_json TEXT NOT NULL,
+                    sample_count INTEGER NOT NULL,
+                    privacy_class TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    reviewed_by TEXT,
+                    version INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    reviewed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS memory_candidate_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    candidate_id TEXT NOT NULL REFERENCES memory_candidates(candidate_id),
+                    event_type TEXT NOT NULL,
+                    by TEXT NOT NULL,
+                    at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS task_module_links (
+                    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+                    module_id TEXT NOT NULL,
+                    relation TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    status TEXT NOT NULL,
+                    confirmed_by TEXT,
+                    created_at TEXT NOT NULL,
+                    confirmed_at TEXT,
+                    PRIMARY KEY (task_id, module_id, relation)
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_task ON runs(task_id, attempt);
                 CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id, event_id);
                 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status, created_at);
                 CREATE INDEX IF NOT EXISTS idx_goal_events_goal ON goal_events(goal_id, event_id);
+                CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_candidates(subject_kind, subject_id, domain_id, status);
+                CREATE INDEX IF NOT EXISTS idx_memory_events_candidate ON memory_candidate_events(candidate_id, event_id);
+                CREATE INDEX IF NOT EXISTS idx_module_links_module ON task_module_links(module_id, status);
                 """
             )
             workflow_columns = {
@@ -655,7 +695,93 @@ class RuntimeStore:
             """,
             values,
         )
+        for raw_link in task.get("module_links") or []:
+            self._insert_task_module_link(connection, task_id, raw_link)
         return task_id
+
+    @staticmethod
+    def _decode_module_link(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+        link = dict(row)
+        link["schema_version"] = "personal-ai-os.module-task-link/v1"
+        return link
+
+    def _insert_task_module_link(
+        self,
+        connection: sqlite3.Connection,
+        task_id: str,
+        raw_link: dict[str, Any],
+    ) -> dict[str, Any]:
+        link = validate_task_module_link(raw_link)
+        if connection.execute(
+            "SELECT 1 FROM tasks WHERE task_id = ?", (task_id,)
+        ).fetchone() is None:
+            raise KeyError(f"task not found: {task_id}")
+        now = _now()
+        connection.execute(
+            """
+            INSERT INTO task_module_links (
+                task_id, module_id, relation, source, confidence, status,
+                confirmed_by, created_at, confirmed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(task_id, module_id, relation) DO NOTHING
+            """,
+            (
+                task_id,
+                link["module_id"],
+                link["relation"],
+                link["source"],
+                link["confidence"],
+                link["status"],
+                None,
+                now,
+                now if link["status"] == "CONFIRMED" else None,
+            ),
+        )
+        row = connection.execute(
+            """SELECT * FROM task_module_links
+               WHERE task_id = ? AND module_id = ? AND relation = ?""",
+            (task_id, link["module_id"], link["relation"]),
+        ).fetchone()
+        persisted = self._decode_module_link(row)
+        if any(
+            persisted[field] != link[field]
+            for field in ("source", "confidence", "status")
+        ):
+            raise ValueError("module link definition drift")
+        return persisted
+
+    def link_task_module(self, task_id: str, link: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as connection:
+            return self._insert_task_module_link(connection, task_id, link)
+
+    def confirm_task_module_link(
+        self,
+        task_id: str,
+        module_id: str,
+        relation: str,
+        *,
+        confirmed_by: str,
+    ) -> dict[str, Any]:
+        confirmed_by = str(confirmed_by or "").strip()
+        if not confirmed_by:
+            raise ValueError("module link confirmer is required")
+        now = _now()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE task_module_links
+                   SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = ?
+                   WHERE task_id = ? AND module_id = ? AND relation = ?
+                     AND status = 'PROPOSED'""",
+                (confirmed_by, now, task_id, module_id, relation.upper()),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("module link is missing or already confirmed")
+            row = connection.execute(
+                """SELECT * FROM task_module_links
+                   WHERE task_id = ? AND module_id = ? AND relation = ?""",
+                (task_id, module_id, relation.upper()),
+            ).fetchone()
+        return self._decode_module_link(row)
 
     @staticmethod
     def _decode_task(row: sqlite3.Row, *, attempts: int = 0, artifacts: list[str] | None = None) -> dict[str, Any]:
@@ -680,7 +806,112 @@ class RuntimeStore:
             artifacts = [item[0] for item in connection.execute(
                 "SELECT artifact_id FROM artifacts WHERE task_id = ? ORDER BY created_at", (task_id,)
             )]
-        return self._decode_task(row, attempts=attempts, artifacts=artifacts)
+            module_links = [
+                self._decode_module_link(item)
+                for item in connection.execute(
+                    "SELECT * FROM task_module_links WHERE task_id = ? ORDER BY rowid",
+                    (task_id,),
+                )
+            ]
+        task = self._decode_task(row, attempts=attempts, artifacts=artifacts)
+        task["module_links"] = module_links
+        return task
+
+    @staticmethod
+    def _decode_memory_candidate(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+        candidate = dict(row)
+        candidate["schema_version"] = "personal-ai-os.memory-candidate/v1"
+        candidate["subject"] = {
+            "kind": candidate.pop("subject_kind"),
+            "id": candidate.pop("subject_id"),
+        }
+        candidate["evidence_refs"] = json.loads(candidate.pop("evidence_refs_json"))
+        return candidate
+
+    def create_memory_candidate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        candidate = validate_memory_candidate(payload)
+        now = _now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO memory_candidates (
+                    candidate_id, subject_kind, subject_id, domain_id, category,
+                    statement, evidence_refs_json, sample_count, privacy_class,
+                    status, reviewed_by, version, created_at, reviewed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PROPOSED', NULL, ?, ?, NULL)
+                """,
+                (
+                    candidate["candidate_id"],
+                    candidate["subject"]["kind"],
+                    candidate["subject"]["id"],
+                    candidate["domain_id"],
+                    candidate["category"],
+                    candidate["statement"],
+                    _json(candidate["evidence_refs"]),
+                    candidate["sample_count"],
+                    candidate["privacy_class"],
+                    candidate["version"],
+                    now,
+                ),
+            )
+            connection.execute(
+                """INSERT INTO memory_candidate_events
+                   (candidate_id, event_type, by, at) VALUES (?, 'PROPOSED', ?, ?)""",
+                (candidate["candidate_id"], "candidate-source", now),
+            )
+        return self.get_memory_candidate(candidate["candidate_id"])
+
+    def get_memory_candidate(self, candidate_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM memory_candidates WHERE candidate_id = ?",
+                (candidate_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"memory candidate not found: {candidate_id}")
+        return self._decode_memory_candidate(row)
+
+    def review_memory_candidate(
+        self,
+        candidate_id: str,
+        *,
+        decision: str,
+        reviewed_by: str,
+    ) -> dict[str, Any]:
+        status = decision.upper()
+        if status not in {"APPROVED", "REJECTED"}:
+            raise ValueError("memory decision must be APPROVED or REJECTED")
+        reviewed_by = str(reviewed_by or "").strip()
+        if not reviewed_by:
+            raise ValueError("memory reviewer is required")
+        now = _now()
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE memory_candidates
+                   SET status = ?, reviewed_by = ?, reviewed_at = ?
+                   WHERE candidate_id = ? AND status = 'PROPOSED'""",
+                (status, reviewed_by, now, candidate_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("memory candidate is missing or already reviewed")
+            connection.execute(
+                """INSERT INTO memory_candidate_events
+                   (candidate_id, event_type, by, at) VALUES (?, ?, ?, ?)""",
+                (candidate_id, status, reviewed_by, now),
+            )
+        return self.get_memory_candidate(candidate_id)
+
+    def operating_practices(
+        self,
+        *,
+        subject: dict[str, str],
+        domain_id: str,
+    ) -> dict[str, Any]:
+        return compile_operating_practices(
+            self.snapshot()["memory_candidates"],
+            subject=subject,
+            domain_id=domain_id,
+        )
 
     def _record_event(
         self,
@@ -1156,6 +1387,15 @@ class RuntimeStore:
             goal_event_rows = connection.execute(
                 "SELECT * FROM goal_events ORDER BY event_id"
             ).fetchall()
+            module_link_rows = connection.execute(
+                "SELECT * FROM task_module_links ORDER BY rowid"
+            ).fetchall()
+            memory_candidate_rows = connection.execute(
+                "SELECT * FROM memory_candidates ORDER BY rowid"
+            ).fetchall()
+            memory_candidate_event_rows = connection.execute(
+                "SELECT * FROM memory_candidate_events ORDER BY event_id"
+            ).fetchall()
         route_by_run_id = {}
         for row in event_rows:
             if row["event_type"] != "AUTO_ROUTE_SELECTED" or not row["run_id"]:
@@ -1180,14 +1420,19 @@ class RuntimeStore:
         artifacts_by_task: dict[str, list[str]] = {}
         for artifact in artifacts:
             artifacts_by_task.setdefault(artifact["task_id"], []).append(artifact["artifact_id"])
-        tasks = [
-            self._decode_task(
+        module_links = [self._decode_module_link(row) for row in module_link_rows]
+        links_by_task: dict[str, list[dict[str, Any]]] = {}
+        for link in module_links:
+            links_by_task.setdefault(link["task_id"], []).append(link)
+        tasks = []
+        for row in task_rows:
+            task = self._decode_task(
                 row,
                 attempts=attempts.get(row["task_id"], 0),
                 artifacts=artifacts_by_task.get(row["task_id"], []),
             )
-            for row in task_rows
-        ]
+            task["module_links"] = links_by_task.get(row["task_id"], [])
+            tasks.append(task)
         events = []
         for row in event_rows:
             event = dict(row)
@@ -1214,6 +1459,11 @@ class RuntimeStore:
             "assignments": assignments,
             "goals": [self._decode_goal(row) for row in goal_rows],
             "goal_events": goal_events,
+            "module_links": module_links,
+            "memory_candidates": [
+                self._decode_memory_candidate(row) for row in memory_candidate_rows
+            ],
+            "memory_candidate_events": [dict(row) for row in memory_candidate_event_rows],
         }
 
     def integrity(self) -> dict[str, Any]:
@@ -1387,12 +1637,41 @@ class ExecutionBroker:
             probe = adapter.probe()
             if not probe.get("available"):
                 return {"ok": False, "reason": "ADAPTER_UNAVAILABLE"}
-        profile = self.domain_profiles.get(task["domain_id"])
+        profile = dict(self.domain_profiles.get(task["domain_id"]) or {})
+        practice_subject = (
+            (task.get("context") or {}).get("model_context") or {}
+        ).get("practice_subject")
+        if practice_subject is not None:
+            if not isinstance(practice_subject, dict):
+                return {"ok": False, "reason": "PRACTICE_SCOPE_INVALID"}
+            try:
+                operating_practices = self.store.operating_practices(
+                    subject=practice_subject,
+                    domain_id=task["domain_id"],
+                )
+            except ValueError:
+                return {"ok": False, "reason": "PRACTICE_SCOPE_INVALID"}
+            profile["operating_practices"] = operating_practices["rules"]
+            profile["practice_evidence_refs"] = operating_practices["evidence_refs"]
         upstream_artifacts = [
             artifact
             for artifact in self.store.snapshot()["artifacts"]
             if artifact["artifact_id"] in dependency_result_refs
         ]
+        try:
+            context_pack = build_context_pack(
+                task,
+                profile,
+                upstream_artifacts=upstream_artifacts,
+            )
+        except ValueError as exc:
+            message = str(exc).lower()
+            reason = (
+                "CONTEXT_BUDGET_EXCEEDED"
+                if "exceed" in message or "budget" in message
+                else "CONTEXT_PACK_INVALID"
+            )
+            return {"ok": False, "status": "QUEUED", "reason": reason}
         claim = self.store.claim_run(
             task_id=task_id,
             adapter_id=adapter_id,
@@ -1417,11 +1696,7 @@ class ExecutionBroker:
             receipt = adapter.start(
                 task,
                 model=model,
-                context_pack=build_context_pack(
-                    task,
-                    profile,
-                    upstream_artifacts=upstream_artifacts,
-                ),
+                context_pack=context_pack,
             )
         except Exception:
             receipt = {

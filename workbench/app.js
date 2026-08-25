@@ -699,7 +699,7 @@
     return `M ${startX} ${startY} C ${middleX} ${startY}, ${middleX} ${endY}, ${endX} ${endY}`;
   }
 
-  function renderModuleTopology(topology, selectedModuleId) {
+  function renderModuleTopology(topology, selectedModuleId, moduleWork = {}, cognitiveLearning = {}) {
     const byId = Object.fromEntries(topology.nodes.map((node) => [node.module_id, node]));
     const neighborhood = moduleNeighborhood(topology.edges, selectedModuleId);
     const upstream = new Set(neighborhood.upstream);
@@ -717,7 +717,15 @@
       const nodeRelation = relation(node.module_id);
       const status = node.availability === "READY" ? "可用" : node.availability === "PROTOTYPE" ? "试运行" : "规划中";
       const drill = node.child_graph ? " · 可下钻" : "";
-      return `<button class="module-node" type="button" data-module-id="${escapeHtml(node.module_id)}" data-relation="${nodeRelation}" aria-pressed="${nodeRelation === "selected" ? "true" : "false"}" aria-controls="module-detail" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"><span class="module-node-meta"><span>${escapeHtml(node.lane)}</span><em>${escapeHtml(status)}</em></span><b>${escapeHtml(node.name)}</b><small>${node.optional ? "可选模块" : "核心模块"}${drill}</small><i aria-hidden="true"></i></button>`;
+      const work = (moduleWork.by_module || {})[node.module_id] || {};
+      const taskCount = (work.task_ids || []).length;
+      const activeCount = Number((work.status_counts || {}).IN_PROGRESS || 0) + Number((work.status_counts || {}).REVIEW || 0);
+      const workLabel = taskCount ? ` · ${activeCount ? `建设中 ${activeCount} · ` : ""}关联 ${taskCount}` : "";
+      const cognitiveCount = node.module_id === "learning-cycle" ? Number(cognitiveLearning.proposed || 0) + Number(cognitiveLearning.approved || 0) : 0;
+      const cognitiveLabel = node.module_id === "learning-cycle" && cognitiveCount
+        ? ` · 候选 ${Number(cognitiveLearning.proposed || 0)} · 已确认 ${Number(cognitiveLearning.approved || 0)}`
+        : "";
+      return `<button class="module-node" type="button" data-module-id="${escapeHtml(node.module_id)}" data-relation="${nodeRelation}" data-work-count="${taskCount}" data-cognitive-count="${cognitiveCount}" aria-pressed="${nodeRelation === "selected" ? "true" : "false"}" aria-controls="module-detail" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"><span class="module-node-meta"><span>${escapeHtml(node.lane)}</span><em>${escapeHtml(status)}</em></span><b>${escapeHtml(node.name)}</b><small>${node.optional ? "可选模块" : "核心模块"}${drill}${workLabel}${cognitiveLabel}</small><i aria-hidden="true"></i></button>`;
     }).join("");
     return `<div class="module-scene-content" style="width:${topology.width}px;height:${topology.height}px"><div class="module-lane-layer" aria-hidden="true">${lanes}</div><svg class="module-edge-layer" viewBox="0 0 ${topology.width} ${topology.height}" aria-hidden="true"><defs><marker id="module-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z"></path></marker></defs>${edges}</svg><div class="module-node-layer">${nodes}</div></div>`;
   }
@@ -809,7 +817,11 @@
     return {
       activeBoard: PRIMARY_BOARDS.some((board) => board.id === state.activeBoard) ? state.activeBoard : "work",
       boards: PRIMARY_BOARDS.map((board) => ({ ...board, count: board.id === "decision" ? pending.length : null })),
-      global: moduleGraph(),
+      global: {
+        ...moduleGraph(),
+        moduleWork: clone(state.moduleWork || { by_module: {}, links: [], unlinked_task_ids: [] }),
+        cognitiveLearning: clone(state.cognitiveLearning || { proposed: 0, approved: 0, rejected: 0, subjects: 0 }),
+      },
       work: { ...work, domains, activeDomain, domainLines, lines, activeLine, operationChain: clone(OPERATION_CHAIN) },
       decision: { pending },
       onboarding: clone(state.onboarding),
@@ -861,7 +873,22 @@
 
   function proposeTaskFromModuleAnnotation(state, moduleId, annotation) {
     const text = String(annotation || "").trim();
-    const module = MODULES.find((item) => item.module_id === moduleId);
+    let module = MODULES.find((item) => item.module_id === moduleId);
+    if (!module && architecture) {
+      const pendingPaths = [[]];
+      const visited = new Set();
+      while (pendingPaths.length && !module) {
+        const path = pendingPaths.shift();
+        const key = path.join("/");
+        if (visited.has(key)) continue;
+        visited.add(key);
+        const graph = architecture.systemGraph(path);
+        module = graph.nodes.find((item) => item.module_id === moduleId);
+        graph.nodes.filter((item) => item.child_graph).forEach((item) => {
+          pendingPaths.push([...path, item.child_graph]);
+        });
+      }
+    }
     const lineId = state.activeLineId || (state.businessLines[0] && state.businessLines[0].line_id);
     if (!text) return { status: "BLOCKED", reason: "ANNOTATION_REQUIRED" };
     if (!module || !lineId) return { status: "BLOCKED", reason: "MODULE_CONTEXT_REQUIRED" };
@@ -885,6 +912,12 @@
       context: {
         model_context: { module_id: module.module_id, annotation: text },
       },
+      module_links: [{
+        module_id: module.module_id,
+        relation: "CHANGES",
+        source: "EXPLICIT",
+        status: "CONFIRMED",
+      }],
       status: "QUEUED",
     };
     return { status: "CANDIDATE", line_id: lineId, module_id: module.module_id, task, route: routeTask(task) };
@@ -1008,10 +1041,16 @@
       ? `<img src="${escapeHtml(pet.src)}" alt="" loading="lazy" decoding="async"><span class="pet-static" aria-hidden="true">🐋</span>`
       : pet ? `<span aria-hidden="true">${pet.glyph}</span>` : "";
     const petSlot = pet ? `<span class="workflow-pet${pet.kind === "image" ? " image-pet" : ""}" data-pet-id="${escapeHtml(pet.pet_id)}" aria-label="${escapeHtml(pet.label)}" title="${escapeHtml(pet.label)}">${petMedia}</span>` : "";
+    const moduleRelationLabels = { BUILDS: "建设模块", CHANGES: "修改模块", USES: "使用模块", VALIDATES: "验证模块", BLOCKED_BY: "受模块阻塞", AFFECTS: "影响模块" };
+    const moduleLinks = (task.module_links || []).filter((link) => link.status === "CONFIRMED");
+    const moduleChips = moduleLinks.length
+      ? `<span class="workflow-node-modules">${moduleLinks.map((link) => `<span data-task-module="${escapeHtml(link.module_id)}">${escapeHtml(moduleRelationLabels[link.relation] || "关联模块")} · ${escapeHtml(link.module_id)}</span>`).join("")}</span>`
+      : "";
     return `<button class="workflow-node status-${escapeHtml(task.status.toLowerCase())}${selected ? " selected" : ""}${pet ? " has-pet" : ""}" type="button" data-workflow-task="${escapeHtml(task.task_id)}" aria-pressed="${selected ? "true" : "false"}">
       <span class="workflow-node-head"><span class="workflow-node-id">${escapeHtml(task.public_label || task.title || task.task_id)}</span><span class="workflow-node-status"><i class="run-pulse" aria-hidden="true"></i>${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span></span>
       <span class="workflow-node-logic kind-${escapeHtml(flowKind)}">${escapeHtml(flowLabels[flowKind])}</span>
       ${agent}<span class="workflow-node-stage">${escapeHtml(task.stage || task.title || "自定义任务")}</span>
+      ${moduleChips}
       <span class="workflow-node-route">${route}<span>${task.attempts ? `第 ${task.attempts} 次运行` : "尚未运行"}</span></span>
       ${petSlot}</button>`;
   }
@@ -1225,7 +1264,7 @@
         moduleViewFitted = false;
       }
       if (!mapGraph.modules.some((item) => item.module_id === selectedModule)) selectedModule = mapGraph.modules[0] ? mapGraph.modules[0].module_id : null;
-      byId("module-scene").innerHTML = renderModuleTopology(moduleTopology, selectedModule);
+      byId("module-scene").innerHTML = renderModuleTopology(moduleTopology, selectedModule, view.global.moduleWork, view.global.cognitiveLearning);
       byId("module-map-viewport").dataset.focused = moduleFocusEnabled ? "true" : "false";
       byId("module-map-title").textContent = mapGraph.name || "运行模块";
       byId("module-count").textContent = String(mapGraph.modules.length);
@@ -1246,6 +1285,11 @@
       byId("module-interfaces").textContent = connections.interfaces.length ? connections.interfaces.map((item) => `${item.direction}：${item.name}（${item.protocol}）`).join(" · ") : "由 capability 合同定义";
       byId("module-feedback").textContent = connections.feedback.length ? connections.feedback.map((item) => `${item.direction}：${item.module_name}`).join(" · ") : "没有反馈连接";
       byId("module-control").textContent = module && module.control ? module.control : "按模块合同运行";
+      const moduleWork = module ? ((view.global.moduleWork.by_module || {})[module.module_id] || {}) : {};
+      const linkedTasks = (moduleWork.task_ids || []).map((taskId) => state.tasks.find((task) => task.task_id === taskId)).filter(Boolean);
+      byId("module-work-links").innerHTML = linkedTasks.length
+        ? linkedTasks.map((task) => `<button type="button" data-module-task-id="${escapeHtml(task.task_id)}"><span>${escapeHtml(task.public_label || task.title || task.task_id)}</span><b>${escapeHtml(STATUS_LABELS[state.taskStates[task.task_id]] || state.taskStates[task.task_id] || "待分配")}</b></button>`).join("")
+        : '<p>当前没有已确认的关联任务。</p>';
       const drillButton = doc.querySelector("[data-map-drill]");
       drillButton.hidden = !(moduleMapMode === "system" && module && module.child_graph);
       drillButton.textContent = module && module.child_graph ? `进入${module.name}` : "进入内部结构";
@@ -1410,6 +1454,18 @@
         moduleFocusEnabled = !moduleFocusEnabled;
         render();
         announce(moduleFocusEnabled ? "已聚焦当前模块的上下游" : "已显示全部模块");
+        return;
+      }
+      const linkedTaskButton = event.target.closest && event.target.closest("[data-module-task-id]");
+      if (linkedTaskButton) {
+        const task = state.tasks.find((item) => item.task_id === linkedTaskButton.dataset.moduleTaskId);
+        if (!task) return;
+        state = selectBusinessLine(state, task.line_id);
+        state = selectBoard(state, "work");
+        state.activeTaskId = task.task_id;
+        render();
+        scrollActiveBoardIntoView(doc, "work");
+        announce(`已定位${task.public_label || task.title || "关联任务"}`);
         return;
       }
       const moduleButton = event.target.closest && event.target.closest("[data-module-id]");

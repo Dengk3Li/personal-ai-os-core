@@ -228,6 +228,29 @@ def _main(argv: list[str] | None = None) -> int:
     runtime_sync.add_argument("--plan", required=True)
     runtime_brief = runtime_commands.add_parser("brief", help="read the secretary brief")
     runtime_brief.add_argument("--store", required=True)
+    runtime_memory_propose = runtime_commands.add_parser(
+        "memory-propose", help="record one evidence-backed practice candidate"
+    )
+    runtime_memory_propose.add_argument("--store", required=True)
+    runtime_memory_propose.add_argument("--candidate", required=True)
+    runtime_memory_review = runtime_commands.add_parser(
+        "memory-review", help="approve or reject one practice candidate"
+    )
+    runtime_memory_review.add_argument("--store", required=True)
+    runtime_memory_review.add_argument("--candidate-id", required=True)
+    runtime_memory_review.add_argument(
+        "--decision", choices=("APPROVED", "REJECTED"), required=True
+    )
+    runtime_memory_review.add_argument("--by", default="owner")
+    runtime_memory_profile = runtime_commands.add_parser(
+        "memory-profile", help="read approved practices for one subject and domain"
+    )
+    runtime_memory_profile.add_argument("--store", required=True)
+    runtime_memory_profile.add_argument(
+        "--subject-kind", choices=("person", "team"), required=True
+    )
+    runtime_memory_profile.add_argument("--subject-id", required=True)
+    runtime_memory_profile.add_argument("--domain", required=True)
     runtime_goal_create = runtime_commands.add_parser(
         "goal-create", help="register one versioned durable goal"
     )
@@ -345,6 +368,29 @@ def _main(argv: list[str] | None = None) -> int:
             }
         elif args.runtime_command == "brief":
             payload = {"status": store.integrity()["status"], **build_secretary_brief(store.snapshot())}
+        elif args.runtime_command == "memory-propose":
+            candidate = json.loads(Path(args.candidate).read_text(encoding="utf-8"))
+            payload = {
+                "status": "READY",
+                "candidate": store.create_memory_candidate(candidate),
+            }
+        elif args.runtime_command == "memory-review":
+            payload = {
+                "status": "READY",
+                "candidate": store.review_memory_candidate(
+                    args.candidate_id,
+                    decision=args.decision,
+                    reviewed_by=args.by,
+                ),
+            }
+        elif args.runtime_command == "memory-profile":
+            payload = {
+                "status": "READY",
+                "profile": store.operating_practices(
+                    subject={"kind": args.subject_kind, "id": args.subject_id},
+                    domain_id=args.domain,
+                ),
+            }
         elif args.runtime_command == "goal-create":
             payload = {
                 "status": "READY",

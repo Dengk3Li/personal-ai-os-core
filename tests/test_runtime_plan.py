@@ -143,6 +143,25 @@ class RuntimePlanTests(unittest.TestCase):
             self.store.get_task("self-hosting:intake")["title"],
         )
 
+    def test_module_link_definition_is_persisted_and_drift_checked(self):
+        plan = self._plan()
+        plan["workflows"][0]["tasks"][0]["module_links"] = [{
+            "module_id": "longtask-kernel",
+            "relation": "BUILDS",
+            "source": "EXPLICIT",
+            "status": "CONFIRMED",
+        }]
+        sync_runtime_plan(self.store, plan)
+
+        self.assertEqual(
+            "longtask-kernel",
+            self.store.get_task("self-hosting:intake")["module_links"][0]["module_id"],
+        )
+        plan["workflows"][0]["tasks"][0]["module_links"][0]["relation"] = "USES"
+
+        with self.assertRaisesRegex(ValueError, "runtime plan definition drift"):
+            sync_runtime_plan(self.store, plan)
+
     def test_unexpected_insert_failure_rolls_back_the_whole_plan(self):
         class FailingStore(RuntimeStore):
             def __init__(self, database):

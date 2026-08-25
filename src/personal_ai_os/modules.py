@@ -97,6 +97,19 @@ _MODULES = [
 ]
 
 
+_SYSTEM_GRAPH_MODULE_IDS = {
+    "analysis-domain", "branch-node", "candidate-extract", "condition-node",
+    "continuity", "conversation-learning", "delivery", "domain-routing",
+    "domain-systems", "domain-template", "dynamic-route", "evidence-check",
+    "execution", "experience-candidate", "goal-boundary", "human-decision",
+    "human-promotion", "join-node", "learning-cycle", "longtask-kernel",
+    "loop-node", "module-task-link", "owner-accept", "personal-context",
+    "personal-domain", "science-domain", "secretary-entry", "sequence-node",
+    "signal-capture", "task-load", "task-node", "task-state",
+    "workflow-compiler", "writing-domain",
+}
+
+
 _REQUIRED_MANIFEST_FIELDS = {
     "contract_version",
     "module_id",
@@ -114,6 +127,14 @@ def module_catalog() -> list[dict[str, Any]]:
     """Return the reusable built-in module manifests."""
 
     return deepcopy(_MODULES)
+
+
+def public_module_ids() -> set[str]:
+    """Return stable IDs rendered by either built-in module-map view."""
+
+    return _SYSTEM_GRAPH_MODULE_IDS | {
+        module["module_id"] for module in _MODULES
+    }
 
 
 def discover_module_manifests(directory: str | Path) -> dict[str, list[dict[str, Any]]]:

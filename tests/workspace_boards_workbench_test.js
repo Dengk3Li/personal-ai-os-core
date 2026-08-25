@@ -151,6 +151,12 @@ test("a module annotation becomes a bounded task candidate for the active workfl
   assert.equal(proposal.status, "CANDIDATE");
   assert.equal(proposal.task.line_id, state.activeLineId);
   assert.equal(proposal.task.context.model_context.module_id, "workflow-core");
+  assert.deepEqual(proposal.task.module_links, [{
+    module_id: "workflow-core",
+    relation: "CHANGES",
+    source: "EXPLICIT",
+    status: "CONFIRMED",
+  }]);
   assert.equal(
     proposal.task.context.model_context.annotation,
     "The handoff state needs a clearer acceptance boundary.",
@@ -159,6 +165,19 @@ test("a module annotation becomes a bounded task candidate for the active workfl
     workbench.proposeTaskFromModuleAnnotation(state, "workflow-core", " ").status,
     "BLOCKED",
   );
+});
+
+test("a system-map annotation keeps its module identity on the task card", () => {
+  const state = workbench.createShowcaseState();
+  const proposal = workbench.proposeTaskFromModuleAnnotation(
+    state,
+    "longtask-kernel",
+    "补齐旧任务卡恢复现场。",
+  );
+
+  assert.equal(proposal.status, "CANDIDATE");
+  assert.equal(proposal.task.module_links[0].module_id, "longtask-kernel");
+  assert.equal(proposal.task.module_links[0].relation, "CHANGES");
 });
 
 test("dragging a module updates only its position inside the canvas bounds", () => {
@@ -189,6 +208,26 @@ test("the module renderer draws real edges and marks the focused dependency path
   assert.match(html, /data-module-id="workflow-core"[^>]+data-relation="selected"/);
   assert.match(html, /data-module-id="workspace-intake"[^>]+data-relation="upstream"/);
   assert.match(html, /data-module-id="execution-adapter"[^>]+data-relation="downstream"/);
+});
+
+test("module nodes show task-backed construction state without changing graph edges", () => {
+  const graph = require("../workbench/architecture.js").systemGraph([]);
+  const topology = workbench.buildModuleTopology(graph.nodes, graph.edges);
+  const html = workbench.renderModuleTopology(topology, "longtask-kernel", {
+    by_module: {
+      "longtask-kernel": {
+        task_ids: ["task-001", "task-002"],
+        relations: ["BUILDS", "VALIDATES"],
+        status_counts: { IN_PROGRESS: 1, QUEUED: 1 },
+      },
+    },
+  }, { proposed: 3, approved: 2 });
+
+  assert.match(html, /data-module-id="longtask-kernel"[^>]+data-work-count="2"/);
+  assert.match(html, /建设中 1 · 关联 2/);
+  assert.match(html, /data-module-id="learning-cycle"[^>]+data-cognitive-count="5"/);
+  assert.match(html, /候选 3 · 已确认 2/);
+  assert.equal((html.match(/data-edge-from=/g) || []).length, graph.edges.length);
 });
 
 test("map zoom keeps the pointer anchor stable and clamps unsafe scales", () => {

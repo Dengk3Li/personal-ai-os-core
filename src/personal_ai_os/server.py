@@ -13,6 +13,7 @@ from .runtime import ExecutionBroker, RuntimeStore
 from .automation import AutoAdvanceEngine
 from .goals import GoalController
 from .secretary import build_secretary_brief
+from .task_links import module_work_projection
 from .presentation import (
     apply_presentation,
     identifier_aliases,
@@ -71,6 +72,7 @@ def runtime_workbench_state(
         "attempts",
         "artifact_refs",
         "flow_kind",
+        "module_links",
     )
     tasks = [
         {
@@ -136,6 +138,17 @@ def runtime_workbench_state(
                 }
             )
         pending_decisions = projected_decisions
+    module_work = module_work_projection(snapshot)
+    memory_candidates = snapshot.get("memory_candidates") or []
+    cognitive_learning = {
+        "proposed": sum(item.get("status") == "PROPOSED" for item in memory_candidates),
+        "approved": sum(item.get("status") == "APPROVED" for item in memory_candidates),
+        "rejected": sum(item.get("status") == "REJECTED" for item in memory_candidates),
+        "subjects": len({
+            (item.get("subject", {}).get("kind"), item.get("subject", {}).get("id"))
+            for item in memory_candidates
+        }),
+    }
     recovering_workflows = {
         task["workflow_id"]
         for task in snapshot.get("tasks", [])
@@ -197,6 +210,8 @@ def runtime_workbench_state(
         "pendingDecisions": pending_decisions,
         "assignments": snapshot["assignments"],
         "durableGoals": durable_goals,
+        "moduleWork": module_work,
+        "cognitiveLearning": cognitive_learning,
         "onboarding": {
             "status": "RUNTIME_READY",
             "readOnly": False,

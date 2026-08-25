@@ -48,6 +48,22 @@ def build_context_pack(
                 "truncated": len(excerpt) < len(content),
             }
         )
+    model_context = model_context_for_task(task)
+    operating_practices = list(profile.get("operating_practices") or [])
+    practice_evidence_refs = list(profile.get("practice_evidence_refs") or [])
+    bounded_context = json.dumps(
+        {
+            "model_context": model_context,
+            "operating_practices": operating_practices,
+            "practice_evidence_refs": practice_evidence_refs,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    if len(bounded_context) > MODEL_CONTEXT_CHARACTER_LIMIT:
+        raise ValueError(
+            f"model context budget exceeds {MODEL_CONTEXT_CHARACTER_LIMIT} characters"
+        )
     return {
         "schema_version": "personal-ai-os.context-pack/v1",
         "task_id": task.get("task_id"),
@@ -57,12 +73,14 @@ def build_context_pack(
         "next_action": task.get("next_action") or "produce one inspectable result",
         "constraints": list(task.get("constraints") or []),
         "artifact_refs": list(task.get("artifact_refs") or []),
-        "model_context": model_context_for_task(task),
+        "model_context": model_context,
         "upstream_artifacts": bounded_upstream,
         "domain_id": profile.get("domain_id") or task.get("domain_id") or "general",
         "persona": profile.get("persona") or "direct",
         "memory_refs": list(profile.get("memory_refs") or []),
         "instruction_refs": list(profile.get("instruction_refs") or []),
+        "operating_practices": operating_practices,
+        "practice_evidence_refs": practice_evidence_refs,
     }
 
 

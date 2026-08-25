@@ -127,6 +127,53 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual(200, read_status)
         self.assertEqual("product", line["domain_id"])
 
+    def test_runtime_projection_links_module_work_to_task_truth(self):
+        self.store.create_task({
+            "task_id": "science:module-link",
+            "workflow_id": "science",
+            "title": "建设长期任务内核",
+            "acceptance": "模块与任务能够互相定位",
+            "module_links": [{
+                "module_id": "longtask-kernel",
+                "relation": "BUILDS",
+                "source": "EXPLICIT",
+                "status": "CONFIRMED",
+            }],
+        })
+
+        _, projection = self.request("/api/runtime")
+
+        module_work = projection["state"]["moduleWork"]
+        self.assertEqual(
+            ["science:module-link"],
+            module_work["by_module"]["longtask-kernel"]["task_ids"],
+        )
+        task = next(
+            item for item in projection["state"]["tasks"]
+            if item["task_id"] == "science:module-link"
+        )
+        self.assertEqual("longtask-kernel", task["module_links"][0]["module_id"])
+
+    def test_runtime_projection_exposes_only_cognitive_counts(self):
+        self.store.create_memory_candidate({
+            "schema_version": "personal-ai-os.memory-candidate/v1",
+            "candidate_id": "private-habit",
+            "subject": {"kind": "person", "id": "writer-a"},
+            "domain_id": "science",
+            "category": "warning",
+            "statement": "PRIVATE_STYLE_SENTINEL",
+            "evidence_refs": ["artifact:accepted"],
+            "sample_count": 2,
+            "privacy_class": "private",
+        })
+
+        _, projection = self.request("/api/runtime")
+        serialized = json.dumps(projection["state"], ensure_ascii=False)
+
+        self.assertEqual(1, projection["state"]["cognitiveLearning"]["proposed"])
+        self.assertEqual(0, projection["state"]["cognitiveLearning"]["approved"])
+        self.assertNotIn("PRIVATE_STYLE_SENTINEL", serialized)
+
     def test_private_local_projection_keeps_private_task_copy_but_whitelists_adapter_probe(self):
         self.store.create_task(
             {

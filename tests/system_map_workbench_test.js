@@ -31,6 +31,7 @@ test("the long-task kernel explains domain abstraction and evidence-gated learni
 
   assert.ok(ids.has("domain-template"));
   assert.ok(ids.has("workflow-compiler"));
+  assert.ok(ids.has("module-task-link"));
   assert.ok(ids.has("experience-candidate"));
   assert.ok(ids.has("human-promotion"));
   assert.equal(graph.nodes.find((node) => node.module_id === "conversation-learning").availability, "PLANNED");
@@ -49,6 +50,8 @@ test("the system map does not present vision-only modules as operational", () =>
   assert.equal(root.nodes.find((node) => node.module_id === "learning-cycle").availability, "PROTOTYPE");
   assert.equal(domainSystems.nodes.find((node) => node.module_id === "personal-domain").availability, "PLANNED");
   assert.equal(learning.nodes.find((node) => node.module_id === "signal-capture").availability, "PLANNED");
+  assert.equal(learning.nodes.find((node) => node.module_id === "owner-accept").availability, "READY");
+  assert.equal(learning.nodes.find((node) => node.module_id === "task-load").availability, "READY");
 });
 
 
@@ -94,4 +97,5 @@ test("the report-facing workbench surface uses Chinese action language", () => {
   });
   assert.doesNotMatch(visibleSurface, /配置 Adapter 后推进/);
   assert.match(visibleSurface, /暂无可用执行适配器/);
+  assert.match(html, /v0\.13\.0/);
 });

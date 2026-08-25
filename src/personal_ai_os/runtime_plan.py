@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .runtime import RuntimeStore
+from .task_links import validate_task_module_link
 
 
 RUNTIME_PLAN_SCHEMA = "personal-ai-os.runtime-plan/v1"
@@ -69,6 +70,10 @@ def _validated_plan(plan: dict[str, Any]) -> list[dict[str, Any]]:
                 raise ValueError(f"duplicate runtime plan task: {task_id}")
             task_ids.add(task_id)
             workflow_task_ids.add(task_id)
+            raw_module_links = task.get("module_links") or []
+            if not isinstance(raw_module_links, list):
+                raise ValueError(f"task module_links must be a list: {task_id}")
+            module_links = [validate_task_module_link(item) for item in raw_module_links]
             normalized_tasks.append(
                 {
                     **task,
@@ -78,6 +83,7 @@ def _validated_plan(plan: dict[str, Any]) -> list[dict[str, Any]]:
                     "status": "QUEUED",
                     "context": dict(context),
                     "required_capabilities": list(capabilities),
+                    "module_links": module_links,
                 }
             )
 
@@ -144,6 +150,20 @@ def _task_definition(workflow_id: str, task: dict[str, Any]) -> dict[str, Any]:
         "domain_id": str(task.get("domain_id") or workflow_id),
         "context": dict(task.get("context") or {}),
         "requires_git_closure": bool(task.get("requires_git_closure", False)),
+        "module_links": [
+            {
+                key: item.get(key)
+                for key in (
+                    "schema_version",
+                    "module_id",
+                    "relation",
+                    "source",
+                    "confidence",
+                    "status",
+                )
+            }
+            for item in (task.get("module_links") or [])
+        ],
     }
 
 

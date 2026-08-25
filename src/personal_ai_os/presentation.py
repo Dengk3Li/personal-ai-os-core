@@ -6,6 +6,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from .modules import public_module_ids
+
 
 SCHEMA_VERSION = "personal-ai-os.presentation/v1"
 WORKFLOW_FIELDS = {"name", "caption", "goal"}
@@ -54,6 +56,23 @@ def _ordered_aliases(values: list[Any], prefix: str, width: int) -> dict[str, st
     return aliases
 
 
+def _module_aliases(values: list[Any]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    private_index = 0
+    for value in values:
+        if value is None or str(value).strip() == "":
+            continue
+        module_id = str(value)
+        if module_id in aliases:
+            continue
+        if module_id in public_module_ids():
+            aliases[module_id] = module_id
+        else:
+            private_index += 1
+            aliases[module_id] = f"module-{private_index:02d}"
+    return aliases
+
+
 def identifier_aliases(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
     workflows = list(snapshot.get("workflows", []))
     tasks = list(snapshot.get("tasks", []))
@@ -61,6 +80,7 @@ def identifier_aliases(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
     events = list(snapshot.get("events", []))
     artifacts = list(snapshot.get("artifacts", []))
     decisions = list(snapshot.get("decisions", []))
+    module_links = list(snapshot.get("module_links", []))
     assignments = snapshot.get("assignments") or {}
     workflow_values = [item.get("workflow_id") for item in workflows]
     workflow_values.extend(task.get("workflow_id") for task in tasks)
@@ -110,6 +130,14 @@ def identifier_aliases(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
             "capability",
             2,
         ),
+        "modules": _module_aliases(
+            [item.get("module_id") for item in module_links]
+            + [
+                link.get("module_id")
+                for task in tasks
+                for link in (task.get("module_links") or [])
+            ],
+        ),
     }
 
 
@@ -153,6 +181,9 @@ def _anonymize_runtime_identifiers(
             _alias(value, aliases["artifacts"])
             for value in task.get("artifact_refs") or []
         ]
+        for link in task.get("module_links") or []:
+            link["task_id"] = _alias(link.get("task_id"), aliases["tasks"])
+            link["module_id"] = _alias(link.get("module_id"), aliases["modules"])
     for run in snapshot.get("runs", []):
         run["run_id"] = _alias(run.get("run_id"), aliases["runs"])
         run["task_id"] = _alias(run.get("task_id"), aliases["tasks"])
@@ -173,6 +204,9 @@ def _anonymize_runtime_identifiers(
         decision["task_id"] = _alias(
             decision.get("task_id"), aliases["tasks"]
         )
+    for link in snapshot.get("module_links", []):
+        link["task_id"] = _alias(link.get("task_id"), aliases["tasks"])
+        link["module_id"] = _alias(link.get("module_id"), aliases["modules"])
     projected_assignments: dict[str, dict[str, Any]] = {}
     for task_id, assignment in (snapshot.get("assignments") or {}).items():
         for value in (assignment or {}).values():

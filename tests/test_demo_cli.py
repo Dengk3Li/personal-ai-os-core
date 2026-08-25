@@ -90,6 +90,46 @@ class DemoCliTests(unittest.TestCase):
         self.assertEqual("READY", payload["status"])
         self.assertEqual("runtime-store", payload["brief"]["authority"])
 
+    def test_runtime_cli_proposes_reviews_and_reads_scoped_practices(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = str(root / "runtime.db")
+            candidate = root / "candidate.json"
+            candidate.write_text(json.dumps({
+                "schema_version": "personal-ai-os.memory-candidate/v1",
+                "candidate_id": "habit-1",
+                "subject": {"kind": "team", "id": "writing-team"},
+                "domain_id": "writing",
+                "category": "workflow",
+                "statement": "提交前逐项核对模板结构。",
+                "evidence_refs": ["artifact:accepted-1"],
+                "sample_count": 4,
+                "privacy_class": "team",
+            }), encoding="utf-8")
+            proposed = subprocess.run([
+                sys.executable, "-m", "personal_ai_os", "runtime", "memory-propose",
+                "--store", store, "--candidate", str(candidate),
+            ], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False)
+            reviewed = subprocess.run([
+                sys.executable, "-m", "personal_ai_os", "runtime", "memory-review",
+                "--store", store, "--candidate-id", "habit-1", "--decision", "APPROVED",
+                "--by", "owner",
+            ], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False)
+            profile = subprocess.run([
+                sys.executable, "-m", "personal_ai_os", "runtime", "memory-profile",
+                "--store", store, "--subject-kind", "team", "--subject-id", "writing-team",
+                "--domain", "writing",
+            ], cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False)
+
+        self.assertEqual(0, proposed.returncode, proposed.stderr)
+        self.assertEqual("PROPOSED", json.loads(proposed.stdout)["candidate"]["status"])
+        self.assertEqual(0, reviewed.returncode, reviewed.stderr)
+        self.assertEqual("APPROVED", json.loads(reviewed.stdout)["candidate"]["status"])
+        self.assertEqual(0, profile.returncode, profile.stderr)
+        self.assertEqual(["提交前逐项核对模板结构。"], json.loads(profile.stdout)["profile"]["rules"])
+
     def test_runtime_cli_syncs_a_private_local_plan_without_copying_it_to_output(self):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT / "src")

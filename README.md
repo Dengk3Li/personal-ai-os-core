@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.12 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.12.md)
+[中文说明](README.zh-CN.md) · [v0.13 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.13.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -162,6 +162,26 @@ The private-local Workbench shows the current durable goal, persisted budget usa
 
 This slice independently implements general control-plane mechanisms after reviewing Prime Agent, LangGraph, OpenHands, Letta Code, and LoopX. It does not copy their source code, product UI, trademarks, or brand assets. See [reference project license notes](docs/REFERENCE_PROJECT_LICENSES_V0.12.md).
 
+## v0.13 cognitive practice and module-task links
+
+The reusable “brain” layer now stores evidence-backed working-practice candidates for one person or team and one domain. A candidate starts as `PROPOSED`; only an explicit review with a recorded reviewer can make it `APPROVED`, and that decision is appended to the review event trail. Model context loads only approved practices whose subject and domain match the current task. Practice count, statement length, and the combined model-context payload are bounded. The public core does not infer personality from conversations or promote memory automatically.
+
+The “hand” layer now carries versioned links between a task and the module it builds, changes, uses, validates, or is blocked by. Confirmed links appear in both Work Progress and the Module Map. Analyzed links remain proposals until confirmed, and tasks without a module link stay visible as unlinked work. A module annotation preserves the selected module identity when it becomes a task.
+
+```bash
+personal-ai-os runtime memory-propose \
+  --store .personal-ai-os/runtime.db \
+  --candidate ./memory-candidate.private.json
+
+personal-ai-os runtime memory-review \
+  --store .personal-ai-os/runtime.db \
+  --candidate-id candidate:writing:001 \
+  --decision APPROVED \
+  --by owner
+```
+
+Private legacy-card ingestion is implemented outside this public repository as a read-only adapter. It projects existing task truth into the generic envelope, reports reconciliation issues, and performs no import or state transition during preview. Automatic dialogue mining, automatic memory approval, capability self-installation, and recursive repository understanding remain unimplemented boundaries. Design references and license conditions are recorded in [v0.13 reference project notes](docs/REFERENCE_PROJECT_LICENSES_V0.13.md).
+
 ## Operating model
 
 ```mermaid
@@ -240,6 +260,8 @@ The commands emit machine-readable JSON. `inspect` and `plan` remain read-only; 
 | Per-task execution routing | Auto advance chooses the smallest available route that satisfies capability, tier, and context requirements, then atomically binds it to the claimed run. |
 | Recursive system cognition | Presents the operating system from secretary entry to delivery and feedback, with draggable topology, real edges, breadcrumbs, and module drilldown. |
 | Structured workflow grammar | Validates and evaluates task, sequence, branch, join, condition, and bounded-loop nodes without evaluating arbitrary code. |
+| Evidence-gated working practices | Stores person- or team-scoped practice candidates and loads only explicitly approved rules for the matching domain. |
+| Module-task links | Connects confirmed task work to system modules with typed relations and derives linked and unlinked work projections. |
 | Local presentation projection | Applies a strict display-only allowlist to workflow and task copy while keeping private runtime truth outside public Git and browser payloads. |
 | Domain context compiler | Loads one domain through a fixed references-only allowlist and fails closed on ambiguity or unknown layers. |
 | Task assignment | Selects a compatible executor with capacity. |
