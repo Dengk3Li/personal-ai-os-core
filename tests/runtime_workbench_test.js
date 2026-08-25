@@ -276,6 +276,46 @@ test("task detail uses saved execution settings without exposing configuration c
   assert.match(html, /使用已保存的执行策略/);
 });
 
+test("task detail explains why it ran, what it produced, and what follows", () => {
+  const task = {
+    task_id: "task-result",
+    public_label: "任务 02",
+    title: "整理实验结果",
+    status: "REVIEW",
+    action: "ACCEPT",
+    attempts: 1,
+    depends_on: ["task-input"],
+    events: [
+      { event_id: "e-1", kind: "assigned", label: "已分配执行器", at: "2026-08-25T23:40:00+08:00", occurred_at: "2026-08-25T23:40:00+08:00", run_id: "run-1" },
+      { event_id: "e-2", kind: "artifact_created", label: "阶段产物已登记", at: "2026-08-25T23:42:00+08:00", occurred_at: "2026-08-25T23:42:00+08:00", run_id: "run-1" },
+    ],
+    result: { status: "REGISTERED", summary: "已形成实验结果摘要", preview: "证据显示假设 A 得到初步支持。", artifact_id: "artifact-1", created_at: "2026-08-25T23:42:00+08:00" },
+  };
+  const html = workbench.renderRunDetail(
+    task,
+    {
+      runtime: true,
+      defaultModel: "model-a",
+      adapters: [{ adapter_id: "test-adapter", available: true }],
+      tasks: [
+        { task_id: "task-input", public_label: "任务 01", title: "整理原始数据", status: "DONE" },
+        task,
+        { task_id: "task-next", public_label: "任务 03", title: "进入下一轮验证", status: "QUEUED", depends_on: ["task-result"] },
+      ],
+    },
+  );
+
+  assert.match(html, /前因/);
+  assert.match(html, /本轮结果/);
+  assert.match(html, /后果与下一步/);
+  assert.match(html, /整理原始数据/);
+  assert.match(html, /已形成实验结果摘要/);
+  assert.match(html, /证据显示假设 A 得到初步支持/);
+  assert.match(html, /进入下一轮验证/);
+  assert.match(html, /2026-08-25 23:40/);
+  assert.match(html, /2026-08-25 23:42/);
+});
+
 test("settings explain saved routing and keep credentials on the server", () => {
   const html = workbench.renderSettings({
     runtime: true,

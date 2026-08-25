@@ -54,8 +54,24 @@ def runtime_workbench_state(
                 "kind": event["event_type"].lower(),
                 "label": labels.get(event["event_type"], "运行状态已更新"),
                 "at": event["at"][11:16] if len(event["at"]) >= 16 else event["at"],
+                "occurred_at": event["at"],
+                "run_id": event.get("run_id"),
             }
         )
+    artifacts_by_task: dict[str, list[dict[str, Any]]] = {}
+    for artifact in snapshot.get("artifacts", []):
+        result = {
+            "status": "REGISTERED",
+            "artifact_id": artifact.get("artifact_id"),
+            "run_id": artifact.get("run_id"),
+            "summary": artifact.get("summary") or "阶段产物已登记",
+            "created_at": artifact.get("created_at"),
+        }
+        if presentation is None:
+            result["preview"] = str(artifact.get("content") or "")[:1200]
+        else:
+            result["summary"] = "阶段产物已登记"
+        artifacts_by_task.setdefault(artifact["task_id"], []).append(result)
     browser_task_fields = (
         "task_id",
         "workflow_id",
@@ -81,11 +97,13 @@ def runtime_workbench_state(
         "artifact_refs",
         "flow_kind",
         "module_links",
+        "result",
     )
     tasks = [
         {
             **{field: task.get(field) for field in browser_task_fields},
             "events": events_by_task.get(task["task_id"], []),
+            "result": (artifacts_by_task.get(task["task_id"]) or [None])[-1],
         }
         for task in snapshot["tasks"]
     ]

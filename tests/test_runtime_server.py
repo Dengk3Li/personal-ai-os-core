@@ -125,6 +125,62 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("REVIEW", after["state"]["taskStates"][task["task_id"]])
         self.assertEqual(1, task["attempts"])
 
+    def test_runtime_projection_returns_result_feedback_and_real_timeline(self):
+        run_status, dispatched = self.request(
+            "/api/runs",
+            {
+                "task_id": "science:hypothesis",
+                "adapter_id": "test-adapter",
+                "model": "model-a",
+            },
+        )
+
+        _, after = self.request("/api/runtime")
+        task = next(
+            item
+            for item in after["state"]["tasks"]
+            if item["task_id"] == "science:hypothesis"
+        )
+
+        self.assertEqual(200, run_status)
+        self.assertTrue(dispatched["ok"])
+        self.assertEqual("REVIEW", task["status"])
+        self.assertEqual("REGISTERED", task["result"]["status"])
+        self.assertEqual("API result", task["result"]["summary"])
+        self.assertEqual("API result", task["result"]["preview"])
+        self.assertRegex(task["result"]["created_at"], r"^\d{4}-\d{2}-\d{2}T")
+        self.assertTrue(task["events"])
+        self.assertRegex(task["events"][0]["occurred_at"], r"^\d{4}-\d{2}-\d{2}T")
+        self.assertIn("run_id", task["events"][0])
+
+    def test_public_safe_result_feedback_omits_private_preview(self):
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="model-a",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            presentation={
+                "schema_version": "personal-ai-os.presentation/v1",
+                "workflows": {},
+                "tasks": {},
+            },
+            projection_mode="public-safe",
+        )
+
+        dispatched = app.broker.dispatch(
+            "science:hypothesis",
+            adapter_id="test-adapter",
+            model="model-a",
+        )
+        projection = app.projection()
+        task = next(item for item in projection["state"]["tasks"] if item["result"])
+        serialized = json.dumps(projection, ensure_ascii=False)
+
+        self.assertTrue(dispatched["ok"])
+        self.assertEqual("REGISTERED", task["result"]["status"])
+        self.assertNotIn("preview", task["result"])
+        self.assertNotIn("API result", serialized)
+
     def test_empty_workflow_keeps_its_domain_in_the_runtime_projection(self):
         created_status, created = self.request(
             "/api/workflows",

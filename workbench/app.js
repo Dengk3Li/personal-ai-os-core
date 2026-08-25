@@ -1147,11 +1147,55 @@
     return `<div class="workflow-groups">${groups}</div>`;
   }
 
+  function formatTimelineTime(value) {
+    const raw = String(value || "");
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return `${raw.slice(0, 10)} ${raw.slice(11, 16)}`;
+    return raw || "时间未知";
+  }
+
+  function relatedTasks(task, runtimeState, direction) {
+    const tasks = runtimeState && Array.isArray(runtimeState.tasks) ? runtimeState.tasks : [];
+    if (direction === "previous") {
+      return (task.depends_on || []).map((taskId) => tasks.find((item) => item.task_id === taskId)).filter(Boolean);
+    }
+    return tasks.filter((item) => (item.depends_on || []).includes(task.task_id));
+  }
+
+  function relatedTaskLabel(task) {
+    const label = task.public_label || task.title || task.task_id;
+    const title = task.title && task.title !== label ? ` · ${task.title}` : "";
+    return `${label}${title}`;
+  }
+
+  function renderTaskStory(task, runtimeState) {
+    const previous = relatedTasks(task, runtimeState, "previous");
+    const next = relatedTasks(task, runtimeState, "next");
+    const previousCopy = previous.length
+      ? previous.map((item) => escapeHtml(relatedTaskLabel(item))).join("、")
+      : "当前工作线入口任务，无前置任务。";
+    const nextCopy = next.length
+      ? next.map((item) => escapeHtml(relatedTaskLabel(item))).join("、")
+      : task.status === "REVIEW"
+        ? "验收通过后，本工作线才会继续寻找下游任务。"
+        : ["DONE", "ARCHIVED"].includes(task.status)
+          ? "没有待接续的下游任务。"
+          : "本轮结束后等待新的下游安排。";
+    const result = task.result;
+    const resultCopy = result
+      ? `<strong>${escapeHtml(result.status === "REGISTERED" ? "已形成可核对产物" : result.status)}</strong><p>${escapeHtml(result.summary || "阶段产物已登记")}</p>${result.preview ? `<blockquote>${escapeHtml(result.preview)}</blockquote>` : ""}<small>${result.created_at ? `产出时间：${escapeHtml(formatTimelineTime(result.created_at))}` : "产出已登记"}</small>`
+      : `<strong>尚未形成结果</strong><p>${task.status === "IN_PROGRESS" ? "任务仍在执行，结果会在运行回执到达后显示。" : "当前还没有可供验收的阶段产物。"}</p>`;
+    return `<section class="task-story" aria-label="任务前因后果">
+      <div class="story-block"><span>前因</span><p>${previousCopy}</p><small>进入条件：${escapeHtml(task.acceptance || "满足当前任务的验收条件")}</small></div>
+      <div class="story-block story-result"><span>本轮结果</span>${resultCopy}</div>
+      <div class="story-block"><span>后果与下一步</span><p>${nextCopy}</p><small>当前状态：${escapeHtml(STATUS_LABELS[task.status] || task.status || "待分配")}</small></div>
+    </section>`;
+  }
+
   function renderRunDetail(task, runtimeState) {
     if (!task) return '<p class="empty-trace">选择一个节点查看运行轨迹。</p>';
     const assignment = task.assignment;
     const events = task.events && task.events.length
-      ? `<ol class="event-trace">${task.events.map((event) => `<li><time>${escapeHtml(event.at)}</time><span>${escapeHtml(event.label)}</span></li>`).join("")}</ol>`
+      ? `<ol class="event-trace">${task.events.map((event) => `<li><time datetime="${escapeHtml(event.occurred_at || event.at)}">${escapeHtml(formatTimelineTime(event.occurred_at || event.at))}</time><span>${escapeHtml(event.label)}</span></li>`).join("")}</ol>`
       : '<p class="empty-trace">任务尚未分配。分配后会记录适配器启动、心跳、产物与复核事件。</p>';
     const availableAdapters = runtimeState && runtimeState.runtime
       ? (runtimeState.adapters || []).filter((adapter) => adapter.available)
@@ -1171,6 +1215,7 @@
       : (ACTION_LABELS[task.action] || task.action);
     return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || task.title || "自定义任务")}</h3></div>
       <dl class="run-detail-meta"><div><dt>模型</dt><dd>${escapeHtml(assignment ? assignment.model : "等待选择")}</dd></div><div><dt>执行适配器</dt><dd>${escapeHtml(assignment ? assignment.executor : "尚未分配")}</dd></div><div><dt>运行轮次</dt><dd>${task.attempts ? `第 ${String(task.attempts).padStart(2, "0")} 次` : "尚未运行"}</dd></div><div><dt>节点类型</dt><dd>${escapeHtml(({ sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" })[inferFlowKind(task)] || "顺序")}</dd></div></dl>
+      ${renderTaskStory(task, runtimeState)}
       ${events}
       ${runtimeState && runtimeState.runtime && needsAdapter ? '<p class="empty-trace">使用已保存的执行策略；模型、路由与 API 在设置中统一管理。</p>' : ""}
       <div data-task-id="${escapeHtml(task.task_id)}"><button class="task-action" type="button" data-action="task" ${disabled ? "disabled" : ""}>${escapeHtml(actionLabel)}</button></div>`;
