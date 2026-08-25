@@ -664,6 +664,37 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual(routes, projection["execution_settings"]["routes"])
         self.assertTrue(projection["execution"]["advance_ready"])
 
+    def test_private_codex_app_server_binding_restores_from_factory_after_restart(self):
+        configured = CountingAdapter("codex-app-server")
+        factory = lambda _config: (configured, "codex-model")
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="fallback-model",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            execution_adapter_factories={"codex-app-server": factory},
+        )
+        configured_projection = app.configure_execution(
+            {
+                "mode": "fixed",
+                "adapter": {"kind": "codex-app-server", "model": "codex-model"},
+            }
+        )
+
+        restarted = RuntimeApplication(
+            store=RuntimeStore(self.store.database),
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="fallback-model",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            execution_adapter_factories={"codex-app-server": factory},
+        )
+        projection = restarted.projection()
+
+        self.assertTrue(configured_projection["execution"]["task_dispatch_ready"])
+        self.assertEqual("codex-app-server", projection["execution_settings"]["default_adapter_id"])
+        self.assertEqual("codex-model", projection["default_model"])
+        self.assertTrue(projection["execution"]["task_dispatch_ready"])
+
     def test_codex_project_bridge_claims_binds_and_completes_a_browser_dispatch(self):
         project = Path(self.temp.name) / "science-project"
         project.mkdir()

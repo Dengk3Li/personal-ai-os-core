@@ -391,6 +391,23 @@ class RuntimeApplication:
                 self.credential_source = "recovery-required"
             else:
                 self.credential_source = "server-environment"
+        elif adapter_kind == "codex-app-server":
+            factory = self.execution_adapter_factories.get("codex-app-server")
+            try:
+                if factory is None:
+                    raise ValueError("CODEX_APP_SERVER_FACTORY_MISSING")
+                adapter, configured_model = factory({"model": saved_model})
+                if not adapter.probe().get("available"):
+                    raise ValueError("CODEX_APP_SERVER_UNAVAILABLE")
+            except (OSError, ValueError):
+                self.default_adapter_id = ""
+                self.default_model = ""
+                self.credential_source = "recovery-required"
+                return
+            self.broker.adapters[adapter.adapter_id] = adapter
+            saved_adapter_id = str(adapter.adapter_id)
+            saved_model = str(configured_model or saved_model).strip()
+            self.credential_source = "codex-session"
         else:
             saved_adapter_id = ""
             self.credential_source = "recovery-required"
@@ -415,12 +432,19 @@ class RuntimeApplication:
             codex_projects = [dict(item) for item in active.project_bindings]
         elif isinstance(active, OpenAICompatibleAdapter):
             adapter_kind = "openai-compatible"
+        elif str(getattr(active, "adapter_id", "")) == CodexAppServerAdapter.adapter_id:
+            adapter_kind = "codex-app-server"
         elif codex_adapters and any(
             str(route.get("adapter_id") or "") == CodexProjectAdapter.adapter_id
             for route in self.runtime_routes
         ):
             adapter_kind = "codex-project"
             codex_projects = [dict(item) for item in codex_adapters[0].project_bindings]
+        elif any(
+            str(route.get("adapter_id") or "") == CodexAppServerAdapter.adapter_id
+            for route in self.runtime_routes
+        ) and CodexAppServerAdapter.adapter_id in self.broker.adapters:
+            adapter_kind = "codex-app-server"
         self.store.save_execution_settings(
             {
                 "mode": mode,
