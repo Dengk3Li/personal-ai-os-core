@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 
 const workbench = require("../workbench/app.js");
 
@@ -316,6 +317,54 @@ test("task detail explains why it ran, what it produced, and what follows", () =
   assert.match(html, /2026-08-25 23:42/);
 });
 
+test("task story derives causal inputs and downstream impact from persisted dependency states", () => {
+  const task = {
+    task_id: "task-result",
+    public_label: "任务 02",
+    title: "整理实验结果",
+    status: "REVIEW",
+    action: "ACCEPT",
+    attempts: 1,
+    line_id: "research-line",
+    depends_on: ["task-input"],
+    acceptance: "结果摘要可追溯并可供下一轮验证使用",
+    result: { status: "REGISTERED", summary: "已形成实验结果摘要", created_at: "2026-08-25T23:42:00+08:00" },
+  };
+  const html = workbench.renderRunDetail(
+    task,
+    {
+      runtime: true,
+      defaultModel: "model-a",
+      adapters: [{ adapter_id: "test-adapter", available: true }],
+      businessLines: [{ line_id: "research-line", name: "科研线", caption: "问题、证据与下一轮验证" }],
+      tasks: [
+        {
+          task_id: "task-input",
+          public_label: "任务 01",
+          title: "整理原始数据",
+          status: "DONE",
+          result: { status: "REGISTERED", summary: "原始数据已完成清洗", created_at: "2026-08-25T23:30:00+08:00" },
+        },
+        task,
+        { task_id: "task-next", public_label: "任务 03", title: "进入下一轮验证", status: "QUEUED", depends_on: ["task-result"], acceptance: "完成验证方案" },
+      ],
+    },
+  );
+
+  assert.match(html, /上游已完成/);
+  assert.match(html, /原始数据已完成清洗/);
+  assert.match(html, /下游待启动/);
+  assert.match(html, /任务 03/);
+  assert.match(html, /等待本任务收口/);
+  assert.doesNotMatch(html, /继续寻找下游任务/);
+});
+
+test("task story keeps long causal text inside the detail panel", () => {
+  const css = fs.readFileSync(require.resolve("../workbench/style.css"), "utf8");
+  assert.match(css, /\.story-block(?:\s*,\s*\.story-block \*)?[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.story-block(?:\s*,\s*\.story-block \*)?[^}]*min-width:\s*0/);
+});
+
 test("settings explain saved routing and keep credentials on the server", () => {
   const html = workbench.renderSettings({
     runtime: true,
@@ -399,6 +448,32 @@ test("private settings bind the active workline to a native Codex project", () =
   assert.match(html, /id="codex-project-path"/);
   assert.match(html, /data-bind-codex-project/);
   assert.doesNotMatch(html, /自动绑定 Codex/);
+});
+
+test("task detail shows the native Codex project execution state", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "science:hypothesis",
+      public_label: "任务 01",
+      title: "科研任务",
+      status: "IN_PROGRESS",
+      action: "REQUEST_REVIEW",
+      attempts: 1,
+      events: [],
+      codex_dispatch: {
+        status: "RUNNING",
+        project: { label: "科研项目", environment: "worktree" },
+        thread_id: "codex-thread-1",
+        project_id: "codex-project-1",
+      },
+    },
+    { runtime: true, defaultModel: "model-a", adapters: [{ adapter_id: "codex-project", available: true }] },
+  );
+
+  assert.match(html, /Codex 项目执行/);
+  assert.match(html, /科研项目/);
+  assert.match(html, /已绑定原生任务/);
+  assert.match(html, /codex-thread-1/);
 });
 
 test("Codex project binding replaces only the active workline mapping", () => {

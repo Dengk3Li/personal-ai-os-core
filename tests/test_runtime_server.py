@@ -622,6 +622,70 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("REVIEW", completed["status"])
         self.assertEqual("REVIEW", self.store.get_task("science:hypothesis")["status"])
 
+    def test_runtime_projection_surfaces_codex_project_queue_and_bound_thread(self):
+        project = Path(self.temp.name) / "science-project"
+        project.mkdir()
+        self.request(
+            "/api/settings/execution",
+            {
+                "mode": "fixed",
+                "adapter": {
+                    "kind": "codex-project",
+                    "model": "model-a",
+                    "projects": [
+                        {
+                            "project_key": "science-workspace",
+                            "label": "科研项目",
+                            "path": str(project),
+                            "workflow_ids": ["science"],
+                            "environment": "worktree",
+                        }
+                    ],
+                },
+            },
+        )
+
+        run_status, dispatched = self.request(
+            "/api/runs",
+            {"task_id": "science:hypothesis", "adapter_id": "codex-project", "model": "model-a"},
+        )
+        _, queued = self.request("/api/runtime")
+        queued_task = next(
+            item for item in queued["state"]["tasks"] if item["task_id"] == "science:hypothesis"
+        )
+        dispatch = queued_task["codex_dispatch"]
+        claim_status, claimed = self.request(
+            "/api/codex-project/claim", {"worker_id": "runtime-projection-test"}
+        )
+        _, claimed_projection = self.request("/api/runtime")
+        claimed_task = next(
+            item
+            for item in claimed_projection["state"]["tasks"]
+            if item["task_id"] == "science:hypothesis"
+        )
+        bind_status, bound = self.request(
+            f"/api/codex-project/dispatches/{claimed['dispatch_id']}/bind",
+            {"thread_id": "codex-thread-projection", "project_id": "codex-project-1", "host_id": "local"},
+        )
+        _, bound_projection = self.request("/api/runtime")
+        bound_task = next(
+            item
+            for item in bound_projection["state"]["tasks"]
+            if item["task_id"] == "science:hypothesis"
+        )
+
+        self.assertEqual(200, run_status)
+        self.assertTrue(dispatched["ok"])
+        self.assertEqual("PENDING", dispatch["status"])
+        self.assertEqual("科研项目", dispatch["project"]["label"])
+        self.assertIsNone(dispatch["thread_id"])
+        self.assertEqual(200, claim_status)
+        self.assertEqual("CLAIMED", claimed_task["codex_dispatch"]["status"])
+        self.assertEqual(200, bind_status)
+        self.assertEqual("RUNNING", bound["status"])
+        self.assertEqual("RUNNING", bound_task["codex_dispatch"]["status"])
+        self.assertEqual("codex-thread-projection", bound_task["codex_dispatch"]["thread_id"])
+
     def test_live_broker_run_is_not_misreported_as_restart_recovery(self):
         self.store.create_goal(
             {

@@ -30,9 +30,15 @@ def runtime_workbench_state(
     store: RuntimeStore,
     presentation: dict[str, Any] | None = None,
     live_task_ids: set[str] | None = None,
+    codex_dispatches: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     snapshot = apply_presentation(store.snapshot(), presentation)
     live_task_ids = set(live_task_ids or ())
+    codex_dispatch_by_task = {
+        str(item.get("task_id")): item
+        for item in (codex_dispatches or [])
+        if item.get("task_id")
+    }
     events_by_task: dict[str, list[dict[str, Any]]] = {}
     labels = {
         "RUN_ASSIGNED": "已分配执行器",
@@ -104,6 +110,23 @@ def runtime_workbench_state(
             **{field: task.get(field) for field in browser_task_fields},
             "events": events_by_task.get(task["task_id"], []),
             "result": (artifacts_by_task.get(task["task_id"]) or [None])[-1],
+            **(
+                {
+                    "codex_dispatch": {
+                        "status": str(dispatch.get("status") or "UNKNOWN"),
+                        "dispatch_id": str(dispatch.get("dispatch_id") or ""),
+                        "project": {
+                            "label": str((dispatch.get("project") or {}).get("label") or "Codex 项目"),
+                            "environment": str((dispatch.get("project") or {}).get("environment") or ""),
+                        },
+                        "thread_id": str(dispatch.get("thread_id") or "") or None,
+                        "project_id": str(dispatch.get("project_id") or "") or None,
+                        "host_id": str(dispatch.get("host_id") or "") or None,
+                    }
+                }
+                if presentation is None and (dispatch := codex_dispatch_by_task.get(task["task_id"]))
+                else {}
+            ),
         }
         for task in snapshot["tasks"]
     ]
@@ -343,10 +366,21 @@ class RuntimeApplication:
             if self.presentation is not None
             else snapshot
         )
+        codex_adapters = [
+            adapter
+            for adapter in self.broker.adapters.values()
+            if isinstance(adapter, CodexProjectAdapter)
+        ]
         state = runtime_workbench_state(
             self.store,
             self.presentation,
             live_task_ids=self.broker.active_task_ids(),
+            codex_dispatches=(
+                codex_adapters[0].active_dispatches()
+                if self.projection_mode == "private-local"
+                and len(codex_adapters) == 1
+                else []
+            ),
         )
         if self.projection_mode == "public-safe":
             self._anonymize_execution_state(state, snapshot)

@@ -343,12 +343,19 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .empty-trace { margin: 0 0 var(--space-3); color: var(--muted); font-size: .7rem; line-height: 1.5; }
 .task-story { display: grid; gap: .55rem; margin: 0 0 var(--space-3); }
 .story-block { display: grid; gap: .32rem; padding: .72rem .78rem; border: 1px solid var(--line); background: rgba(255, 253, 247, .72); }
+.story-block, .story-block * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
 .story-block > span { color: var(--accent); font-size: .62rem; font-weight: 850; letter-spacing: .04em; }
 .story-block p { margin: 0; color: var(--ink); font-size: .7rem; line-height: 1.45; }
 .story-block small { color: var(--muted); font-size: .6rem; line-height: 1.4; }
 .story-result { border-color: rgba(36, 92, 76, .38); background: var(--surface-strong); }
 .story-result strong { color: var(--accent); font-size: .74rem; }
 .story-result blockquote { margin: .15rem 0 0; padding-left: .65rem; border-left: 2px solid var(--signal); color: var(--ink); font-size: .68rem; line-height: 1.5; }
+.codex-dispatch { display: grid; gap: .32rem; min-width: 0; margin: 0 0 var(--space-3); padding: .72rem .78rem; border: 1px solid rgba(36, 92, 76, .38); background: rgba(232, 245, 238, .72); }
+.codex-dispatch > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+.codex-dispatch-head { display: flex; align-items: baseline; justify-content: space-between; gap: .65rem; }
+.codex-dispatch-head strong { color: var(--accent); font-size: .74rem; }
+.codex-dispatch p, .codex-dispatch small { margin: 0; font-size: .64rem; line-height: 1.4; }
+.codex-dispatch small { color: var(--muted); }
 .auto-advance-controls { display: grid; grid-template-columns: minmax(10rem, 1fr) auto; gap: var(--space-2); align-items: center; width: 100%; padding-top: var(--space-2); border-top: 1px solid rgba(255, 255, 255, .16); }
 .auto-advance-controls[hidden] { display: none; }
 .advance-readiness { color: rgba(255, 255, 255, .82); font-size: .75rem; }

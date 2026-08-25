@@ -1153,12 +1153,23 @@
     return raw || "时间未知";
   }
 
+  function taskDependencyIds(task) {
+    const dependencies = Array.isArray(task && task.depends_on)
+      ? task.depends_on
+      : Array.isArray(task && task.dependencies)
+        ? task.dependencies
+        : Array.isArray(task && task.predecessor_ids)
+          ? task.predecessor_ids
+          : [];
+    return dependencies.map((dependency) => typeof dependency === "string" ? dependency : dependency && dependency.task_id).filter(Boolean);
+  }
+
   function relatedTasks(task, runtimeState, direction) {
     const tasks = runtimeState && Array.isArray(runtimeState.tasks) ? runtimeState.tasks : [];
     if (direction === "previous") {
-      return (task.depends_on || []).map((taskId) => tasks.find((item) => item.task_id === taskId)).filter(Boolean);
+      return taskDependencyIds(task).map((taskId) => tasks.find((item) => item.task_id === taskId)).filter(Boolean);
     }
-    return tasks.filter((item) => (item.depends_on || []).includes(task.task_id));
+    return tasks.filter((item) => taskDependencyIds(item).includes(task.task_id));
   }
 
   function relatedTaskLabel(task) {
@@ -1167,27 +1178,66 @@
     return `${label}${title}`;
   }
 
+  function storyLine(runtimeState, task) {
+    const lines = runtimeState && (runtimeState.businessLines || runtimeState.workflows);
+    return Array.isArray(lines) ? lines.find((line) => line.line_id === task.line_id || line.workflow_id === task.workflow_id) : null;
+  }
+
+  function storyTaskLabel(task) {
+    const status = STATUS_LABELS[task.status] || task.status || "待分配";
+    const result = task.result && task.result.summary ? `；产出：${String(task.result.summary).slice(0, 120)}` : "";
+    return `${relatedTaskLabel(task)}（${status}${result}）`;
+  }
+
   function renderTaskStory(task, runtimeState) {
     const previous = relatedTasks(task, runtimeState, "previous");
     const next = relatedTasks(task, runtimeState, "next");
     const previousCopy = previous.length
-      ? previous.map((item) => escapeHtml(relatedTaskLabel(item))).join("、")
-      : "当前工作线入口任务，无前置任务。";
+      ? `${previous.every((item) => ["DONE", "ARCHIVED"].includes(item.status)) ? "上游已完成" : "上游仍有未收口任务"}：${previous.map((item) => escapeHtml(storyTaskLabel(item))).join("、")}`
+      : (() => {
+          const line = storyLine(runtimeState, task);
+          return line
+            ? `该任务是“${escapeHtml(line.name || line.line_id)}”的入口，承接工作线目标：${escapeHtml(line.caption || "已登记的工作线目标")}`
+            : "当前工作线入口任务，运行库没有登记前置任务。";
+        })();
+    const nextLabels = next.map((item) => escapeHtml(storyTaskLabel(item))).join("、");
+    const nextWaits = next.some((item) => ["QUEUED", "BLOCKED", "PAUSED"].includes(item.status));
     const nextCopy = next.length
-      ? next.map((item) => escapeHtml(relatedTaskLabel(item))).join("、")
+      ? `${nextWaits ? "下游待启动；" : ""}${task.status === "REVIEW" ? "当前结果待验收；验收通过后解锁" : "已登记下游"}：${nextLabels}${nextWaits ? "，等待本任务收口" : ""}`
       : task.status === "REVIEW"
-        ? "验收通过后，本工作线才会继续寻找下游任务。"
+        ? "当前没有已登记下游；下一步是完成本轮验收。"
         : ["DONE", "ARCHIVED"].includes(task.status)
-          ? "没有待接续的下游任务。"
-          : "本轮结束后等待新的下游安排。";
+          ? "当前没有已登记下游；本任务已成为当前工作线的收口节点。"
+          : "当前没有已登记下游；本任务完成后由工作线继续编排。";
     const result = task.result;
+    const preview = result && result.preview ? String(result.preview).slice(0, 900) : "";
     const resultCopy = result
-      ? `<strong>${escapeHtml(result.status === "REGISTERED" ? "已形成可核对产物" : result.status)}</strong><p>${escapeHtml(result.summary || "阶段产物已登记")}</p>${result.preview ? `<blockquote>${escapeHtml(result.preview)}</blockquote>` : ""}<small>${result.created_at ? `产出时间：${escapeHtml(formatTimelineTime(result.created_at))}` : "产出已登记"}</small>`
+      ? `<strong>${escapeHtml(result.status === "REGISTERED" ? "已形成可核对产物" : result.status)}</strong><p>${escapeHtml(result.summary || "阶段产物已登记")}</p>${preview ? `<blockquote>${escapeHtml(preview)}${String(result.preview).length > 900 ? "…" : ""}</blockquote>` : ""}<small>${result.created_at ? `产出时间：${escapeHtml(formatTimelineTime(result.created_at))}` : "产出已登记"}</small>`
       : `<strong>尚未形成结果</strong><p>${task.status === "IN_PROGRESS" ? "任务仍在执行，结果会在运行回执到达后显示。" : "当前还没有可供验收的阶段产物。"}</p>`;
     return `<section class="task-story" aria-label="任务前因后果">
-      <div class="story-block"><span>前因</span><p>${previousCopy}</p><small>进入条件：${escapeHtml(task.acceptance || "满足当前任务的验收条件")}</small></div>
+      <div class="story-block"><span>前因</span><p>${previousCopy}</p><small>本任务验收条件：${escapeHtml(task.acceptance || "满足当前任务的验收条件")}</small></div>
       <div class="story-block story-result"><span>本轮结果</span>${resultCopy}</div>
       <div class="story-block"><span>后果与下一步</span><p>${nextCopy}</p><small>当前状态：${escapeHtml(STATUS_LABELS[task.status] || task.status || "待分配")}</small></div>
+    </section>`;
+  }
+
+  function renderCodexDispatch(dispatch) {
+    if (!dispatch) return "";
+    const statusLabels = {
+      PENDING: "已进入项目队列",
+      CLAIMED: "已被执行总管领取",
+      RUNNING: "已绑定原生任务",
+      COMPLETING: "正在登记结果",
+    };
+    const project = dispatch.project || {};
+    const environment = project.environment === "worktree" ? "独立工作树" : project.environment === "local" ? "当前项目目录" : "执行环境已登记";
+    const thread = dispatch.thread_id
+      ? `<small>任务线程：${escapeHtml(dispatch.thread_id)}</small>`
+      : `<small>等待 Codex 项目总管创建原生任务</small>`;
+    return `<section class="codex-dispatch" aria-label="Codex 项目执行状态">
+      <div class="codex-dispatch-head"><strong>Codex 项目执行</strong><span class="settings-status">${escapeHtml(statusLabels[dispatch.status] || dispatch.status || "状态读取中")}</span></div>
+      <p>${escapeHtml(project.label || "Codex 项目")} · ${escapeHtml(environment)}</p>
+      ${thread}
     </section>`;
   }
 
@@ -1215,6 +1265,7 @@
       : (ACTION_LABELS[task.action] || task.action);
     return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || task.title || "自定义任务")}</h3></div>
       <dl class="run-detail-meta"><div><dt>模型</dt><dd>${escapeHtml(assignment ? assignment.model : "等待选择")}</dd></div><div><dt>执行适配器</dt><dd>${escapeHtml(assignment ? assignment.executor : "尚未分配")}</dd></div><div><dt>运行轮次</dt><dd>${task.attempts ? `第 ${String(task.attempts).padStart(2, "0")} 次` : "尚未运行"}</dd></div><div><dt>节点类型</dt><dd>${escapeHtml(({ sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" })[inferFlowKind(task)] || "顺序")}</dd></div></dl>
+      ${renderCodexDispatch(task.codex_dispatch)}
       ${renderTaskStory(task, runtimeState)}
       ${events}
       ${runtimeState && runtimeState.runtime && needsAdapter ? '<p class="empty-trace">使用已保存的执行策略；模型、路由与 API 在设置中统一管理。</p>' : ""}
@@ -1344,6 +1395,8 @@
     let proposal = null;
     let lineComposerOpen = false;
     let settingsOpen = false;
+    let runtimePollTimer = null;
+    let runtimeRefreshInFlight = false;
     const byId = (id) => doc.getElementById(id);
 
     function activeModuleGraph(view) {
@@ -1426,6 +1479,20 @@
       preserveViewportPosition(doc.defaultView, render);
       announce("已读取本地运行库");
       return true;
+    }
+
+    function scheduleRuntimeRefresh() {
+      if (!runtimeClient || !doc.defaultView || typeof doc.defaultView.setTimeout !== "function") return;
+      if (runtimePollTimer) doc.defaultView.clearTimeout(runtimePollTimer);
+      runtimePollTimer = doc.defaultView.setTimeout(async () => {
+        runtimePollTimer = null;
+        if (!runtimeRefreshInFlight) {
+          runtimeRefreshInFlight = true;
+          try { await refreshRuntime(); } catch (_error) { /* keep the last known runtime state */ }
+          runtimeRefreshInFlight = false;
+        }
+        scheduleRuntimeRefresh();
+      }, 3000);
     }
 
     function render() {
@@ -2142,7 +2209,11 @@
     byId("domain-tabs").addEventListener("keydown", (event) => selectSiblingTab(event, ".domain-tab", (tab) => { state = selectDomain(state, tab.dataset.domainId); }));
     byId("line-tabs").addEventListener("keydown", (event) => selectSiblingTab(event, ".line-tab", (tab) => { state = selectBusinessLine(state, tab.dataset.lineId); }));
     render();
-    if (runtimeClient) refreshRuntime().catch(() => announce("未连接本地运行库，当前使用合成演示"));
+    if (runtimeClient) {
+      refreshRuntime()
+        .catch(() => announce("未连接本地运行库，当前使用合成演示"))
+        .finally(scheduleRuntimeRefresh);
+    }
   }
 
   return {
