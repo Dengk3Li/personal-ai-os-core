@@ -356,6 +356,22 @@ test("task cards show assignment state without exposing route or adapter identif
   assert.match(html, /已分配/);
 });
 
+test("workflow nodes show assignment state without exposing model or adapter identifiers", () => {
+  const html = workbench.renderWorkflowNode({
+    task_id: "task-002",
+    public_label: "任务 02",
+    title: "匿名工作节点",
+    status: "IN_PROGRESS",
+    stage: "执行阶段",
+    assignment: { model: "gpt-5.6-sol", executor: "codex-app-server" },
+    attempts: 1,
+  }, false);
+
+  assert.doesNotMatch(html, /gpt-5\.6-sol/);
+  assert.doesNotMatch(html, /codex-app-server/);
+  assert.match(html, /已分配/);
+});
+
 test("task detail explains why it ran, what it produced, and what follows", () => {
   const task = {
     task_id: "task-result",

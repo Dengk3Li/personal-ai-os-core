@@ -146,7 +146,7 @@ test("running assignments resolve a model-specific pet without changing task tru
     assignment: { model: "Reasoning model", executor: "Science adapter" },
   });
 
-  assert.deepEqual(pet, { pet_id: "reasoning-owl", glyph: "🦉", label: "Reasoning model 工作宠物" });
+  assert.deepEqual(pet, { pet_id: "reasoning-owl", glyph: "🦉", label: "推理工作宠物正在运行" });
   assert.equal(workbench.petForTask({ status: "REVIEW", assignment: { model: "Reasoning model" } }), null);
 });
 

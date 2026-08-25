@@ -1123,13 +1123,13 @@
         pet_id: "blue-whale-maid",
         kind: "image",
         src: `assets/pets/blue-whale-maid/blue-whale-maid-${activity}-${mood}.gif`,
-        label: `${model || "当前模型"} 的蓝鲸女仆正在工作`,
+        label: "蓝鲸女仆正在工作",
       };
     }
-    if (/Reasoning|Research|推理|研究/i.test(model)) return { pet_id: "reasoning-owl", glyph: "🦉", label: `${model} 工作宠物` };
-    if (/Writing|Long-context|写作|长上下文/i.test(model)) return { pet_id: "writing-whale", glyph: "🐋", label: `${model} 工作宠物` };
-    if (/Fast|快速/i.test(model)) return { pet_id: "fast-rabbit", glyph: "🐇", label: `${model} 工作宠物` };
-    return { pet_id: "general-fox", glyph: "🦊", label: `${model || "当前模型"} 工作宠物` };
+    if (/Reasoning|Research|推理|研究/i.test(model)) return { pet_id: "reasoning-owl", glyph: "🦉", label: "推理工作宠物正在运行" };
+    if (/Writing|Long-context|写作|长上下文/i.test(model)) return { pet_id: "writing-whale", glyph: "🐋", label: "写作工作宠物正在运行" };
+    if (/Fast|快速/i.test(model)) return { pet_id: "fast-rabbit", glyph: "🐇", label: "快速工作宠物正在运行" };
+    return { pet_id: "general-fox", glyph: "🦊", label: "工作宠物正在运行" };
   }
 
   function renderStageRail(line) {
@@ -1137,9 +1137,8 @@
   }
 
   function renderWorkflowNode(task, selected, petPreference = "model-animal") {
-    const assignment = task.assignment;
     const pet = petForTask(task, petPreference);
-    const route = assignment ? `${escapeHtml(assignment.model)}<span>${escapeHtml(assignment.executor)}</span>` : "等待分配<span>尚未选择执行器</span>";
+    const route = task.assignment ? "已分配" : "等待分配";
     const agent = task.agent_role ? `<span class="workflow-node-agent">${escapeHtml(task.agent_role)}</span>` : "";
     const flowLabels = { sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" };
     const flowKind = inferFlowKind(task);
