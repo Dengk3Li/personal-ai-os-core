@@ -25,11 +25,15 @@ class FakeHost:
     def __init__(self, creation=None, terminal=None):
         self.creation = creation
         self.terminal = terminal
+        self.create_calls = []
+        self.terminal_calls = []
 
-    def create_task(self, **_kwargs):
+    def create_task(self, **kwargs):
+        self.create_calls.append(kwargs)
         return self.creation
 
-    def read_terminal(self, **_kwargs):
+    def read_terminal(self, **kwargs):
+        self.terminal_calls.append(kwargs)
         return self.terminal
 
 
@@ -67,6 +71,20 @@ class CodexWorkerTests(unittest.TestCase):
         self.assertEqual("THREAD_PROJECT_UNVERIFIED", result["reason"])
         self.assertEqual([], adapter.bound)
 
+    def test_missing_project_id_is_rejected_before_task_creation(self):
+        dispatch = pending_dispatch()
+        dispatch["project"].pop("project_id")
+        adapter = FakeAdapter(dispatch)
+        host = FakeHost(creation={"thread_id": "must-not-be-created"})
+
+        result = run_once(adapter, host, worker_id="worker-1")
+
+        self.assertEqual(
+            {"status": "BLOCKED", "reason": "PROJECT_ID_REQUIRED"}, result
+        )
+        self.assertEqual([], host.create_calls)
+        self.assertEqual([], adapter.bound)
+
     def test_verified_thread_is_bound_to_the_claimed_project(self):
         adapter = FakeAdapter(pending_dispatch())
         host = FakeHost(
@@ -86,6 +104,18 @@ class CodexWorkerTests(unittest.TestCase):
         result = run_once(adapter, host, worker_id="worker-1")
         self.assertEqual("RUNNING", result["status"])
         self.assertEqual("thread-1", adapter.bound[0][1]["thread_id"])
+        self.assertEqual(
+            {
+                "title": "LongTask · task-1 · spatch-1",
+                "task_id": "task-1",
+                "project_id": "project-1",
+                "project_path": "/tmp/project-1",
+                "environment": "worktree",
+                "model": "model-a",
+                "prompt": "do bounded work",
+            },
+            host.create_calls[0],
+        )
 
     def test_non_terminal_host_result_stays_running(self):
         adapter = FakeAdapter()
@@ -93,6 +123,46 @@ class CodexWorkerTests(unittest.TestCase):
         result = finish_once(adapter, host, "dispatch-1")
         self.assertEqual({"status": "RUNNING", "reason": "TERMINAL_RECEIPT_PENDING"}, result)
         self.assertEqual([], adapter.completed)
+
+    def test_empty_dispatch_id_is_rejected_without_reading_host(self):
+        adapter = FakeAdapter()
+        host = FakeHost(terminal={"status": "completed"})
+
+        result = finish_once(adapter, host, "")
+
+        self.assertEqual(
+            {"status": "BLOCKED", "reason": "DISPATCH_ID_REQUIRED"}, result
+        )
+        self.assertEqual([], host.terminal_calls)
+
+    def test_rejected_completion_does_not_report_review(self):
+        class RejectingAdapter(FakeAdapter):
+            def complete(self, dispatch_id, **payload):
+                self.completed.append((dispatch_id, payload))
+                return {
+                    "ok": False,
+                    "status": "BLOCKED",
+                    "reason": "REVIEW_TRANSITION_FAILED",
+                }
+
+        adapter = RejectingAdapter()
+        host = FakeHost(
+            terminal={
+                "status": "completed",
+                "output_text": "bounded result",
+                "receipt": {
+                    "status": "completed",
+                    "verified": True,
+                    "needs_user_input": False,
+                    "human_gate": False,
+                },
+            }
+        )
+
+        result = finish_once(adapter, host, "dispatch-1")
+
+        self.assertEqual("BLOCKED", result["status"])
+        self.assertEqual("REVIEW_TRANSITION_FAILED", result["reason"])
 
     def test_verified_terminal_receipt_can_complete(self):
         adapter = FakeAdapter()

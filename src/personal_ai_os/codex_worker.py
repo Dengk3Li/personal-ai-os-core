@@ -26,6 +26,37 @@ def _same_path(left: Any, right: Any) -> bool:
         return False
 
 
+def _validate_dispatch(dispatch: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+    """Validate queue data before asking Codex to create a task.
+
+    A project-native task cannot be created safely from a path alone.  The
+    desktop bridge must receive the durable project id, path, and execution
+    environment as separate fields so a missing id cannot silently become a
+    projectless thread.
+    """
+    dispatch_id = _text(dispatch.get("dispatch_id"))
+    task_id = _text(dispatch.get("task_id"))
+    project = dispatch.get("project")
+    if not dispatch_id or not task_id or not isinstance(project, dict):
+        return False, "DISPATCH_INVALID", {}
+    project_id = _text(project.get("project_id"))
+    project_path = _text(project.get("path"))
+    environment = _text(project.get("environment"))
+    if not project_id:
+        return False, "PROJECT_ID_REQUIRED", {}
+    if not project_path:
+        return False, "PROJECT_PATH_REQUIRED", {}
+    if environment not in {"local", "worktree"}:
+        return False, "PROJECT_ENVIRONMENT_INVALID", {}
+    return True, "", {
+        "dispatch_id": dispatch_id,
+        "task_id": task_id,
+        "project_id": project_id,
+        "project_path": project_path,
+        "environment": environment,
+    }
+
+
 def _verify_thread(dispatch: dict[str, Any], created: Any) -> tuple[bool, str, dict[str, Any]]:
     if not isinstance(created, dict):
         return False, "THREAD_CREATION_INVALID", {}
@@ -69,10 +100,19 @@ def run_once(adapter: Any, host: Any, *, worker_id: str) -> dict[str, Any]:
         return {"status": "IDLE", "reason": "QUEUE_EMPTY"}
     if not isinstance(dispatch, dict):
         return {"status": "BLOCKED", "reason": "DISPATCH_INVALID"}
+    valid, reason, metadata = _validate_dispatch(dispatch)
+    if not valid:
+        return {"status": "BLOCKED", "reason": reason}
     try:
         created = host.create_task(
-            task_id=_text(dispatch.get("task_id")),
-            project=dict(dispatch.get("project") or {}),
+            title=(
+                f"LongTask · {metadata['task_id']} · "
+                f"{metadata['dispatch_id'][-8:]}"
+            ),
+            task_id=metadata["task_id"],
+            project_id=metadata["project_id"],
+            project_path=metadata["project_path"],
+            environment=metadata["environment"],
             model=_text(dispatch.get("model")),
             prompt=_text(dispatch.get("prompt")),
         )
@@ -82,17 +122,28 @@ def run_once(adapter: Any, host: Any, *, worker_id: str) -> dict[str, Any]:
     if not valid:
         return {"status": "BLOCKED", "reason": reason}
     try:
-        result = adapter.bind_thread(dispatch["dispatch_id"], **binding)
+        result = adapter.bind_thread(metadata["dispatch_id"], **binding)
     except Exception:
         return {"status": "BLOCKED", "reason": "THREAD_BIND_FAILED"}
-    return {"status": "RUNNING", "dispatch_id": dispatch["dispatch_id"], "result": result}
+    if isinstance(result, dict) and (
+        result.get("ok") is False or _text(result.get("status")) == "BLOCKED"
+    ):
+        return {
+            "status": "BLOCKED",
+            "reason": _text(result.get("reason")) or "THREAD_BIND_REJECTED",
+            "result": result,
+        }
+    return {"status": "RUNNING", "dispatch_id": metadata["dispatch_id"], "result": result}
 
 
 def finish_once(adapter: Any, host: Any, dispatch_id: str) -> dict[str, Any]:
     """Complete one running dispatch only after a verified terminal receipt."""
 
+    dispatch_id = _text(dispatch_id)
+    if not dispatch_id:
+        return {"status": "BLOCKED", "reason": "DISPATCH_ID_REQUIRED"}
     try:
-        terminal = host.read_terminal(dispatch_id=_text(dispatch_id))
+        terminal = host.read_terminal(dispatch_id=dispatch_id)
     except Exception:
         return {"status": "RUNNING", "reason": "TERMINAL_RECEIPT_PENDING"}
     if not isinstance(terminal, dict) or _text(terminal.get("status")) != "completed":
@@ -109,11 +160,19 @@ def finish_once(adapter: Any, host: Any, dispatch_id: str) -> dict[str, Any]:
         return {"status": "RUNNING", "reason": "TERMINAL_RECEIPT_UNVERIFIED"}
     try:
         result = adapter.complete(
-            _text(dispatch_id),
+            dispatch_id,
             output_text=_text(terminal["output_text"]),
             completion_receipt=receipt,
         )
     except Exception:
         return {"status": "BLOCKED", "reason": "TERMINAL_COMPLETE_FAILED"}
-    return {"status": "REVIEW", "dispatch_id": _text(dispatch_id), "result": result}
-
+    if isinstance(result, dict) and (
+        result.get("ok") is False or _text(result.get("status")) == "BLOCKED"
+    ):
+        return {
+            "status": "BLOCKED",
+            "reason": _text(result.get("reason")) or "TERMINAL_COMPLETE_REJECTED",
+            "dispatch_id": dispatch_id,
+            "result": result,
+        }
+    return {"status": "REVIEW", "dispatch_id": dispatch_id, "result": result}
