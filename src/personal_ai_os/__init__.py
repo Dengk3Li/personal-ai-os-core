@@ -42,6 +42,7 @@ from .single_owner_progression import (
 )
 from .codex_adapter import CodexAppServerAdapter
 from .codex_project import CodexProjectAdapter
+from .codex_worker import finish_once as finish_codex_dispatch, run_once as run_codex_dispatch_once
 from .secretary import build_context_pack, build_secretary_brief
 from .task_links import module_work_projection, validate_task_module_link
 from .truth import compile_truth
@@ -68,6 +69,7 @@ __all__ = [
     "compile_workflow_structure",
     "CodexAppServerAdapter",
     "CodexProjectAdapter",
+    "finish_codex_dispatch",
     "ContractViolation",
     "acknowledge_recovery",
     "authorize_step",
@@ -98,6 +100,7 @@ __all__ = [
     "request_human_stop",
     "resume_after_human_stop",
     "RuntimeStore",
+    "run_codex_dispatch_once",
     "ResearchReportAcceptanceError",
     "select_ready_task",
     "select_execution_route",
