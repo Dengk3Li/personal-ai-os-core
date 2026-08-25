@@ -211,6 +211,8 @@ This browser binding is intentionally local and process-scoped. Codex reuses the
 
 The private Settings panel can bind each workline to a saved Codex project path. Starting a task writes one durable project-dispatch request instead of calling `thread/start` with only a working directory. A Codex desktop manager resolves that path to the app's real `projectId`, creates the task inside that project, records the returned thread and host IDs, and sends the final result back to the LongTask run. The task then moves to `REVIEW` through the normal Broker boundary.
 
+The project worker passes an explicit `project_id`, `project_path`, `environment`, `model`, and `prompt` to the desktop bridge, with the title `LongTask · <task_id> · <dispatch_id后8位>`. A missing project ID, invalid path/environment, or unverified thread-to-project assignment stops the dispatch before it is bound; a filesystem path alone never substitutes for project ownership. The worker accepts a result only when a verified terminal receipt contains nonempty final output and confirms that no user input or Human Gate is waiting. `REVIEW` remains a human acceptance boundary: the worker does not auto-accept results, resolve gates, merge branches, or update `main`.
+
 App-server `cwd` selects a filesystem location but does not assign a Codex desktop project. Project-native dispatch therefore fails closed behind a local queue when no desktop manager is available. Claims have a bounded lease, completion has one owner, and public-safe projections never expose project paths or dispatch payloads.
 
 ## Operating model
