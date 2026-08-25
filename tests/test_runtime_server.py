@@ -497,6 +497,65 @@ class RuntimeServerTests(unittest.TestCase):
         )
         self.assertEqual("client-alpha-model", app.resolve_model("model-01"))
 
+    def test_public_safe_projection_drops_codex_ownership_and_review_metadata(self):
+        presentation = validate_presentation(
+            {
+                "schema_version": "personal-ai-os.presentation/v1",
+                "workflows": {"science": {"name": "科研工作线"}},
+                "tasks": {"science:hypothesis": {"title": "提出可检验假设"}},
+            }
+        )
+        private_dispatch = {
+            "task_id": "science:hypothesis",
+            "status": "SUCCEEDED",
+            "dispatch_id": "PRIVATE_DISPATCH_SENTINEL",
+            "project": {
+                "label": "PRIVATE_PROJECT_LABEL_SENTINEL",
+                "project_id": "PRIVATE_PROJECT_ID_SENTINEL",
+                "path": "/private/PRIVATE_PROJECT_PATH_SENTINEL",
+                "environment": "worktree",
+            },
+            "thread_id": "PRIVATE_THREAD_ID_SENTINEL",
+            "project_id": "PRIVATE_PROJECT_ID_SENTINEL",
+            "host_id": "PRIVATE_HOST_ID_SENTINEL",
+            "thread_verification": {
+                "source": "thread-project-assignments",
+                "verified": True,
+                "project_id": "PRIVATE_PROJECT_ID_SENTINEL",
+                "project_path": "/private/PRIVATE_PROJECT_PATH_SENTINEL",
+                "environment": "worktree",
+            },
+            "completion_receipt": {
+                "status": "completed",
+                "verified": True,
+                "needs_user_input": True,
+                "human_gate": False,
+            },
+        }
+
+        public_state = runtime_workbench_state(
+            self.store,
+            presentation=presentation,
+            codex_dispatches=[private_dispatch],
+        )
+        serialized = json.dumps(public_state, ensure_ascii=False)
+
+        self.assertTrue(public_state["tasks"])
+        self.assertTrue(
+            all("codex_dispatch" not in task for task in public_state["tasks"])
+        )
+        for sentinel in (
+            "PRIVATE_DISPATCH_SENTINEL",
+            "PRIVATE_PROJECT_LABEL_SENTINEL",
+            "PRIVATE_PROJECT_ID_SENTINEL",
+            "PRIVATE_PROJECT_PATH_SENTINEL",
+            "PRIVATE_THREAD_ID_SENTINEL",
+            "PRIVATE_HOST_ID_SENTINEL",
+            "PROJECT_THREAD_OWNERSHIP_UNVERIFIED",
+            "USER_INPUT_REQUIRED",
+        ):
+            self.assertNotIn(sentinel, serialized)
+
     def test_routes_only_projection_reports_automatic_advance_readiness(self):
         app = RuntimeApplication(
             store=self.store,
