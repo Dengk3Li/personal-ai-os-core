@@ -42,6 +42,34 @@ def _stable_error_code(value: Any, default: str) -> str:
     return default
 
 
+def _required_memory_scope(task: dict[str, Any]) -> dict[str, Any] | None:
+    context = task.get("context") or {}
+    policy = context.get("memory_policy")
+    if policy is None:
+        return None
+    if policy != "require_read":
+        return {"error": "MEMORY_POLICY_INVALID"}
+    subject = context.get("memory_subject")
+    domain_id = str(context.get("memory_domain_id") or "").strip()
+    if (
+        not isinstance(subject, dict)
+        or str(subject.get("kind") or "").strip() not in {"person", "team"}
+        or not str(subject.get("id") or "").strip()
+        or not domain_id
+    ):
+        return {"error": "MEMORY_SCOPE_REQUIRED"}
+    if domain_id != str(task.get("domain_id") or "").strip():
+        return {"error": "MEMORY_SCOPE_MISMATCH"}
+    return {
+        "policy": "require_read",
+        "subject": {
+            "kind": str(subject["kind"]).strip(),
+            "id": str(subject["id"]).strip(),
+        },
+        "domain_id": domain_id,
+    }
+
+
 def _goal_policy(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         raise ValueError("continuation_policy must be an object")
@@ -1700,6 +1728,13 @@ class ExecutionBroker:
         task = self.store.get_task(task_id)
         if task["status"] != "QUEUED":
             return {"ok": False, "reason": "TASK_NOT_QUEUED", "status": task["status"]}
+        required_memory = _required_memory_scope(task)
+        if required_memory and required_memory.get("error"):
+            return {
+                "ok": False,
+                "status": "QUEUED",
+                "reason": required_memory["error"],
+            }
         dependency_result_refs = set()
         for dependency in task["depends_on"]:
             dependency_task = self.store.get_task(dependency)
@@ -1791,19 +1826,29 @@ class ExecutionBroker:
                 "status": "QUEUED",
                 "reason": "WORK_PROTOCOL_MEMORY_SCOPE_MISMATCH",
             }
-        practice_subject = protocol_practice_subject or task_practice_subject
+        practice_subject = (
+            required_memory["subject"]
+            if required_memory is not None
+            else protocol_practice_subject or task_practice_subject
+        )
+        practice_domain_id = (
+            required_memory["domain_id"]
+            if required_memory is not None
+            else task["domain_id"]
+        )
         if practice_subject is not None:
             if not isinstance(practice_subject, dict):
                 return {"ok": False, "reason": "PRACTICE_SCOPE_INVALID"}
             try:
                 operating_practices = self.store.operating_practices(
                     subject=practice_subject,
-                    domain_id=task["domain_id"],
+                    domain_id=practice_domain_id,
                 )
             except ValueError:
                 return {"ok": False, "reason": "PRACTICE_SCOPE_INVALID"}
             profile["operating_practices"] = operating_practices["rules"]
             profile["practice_evidence_refs"] = operating_practices["evidence_refs"]
+            profile["approved_practice_refs"] = operating_practices["candidate_ids"]
         upstream_artifacts = [
             artifact
             for artifact in self.store.snapshot()["artifacts"]
@@ -1904,13 +1949,28 @@ class ExecutionBroker:
                     event_type="RUN_SUCCEEDED",
                     payload={"artifact_id": artifact["artifact_id"]},
                 )
+                memory_review_payload = None
                 if work_protocol and work_protocol.get("learning_review") == "candidate":
+                    memory_review_payload = {
+                        "protocol_id": work_protocol["protocol_id"],
+                    }
+                if required_memory is not None:
+                    memory_review_payload = {
+                        **(memory_review_payload or {}),
+                        "memory_policy": required_memory["policy"],
+                        "memory_subject": required_memory["subject"],
+                        "memory_domain_id": required_memory["domain_id"],
+                        "approved_practice_refs": profile.get(
+                            "approved_practice_refs", []
+                        ),
+                    }
+                if memory_review_payload is not None:
                     self.store._record_event(
                         connection,
                         task_id=task_id,
                         run_id=run["run_id"],
                         event_type="MEMORY_REVIEW_REQUESTED",
-                        payload={"protocol_id": work_protocol["protocol_id"]},
+                        payload=memory_review_payload,
                     )
             review = self.store.transition(
                 task_id,

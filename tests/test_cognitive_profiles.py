@@ -247,6 +247,79 @@ class CognitiveProfileTests(unittest.TestCase):
             [event["event_type"] for event in snapshot["events"]],
         )
 
+    def test_required_memory_policy_fails_closed_before_run_claim_without_scope(self):
+        self.store.create_workflow({
+            "workflow_id": "writing",
+            "name": "写作线",
+            "caption": "受控记忆读取",
+            "layout": "pipeline",
+            "goal": "形成可复核文本",
+            "domain_id": "writing",
+        })
+        self.store.create_task({
+            "task_id": "writing:missing-memory-scope",
+            "workflow_id": "writing",
+            "title": "形成初稿",
+            "acceptance": "运行前必须读取已确认工作方式",
+            "context": {"memory_policy": "require_read"},
+        })
+        adapter = CaptureAdapter()
+
+        result = ExecutionBroker(
+            self.store, {adapter.adapter_id: adapter}
+        ).dispatch(
+            "writing:missing-memory-scope",
+            adapter_id=adapter.adapter_id,
+            model="model-a",
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("MEMORY_SCOPE_REQUIRED", result["reason"])
+        self.assertEqual("QUEUED", self.store.get_task("writing:missing-memory-scope")["status"])
+        self.assertEqual([], self.store.snapshot()["runs"])
+        self.assertEqual([], adapter.context_packs)
+
+    def test_required_memory_policy_exposes_approved_refs_and_only_requests_review(self):
+        self.store.create_workflow({
+            "workflow_id": "writing",
+            "name": "写作线",
+            "caption": "受控记忆读取",
+            "layout": "pipeline",
+            "goal": "形成可复核文本",
+            "domain_id": "writing",
+        })
+        self.store.create_task({
+            "task_id": "writing:memory-aware",
+            "workflow_id": "writing",
+            "title": "形成初稿",
+            "acceptance": "运行前必须读取已确认工作方式",
+            "context": {
+                "memory_policy": "require_read",
+                "memory_subject": {"kind": "person", "id": "writer-a"},
+                "memory_domain_id": "writing",
+            },
+        })
+        self.store.create_memory_candidate(self.candidate())
+        self.store.review_memory_candidate("habit-1", decision="APPROVED", reviewed_by="owner")
+        adapter = CaptureAdapter()
+
+        result = ExecutionBroker(
+            self.store, {adapter.adapter_id: adapter}
+        ).dispatch(
+            "writing:memory-aware", adapter_id=adapter.adapter_id, model="model-a"
+        )
+
+        self.assertTrue(result["ok"])
+        context_pack = adapter.context_packs[0]
+        self.assertEqual(["habit-1"], context_pack["approved_practice_refs"])
+        self.assertEqual(["先列出证据，再形成判断。"], context_pack["operating_practices"])
+        events = self.store.snapshot()["events"]
+        memory_events = [item for item in events if item["event_type"] == "MEMORY_REVIEW_REQUESTED"]
+        self.assertEqual(1, len(memory_events))
+        self.assertEqual("require_read", memory_events[0]["payload"]["memory_policy"])
+        self.assertEqual(["habit-1"], memory_events[0]["payload"]["approved_practice_refs"])
+        self.assertEqual("APPROVED", self.store.get_memory_candidate("habit-1")["status"])
+
 
 if __name__ == "__main__":
     unittest.main()

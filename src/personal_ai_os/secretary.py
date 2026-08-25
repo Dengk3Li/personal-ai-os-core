@@ -52,11 +52,13 @@ def build_context_pack(
     model_context = model_context_for_task(task)
     operating_practices = list(profile.get("operating_practices") or [])
     practice_evidence_refs = list(profile.get("practice_evidence_refs") or [])
+    approved_practice_refs = list(profile.get("approved_practice_refs") or [])
     bounded_context = json.dumps(
         {
             "model_context": model_context,
             "operating_practices": operating_practices,
             "practice_evidence_refs": practice_evidence_refs,
+            "approved_practice_refs": approved_practice_refs,
             "work_protocol": work_protocol or {},
         },
         ensure_ascii=False,
@@ -83,6 +85,7 @@ def build_context_pack(
         "instruction_refs": list(profile.get("instruction_refs") or []),
         "operating_practices": operating_practices,
         "practice_evidence_refs": practice_evidence_refs,
+        "approved_practice_refs": approved_practice_refs,
         "work_protocol": dict(work_protocol or {}),
     }
 

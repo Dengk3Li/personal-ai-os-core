@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.15 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.15.md)
+[中文说明](README.zh-CN.md) · [v0.18 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.18.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -214,6 +214,12 @@ The private Settings panel can bind each workline to a saved Codex project path.
 The project worker passes an explicit `project_id`, `project_path`, `environment`, `model`, and `prompt` to the desktop bridge, with the title `LongTask · <task_id> · <dispatch_id后8位>`. A missing project ID, invalid path/environment, or unverified thread-to-project assignment stops the dispatch before it is bound; a filesystem path alone never substitutes for project ownership. The worker accepts a result only when a verified terminal receipt contains nonempty final output and confirms that no user input or Human Gate is waiting. `REVIEW` remains a human acceptance boundary: the worker does not auto-accept results, resolve gates, merge branches, or update `main`.
 
 App-server `cwd` selects a filesystem location but does not assign a Codex desktop project. Project-native dispatch therefore fails closed behind a local queue when no desktop manager is available. Claims have a bounded lease, completion has one owner, and public-safe projections never expose project paths or dispatch payloads.
+
+## v0.18 required memory read and review-only learning
+
+A task may declare `context.memory_policy: "require_read"` when its execution must use approved working practices. The task must provide an explicit `memory_subject` and `memory_domain_id` matching the task domain. Missing or mismatched scope stops the Broker before it claims a run, leaving the task `QUEUED`.
+
+The model-bound context carries bounded `approved_practice_refs`, working-practice rules, and evidence references. Only `APPROVED` candidates matching both subject and domain are loaded. A successful run records `MEMORY_REVIEW_REQUESTED` with the applied scope and approved references; it never creates, approves, or promotes a memory candidate automatically. Tasks without this policy retain the existing compatibility path.
 
 ## Operating model
 
