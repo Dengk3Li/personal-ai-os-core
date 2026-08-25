@@ -472,6 +472,100 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertNotIn("example.invalid", serialized)
         self.assertNotIn("api_key", serialized)
 
+    def test_private_browser_binds_workflow_to_a_codex_project(self):
+        project = Path(self.temp.name) / "science-project"
+        project.mkdir()
+
+        status, configured = self.request(
+            "/api/settings/execution",
+            {
+                "mode": "fixed",
+                "adapter": {
+                    "kind": "codex-project",
+                    "model": "gpt-5.6-sol",
+                    "projects": [
+                        {
+                            "project_key": "science-workspace",
+                            "label": "科研项目",
+                            "path": str(project),
+                            "workflow_ids": ["science"],
+                            "environment": "worktree",
+                        }
+                    ],
+                },
+            },
+        )
+
+        self.assertEqual(200, status)
+        self.assertTrue(configured["execution"]["task_dispatch_ready"])
+        self.assertEqual(
+            [
+                {
+                    "project_key": "science-workspace",
+                    "label": "科研项目",
+                    "path": str(project.resolve()),
+                    "workflow_ids": ["science"],
+                    "domain_ids": [],
+                    "environment": "worktree",
+                }
+            ],
+            configured["execution_settings"]["codex_projects"],
+        )
+
+    def test_codex_project_bridge_claims_binds_and_completes_a_browser_dispatch(self):
+        project = Path(self.temp.name) / "science-project"
+        project.mkdir()
+        self.request(
+            "/api/settings/execution",
+            {
+                "mode": "fixed",
+                "adapter": {
+                    "kind": "codex-project",
+                    "model": "gpt-5.6-sol",
+                    "projects": [
+                        {
+                            "project_key": "science-workspace",
+                            "label": "科研项目",
+                            "path": str(project),
+                            "workflow_ids": ["science"],
+                            "environment": "worktree",
+                        }
+                    ],
+                },
+            },
+        )
+
+        advanced_status, advanced = self.request(
+            "/api/advance", {"workflow_id": "science", "max_steps": 1}
+        )
+        pending_status, pending = self.request("/api/codex-project/dispatches")
+        claim_status, claimed = self.request(
+            "/api/codex-project/claim", {"worker_id": "manager-thread"}
+        )
+        dispatch_id = claimed["dispatch_id"]
+        bind_status, bound = self.request(
+            f"/api/codex-project/dispatches/{dispatch_id}/bind",
+            {"thread_id": "codex-thread-1", "project_id": "codex-project-1", "host_id": "local"},
+        )
+        complete_status, completed = self.request(
+            f"/api/codex-project/dispatches/{dispatch_id}/complete",
+            {"output_text": "项目线程已完成任务。", "usage": {"input_tokens": 10}},
+        )
+
+        self.assertEqual(200, advanced_status)
+        self.assertEqual("RECOVERY_REQUIRED", advanced["stop_reason"])
+        self.assertEqual(200, pending_status)
+        self.assertEqual(1, len(pending["dispatches"]))
+        self.assertEqual(200, claim_status)
+        self.assertEqual("CLAIMED", claimed["status"])
+        self.assertEqual("科研项目", claimed["project"]["label"])
+        self.assertEqual(200, bind_status)
+        self.assertEqual("RUNNING", bound["status"])
+        self.assertEqual(200, complete_status)
+        self.assertTrue(completed["ok"])
+        self.assertEqual("REVIEW", completed["status"])
+        self.assertEqual("REVIEW", self.store.get_task("science:hypothesis")["status"])
+
     def test_live_broker_run_is_not_misreported_as_restart_recovery(self):
         self.store.create_goal(
             {

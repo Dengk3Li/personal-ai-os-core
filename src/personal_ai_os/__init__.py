@@ -19,6 +19,7 @@ from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .route_config import load_runtime_routes
 from .codex_adapter import CodexAppServerAdapter
+from .codex_project import CodexProjectAdapter
 from .secretary import build_context_pack, build_secretary_brief
 from .task_links import module_work_projection, validate_task_module_link
 from .truth import compile_truth
@@ -42,6 +43,7 @@ __all__ = [
     "compile_operating_practices",
     "compile_workflow_structure",
     "CodexAppServerAdapter",
+    "CodexProjectAdapter",
     "evaluate_git_closure",
     "evaluate_workflow_structure",
     "ExecutionBroker",

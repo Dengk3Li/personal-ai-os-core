@@ -312,12 +312,82 @@ test("private runtime settings bind Codex API and routes only inside settings", 
     cognitiveLearning: { proposed: 0, approved: 0 },
   });
 
-  assert.match(html, /data-bind-codex/);
+  assert.match(html, /data-bind-codex-project/);
   assert.match(html, /data-bind-openai/);
   assert.match(html, /type="password"/);
   assert.match(html, /autocomplete="new-password"/);
   assert.match(html, /data-save-routes/);
   assert.match(html, /research-deep/);
+});
+
+test("private settings bind the active workline to a native Codex project", () => {
+  const html = workbench.renderSettings({
+    runtime: true,
+    activeLineId: "science",
+    activeDomainId: "research",
+    businessLines: [
+      { line_id: "science", domain_id: "research", name: "科研主线" },
+    ],
+    execution: { advance_route_mode: "fixed", task_dispatch_ready: true },
+    adapters: [
+      { adapter_id: "codex-project", available: true, protocol: "codex-project-bridge" },
+    ],
+    executionSettings: {
+      writable: true,
+      mode: "fixed",
+      default_adapter_id: "codex-project",
+      credential_source: "codex-session",
+      routes: [],
+      codex_projects: [
+        {
+          project_key: "science-workspace",
+          label: "AI Workspace",
+          path: "/workspace/ai-os",
+          workflow_ids: ["science"],
+          domain_ids: [],
+          environment: "worktree",
+        },
+      ],
+    },
+    cognitiveLearning: { proposed: 0, approved: 0 },
+  });
+
+  assert.match(html, /Codex 项目/);
+  assert.match(html, /AI Workspace/);
+  assert.match(html, /科研主线/);
+  assert.match(html, /\/workspace\/ai-os/);
+  assert.match(html, /id="codex-project-path"/);
+  assert.match(html, /data-bind-codex-project/);
+  assert.doesNotMatch(html, /自动绑定 Codex/);
+});
+
+test("Codex project binding replaces only the active workline mapping", () => {
+  const payload = workbench.codexProjectSettingsPayload({
+    activeLineId: "science",
+    executionSettings: {
+      codex_projects: [
+        { project_key: "science-old", label: "旧科研项目", path: "/old", workflow_ids: ["science"], domain_ids: [], environment: "local" },
+        { project_key: "writing", label: "写作项目", path: "/writing", workflow_ids: ["writing"], domain_ids: [], environment: "worktree" },
+      ],
+    },
+  }, {
+    label: "AI Workspace",
+    path: "/workspace/ai-os",
+    environment: "worktree",
+    model: "gpt-5.6-sol",
+  });
+
+  assert.equal(payload.adapter.kind, "codex-project");
+  assert.equal(payload.adapter.projects.length, 2);
+  assert.deepEqual(payload.adapter.projects.find((item) => item.workflow_ids.includes("science")), {
+    project_key: "science-old",
+    label: "AI Workspace",
+    path: "/workspace/ai-os",
+    workflow_ids: ["science"],
+    domain_ids: [],
+    environment: "worktree",
+  });
+  assert.equal(payload.adapter.projects.find((item) => item.workflow_ids.includes("writing")).label, "写作项目");
 });
 
 test("low-frequency controls are reachable only from the top-right settings surface", () => {

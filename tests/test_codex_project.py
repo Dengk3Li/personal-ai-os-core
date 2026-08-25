@@ -1,0 +1,139 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from personal_ai_os.codex_project import CodexProjectAdapter
+from personal_ai_os.presets import get_workflow_preset
+from personal_ai_os.runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
+
+
+class CodexProjectAdapterTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.project = self.root / "workspace"
+        self.project.mkdir()
+        self.store = RuntimeStore(self.root / "runtime.db")
+        install_workflow_preset(self.store, "science")
+        self.adapter = CodexProjectAdapter(
+            self.store,
+            project_bindings=[
+                {
+                    "project_key": "science-workspace",
+                    "label": "科研项目",
+                    "path": str(self.project),
+                    "workflow_ids": ["science"],
+                    "environment": "worktree",
+                }
+            ],
+        )
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_dispatch_creates_one_persistent_project_request_instead_of_a_projectless_thread(self):
+        broker = ExecutionBroker(
+            self.store,
+            {self.adapter.adapter_id: self.adapter},
+        )
+
+        result = broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual("IN_PROGRESS", result["status"])
+        pending = self.adapter.pending_dispatches()
+        self.assertEqual(1, len(pending))
+        self.assertEqual("science:hypothesis", pending[0]["task_id"])
+        self.assertEqual("科研项目", pending[0]["project"]["label"])
+        self.assertEqual(str(self.project.resolve()), pending[0]["project"]["path"])
+        self.assertEqual("worktree", pending[0]["project"]["environment"])
+        self.assertIn("澄清科学问题并提出可检验假设", pending[0]["prompt"])
+        snapshot = self.store.snapshot()
+        self.assertEqual("RUNNING", snapshot["runs"][0]["status"])
+        self.assertEqual(pending[0]["dispatch_id"], snapshot["runs"][0]["external_run_id"])
+
+    def test_claim_bind_and_complete_returns_the_project_thread_result_to_review(self):
+        broker = ExecutionBroker(
+            self.store,
+            {self.adapter.adapter_id: self.adapter},
+        )
+        broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+
+        claimed = self.adapter.claim_next(worker_id="manager-thread")
+        self.assertEqual("CLAIMED", claimed["status"])
+        self.assertIsNone(self.adapter.claim_next(worker_id="other-manager"))
+        bound = self.adapter.bind_thread(
+            claimed["dispatch_id"],
+            thread_id="codex-thread-1",
+            project_id="codex-project-1",
+            host_id="local",
+        )
+        self.assertEqual("RUNNING", bound["status"])
+        self.assertEqual("local", bound["host_id"])
+        completed = self.adapter.complete(
+            claimed["dispatch_id"],
+            output_text="已形成可核对的科学假设。",
+            usage={"input_tokens": 120, "output_tokens": 30},
+        )
+
+        self.assertTrue(completed["ok"])
+        self.assertEqual("REVIEW", completed["status"])
+        self.assertEqual("REVIEW", self.store.get_task("science:hypothesis")["status"])
+        snapshot = self.store.snapshot()
+        self.assertEqual("SUCCEEDED", snapshot["runs"][0]["status"])
+        self.assertEqual(1, len(snapshot["artifacts"]))
+        self.assertEqual("已形成可核对的科学假设。", snapshot["artifacts"][0]["content"])
+        self.assertEqual("SUCCEEDED", self.adapter.get_dispatch(claimed["dispatch_id"])["status"])
+
+    def test_expired_claim_is_recovered_without_creating_a_second_dispatch(self):
+        broker = ExecutionBroker(self.store, {self.adapter.adapter_id: self.adapter})
+        broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+        first = self.adapter.claim_next(worker_id="lost-manager")
+        with self.store._connect() as connection:
+            connection.execute(
+                "UPDATE codex_project_dispatches SET lease_until = ? WHERE dispatch_id = ?",
+                ("2000-01-01T00:00:00+00:00", first["dispatch_id"]),
+            )
+
+        recovered = self.adapter.claim_next(worker_id="replacement-manager")
+
+        self.assertEqual(first["dispatch_id"], recovered["dispatch_id"])
+        self.assertEqual("replacement-manager", recovered["worker_id"])
+        self.assertEqual(1, len(self.adapter.active_dispatches()))
+
+    def test_completion_is_single_owner_and_cannot_duplicate_the_artifact(self):
+        broker = ExecutionBroker(self.store, {self.adapter.adapter_id: self.adapter})
+        broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+        claimed = self.adapter.claim_next(worker_id="manager-thread")
+        self.adapter.bind_thread(
+            claimed["dispatch_id"],
+            thread_id="codex-thread-1",
+            project_id="codex-project-1",
+            host_id="local",
+        )
+        self.adapter.complete(claimed["dispatch_id"], output_text="唯一结果")
+
+        with self.assertRaisesRegex(ValueError, "not running"):
+            self.adapter.complete(claimed["dispatch_id"], output_text="重复结果")
+
+        self.assertEqual(1, len(self.store.snapshot()["artifacts"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

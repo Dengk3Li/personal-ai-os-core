@@ -1190,6 +1190,9 @@
     const execution = runtimeState.execution || {};
     const settings = runtimeState.executionSettings || {};
     const routes = settings.routes || [];
+    const codexProjects = settings.codex_projects || [];
+    const activeLine = (runtimeState.businessLines || []).find((line) => line.line_id === runtimeState.activeLineId);
+    const activeProject = codexProjects.find((project) => (project.workflow_ids || []).includes(runtimeState.activeLineId)) || null;
     const adapters = runtimeState.adapters || [];
     const learning = runtimeState.cognitiveLearning || { proposed: 0, approved: 0 };
     const mode = execution.advance_route_mode === "automatic" ? "自动路由" : "固定执行策略";
@@ -1199,6 +1202,9 @@
     const adapterRows = adapters.length
       ? adapters.map((adapter) => `<li><div><strong>${escapeHtml(adapter.adapter_id)}</strong><span>${escapeHtml(adapter.protocol || "执行协议")}</span></div><b class="settings-status">${adapter.available ? "可用" : "未连接"}</b></li>`).join("")
       : '<li><div><strong>尚未连接执行适配器</strong><span>执行端点与凭据由本地服务加载。</span></div><b class="settings-status">未连接</b></li>';
+    const codexProjectRows = codexProjects.length
+      ? codexProjects.map((project) => `<li><div><strong>${escapeHtml(project.label)}</strong><span>${escapeHtml(project.path)}</span><small>${escapeHtml((project.workflow_ids || []).join(" · ") || (project.domain_ids || []).join(" · "))}</small></div><b class="settings-status">已绑定</b></li>`).join("")
+      : '<li><div><strong>尚未绑定 Codex 项目</strong><span>任务暂时不能创建为项目内的 Codex 对话。</span></div><b class="settings-status">待绑定</b></li>';
     const writable = settings.writable === true;
     const adapterOptions = adapters.length
       ? adapters.map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}">${escapeHtml(adapter.adapter_id)}</option>`).join("")
@@ -1217,7 +1223,7 @@
       <label class="route-enabled"><input data-route-enabled type="checkbox"${route.enabled === false ? "" : " checked"}><span>启用</span></label>
     </div>`).join("");
     const writableConnections = writable ? `<div class="settings-bindings">
-      <details class="settings-disclosure"><summary>自动绑定 Codex</summary><div class="settings-form"><p>读取本机 Codex 登录状态与默认模型，执行时通过 app-server 创建有界任务。</p><label class="settings-field"><span>模型（留空读取 Codex 默认值）</span><input id="codex-model" autocomplete="off" placeholder="自动读取"></label><button class="settings-secondary" type="button" data-bind-codex>检测并绑定 Codex</button></div></details>
+      <details class="settings-disclosure"><summary>Codex 项目</summary><div class="settings-form"><p>当前工作线“${escapeHtml(activeLine ? activeLine.name : runtimeState.activeLineId || "未选择")}”的执行任务会创建在这个 Codex 项目下。</p><ul class="settings-list">${codexProjectRows}</ul><label class="settings-field"><span>项目名称</span><input id="codex-project-label" autocomplete="off" value="${escapeHtml(activeProject ? activeProject.label : "")}" placeholder="例如：AI Workspace"></label><label class="settings-field"><span>本地项目路径</span><input id="codex-project-path" autocomplete="off" value="${escapeHtml(activeProject ? activeProject.path : "")}" placeholder="选择已在 Codex 中登记的项目目录"></label><label class="settings-field"><span>运行方式</span><select id="codex-project-environment"><option value="worktree"${!activeProject || activeProject.environment === "worktree" ? " selected" : ""}>独立工作树</option><option value="local"${activeProject && activeProject.environment === "local" ? " selected" : ""}>当前项目目录</option></select></label><label class="settings-field"><span>模型（留空使用 Codex 默认值）</span><input id="codex-project-model" autocomplete="off" value="${escapeHtml(runtimeState.defaultModel || "")}" placeholder="自动读取"></label><button class="settings-secondary" type="button" data-bind-codex-project>绑定当前工作线</button></div></details>
       <details class="settings-disclosure"><summary>绑定兼容 API</summary><div class="settings-form"><p>密钥只保存在当前本地服务进程的内存中；提交后不会回显。</p><label class="settings-field"><span>API 地址</span><input id="api-base" inputmode="url" autocomplete="url" placeholder="https://api.example.com/v1"></label><label class="settings-field"><span>API 密钥</span><input id="api-key" type="password" autocomplete="new-password" placeholder="仅本次本地运行"></label><label class="settings-field"><span>模型</span><input id="api-model" autocomplete="off" placeholder="模型名称"></label><button class="settings-secondary" type="button" data-bind-openai>绑定兼容 API</button></div></details>
     </div>` : "";
     const writableRoutes = writable ? `<details class="settings-disclosure"><summary>编辑任务路由</summary><div class="settings-form"><label class="settings-field"><span>推进方式</span><select id="execution-mode"><option value="fixed"${execution.advance_route_mode !== "automatic" ? " selected" : ""}>固定执行策略</option><option value="automatic"${execution.advance_route_mode === "automatic" ? " selected" : ""}>按能力自动路由</option></select></label><div class="route-editor">${routeEditorRows}</div><button class="settings-secondary" type="button" data-save-routes>保存任务路由</button></div></details>` : "";
@@ -1231,6 +1237,30 @@
       <section class="settings-group"><span>执行连接</span><h3>适配器与 API</h3><p>连接信息只用于本机执行服务，不进入任务卡或运行事件。</p><ul class="settings-list">${adapterRows}</ul><p>凭据来源：${credentialLabel}</p>${writableConnections}</section>
       <section class="settings-group"><span>个人认知</span><h3>经验候选与已确认习惯</h3><p>${Number(learning.proposed || 0)} 项等待确认 · ${Number(learning.approved || 0)} 项已进入任务上下文。工作结果只发起经验复核；候选经证据整理后创建，明确确认后才进入后续任务。</p></section>
     </div>`;
+  }
+
+  function codexProjectSettingsPayload(runtimeState, values) {
+    const lineId = String(runtimeState && runtimeState.activeLineId || "").trim();
+    const label = String(values && values.label || "").trim();
+    const path = String(values && values.path || "").trim();
+    const environment = String(values && values.environment || "worktree").trim();
+    const model = String(values && values.model || "").trim();
+    if (!lineId || !label || !path) throw new Error("CODEX_PROJECT_BINDING_INCOMPLETE");
+    const existing = (((runtimeState || {}).executionSettings || {}).codex_projects || []).map((project) => clone(project));
+    const current = existing.find((project) => (project.workflow_ids || []).includes(lineId));
+    const projects = existing.filter((project) => !(project.workflow_ids || []).includes(lineId));
+    projects.push({
+      project_key: current ? current.project_key : `workline-${lineId}`,
+      label,
+      path,
+      workflow_ids: [lineId],
+      domain_ids: [],
+      environment,
+    });
+    return {
+      mode: "fixed",
+      adapter: { kind: "codex-project", model, projects },
+    };
   }
 
   function renderProposal(proposal, lines) {
@@ -1566,17 +1596,18 @@
         announce("演示数据已重置");
         return;
       }
-      if (event.target.closest && event.target.closest("[data-bind-codex]") && runtimeClient) {
-        const model = (byId("codex-model") && byId("codex-model").value || "").trim();
+      if (event.target.closest && event.target.closest("[data-bind-codex-project]") && runtimeClient) {
         try {
-          await runtimeClient.configureExecution({
-            mode: "fixed",
-            adapter: { kind: "codex-app-server", model },
-          });
+          await runtimeClient.configureExecution(codexProjectSettingsPayload(state, {
+            label: byId("codex-project-label") && byId("codex-project-label").value,
+            path: byId("codex-project-path") && byId("codex-project-path").value,
+            environment: byId("codex-project-environment") && byId("codex-project-environment").value,
+            model: byId("codex-project-model") && byId("codex-project-model").value,
+          }));
           await refreshRuntime();
-          announce("Codex 已绑定，可以开始推进任务");
+          announce("当前工作线已绑定 Codex 项目");
         } catch (error) {
-          announce(`Codex 未绑定：${error.message}`);
+          announce(`Codex 项目未绑定：${error.message}`);
         }
         return;
       }
@@ -2082,6 +2113,7 @@
     createDragClickGuard,
     createDemoState,
     createRuntimeClient,
+    codexProjectSettingsPayload,
     createShowcaseState,
     createWorkline,
     executionReadiness,

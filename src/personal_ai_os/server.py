@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 from .adapters import OpenAICompatibleAdapter
 from .codex_adapter import CodexAppServerAdapter
+from .codex_project import CodexProjectAdapter
 from .route_config import RUNTIME_ROUTES_SCHEMA, validate_runtime_routes
 from .runtime import ExecutionBroker, RuntimeStore
 from .automation import AutoAdvanceEngine
@@ -280,6 +281,16 @@ class RuntimeApplication:
                 model=str(config.get("model") or ""),
             ),
         )
+        self.execution_adapter_factories.setdefault(
+            "codex-project",
+            lambda config: (
+                CodexProjectAdapter(
+                    self.store,
+                    project_bindings=config.get("projects") or [],
+                ),
+                str(config.get("model") or CodexAppServerAdapter._configured_model()),
+            ),
+        )
         self.credential_source = "server-environment"
         self.projection_mode = projection_mode or (
             "public-safe" if presentation is not None else "private-local"
@@ -447,6 +458,13 @@ class RuntimeApplication:
                     "enabled": bool(route.get("enabled", True)),
                 }
             )
+        active_adapter = self.broker.adapters.get(self.default_adapter_id)
+        codex_projects = (
+            [dict(item) for item in active_adapter.project_bindings]
+            if self.projection_mode == "private-local"
+            and isinstance(active_adapter, CodexProjectAdapter)
+            else []
+        )
         return {
             "routes": routes,
             "default_adapter_id": (
@@ -457,7 +475,20 @@ class RuntimeApplication:
             "credential_source": self.credential_source,
             "mode": self.execution_readiness()["advance_route_mode"],
             "writable": self.projection_mode == "private-local",
+            "codex_projects": codex_projects,
         }
+
+    def codex_project_adapter(self) -> CodexProjectAdapter:
+        if self.projection_mode != "private-local":
+            raise ValueError("Codex project dispatch requires private-local projection")
+        adapters = [
+            adapter
+            for adapter in self.broker.adapters.values()
+            if isinstance(adapter, CodexProjectAdapter)
+        ]
+        if len(adapters) != 1:
+            raise ValueError("Codex project adapter is not configured")
+        return adapters[0]
 
     @staticmethod
     def _ordered_aliases(values: list[Any], prefix: str) -> dict[str, str]:
@@ -725,6 +756,21 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                 return
             self._json(200, projection)
             return
+        if path == "/api/codex-project/dispatches":
+            try:
+                dispatches = self.server.app.codex_project_adapter().active_dispatches()
+            except ValueError as exc:
+                self._json(
+                    422,
+                    self.server.app.error_payload(
+                        status="BLOCKED",
+                        safe_reason="REQUEST_REJECTED",
+                        detail=exc,
+                    ),
+                )
+                return
+            self._json(200, {"status": "READY", "dispatches": dispatches})
+            return
         relative = "index.html" if path == "/" else path.lstrip("/")
         target = (self.server.app.web_root / relative).resolve()
         if not target.is_relative_to(self.server.app.web_root) or not target.is_file():
@@ -820,6 +866,34 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     return
             elif path == "/api/settings/execution":
                 result = self.server.app.configure_execution(payload)
+            elif path == "/api/codex-project/claim":
+                result = self.server.app.codex_project_adapter().claim_next(
+                    worker_id=str(payload.get("worker_id") or "")
+                )
+                if result is None:
+                    result = {"status": "IDLE", "reason": "NO_PENDING_DISPATCH"}
+            elif path.startswith("/api/codex-project/dispatches/") and path.endswith("/bind"):
+                dispatch_id = path[
+                    len("/api/codex-project/dispatches/") : -len("/bind")
+                ].strip("/")
+                result = self.server.app.codex_project_adapter().bind_thread(
+                    dispatch_id,
+                    thread_id=str(payload.get("thread_id") or ""),
+                    project_id=str(payload.get("project_id") or ""),
+                    host_id=str(payload.get("host_id") or ""),
+                )
+            elif path.startswith("/api/codex-project/dispatches/") and path.endswith("/complete"):
+                dispatch_id = path[
+                    len("/api/codex-project/dispatches/") : -len("/complete")
+                ].strip("/")
+                usage = payload.get("usage") or {}
+                if not isinstance(usage, dict):
+                    raise ValueError("usage must be an object")
+                result = self.server.app.codex_project_adapter().complete(
+                    dispatch_id,
+                    output_text=str(payload.get("output_text") or ""),
+                    usage=usage,
+                )
             elif path.startswith("/api/goals/") and path.endswith("/continue"):
                 if self.server.app.presentation is not None:
                     raise ValueError("goal control requires private-local projection")

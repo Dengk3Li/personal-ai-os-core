@@ -207,6 +207,12 @@ Task routes are edited in the same panel. The server validates the complete vers
 
 This browser binding is intentionally local and process-scoped. Codex reuses the machine's existing login without copying its credentials. OpenAI-compatible secrets must be entered again after the local runtime restarts. A live Broker run is shown as active work; a persisted `RUNNING` task seen by a different or restarted process remains behind the recovery gate.
 
+### Project-native Codex tasks (unreleased)
+
+The private Settings panel can bind each workline to a saved Codex project path. Starting a task writes one durable project-dispatch request instead of calling `thread/start` with only a working directory. A Codex desktop manager resolves that path to the app's real `projectId`, creates the task inside that project, records the returned thread and host IDs, and sends the final result back to the LongTask run. The task then moves to `REVIEW` through the normal Broker boundary.
+
+App-server `cwd` selects a filesystem location but does not assign a Codex desktop project. Project-native dispatch therefore fails closed behind a local queue when no desktop manager is available. Claims have a bounded lease, completion has one owner, and public-safe projections never expose project paths or dispatch payloads.
+
 ## Operating model
 
 ```mermaid
