@@ -15,6 +15,12 @@ from .planning import project_plan, ready_tasks, validate_plan
 from .presentation import apply_presentation, load_presentation
 from .presets import get_workflow_preset, workflow_preset_catalog
 from .routing import compile_domain_context, route_task
+from .research_report_acceptance import (
+    ResearchReportAcceptanceError,
+    build_research_report_acceptance,
+    synthetic_research_report_fixture,
+    validate_research_report_acceptance,
+)
 from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
@@ -48,6 +54,7 @@ __version__ = "0.15.0"
 __all__ = [
     "build_capsule",
     "build_acceptance_snapshot",
+    "build_research_report_acceptance",
     "AutoAdvanceEngine",
     "build_candidate_plan",
     "build_module_graph",
@@ -91,13 +98,16 @@ __all__ = [
     "request_human_stop",
     "resume_after_human_stop",
     "RuntimeStore",
+    "ResearchReportAcceptanceError",
     "select_ready_task",
     "select_execution_route",
     "submit_for_review",
     "sync_runtime_plan",
+    "synthetic_research_report_fixture",
     "transition_task",
     "validate_plan",
     "validate_memory_candidate",
+    "validate_research_report_acceptance",
     "validate_task_module_link",
     "verify_freeze",
     "expire_lease",
