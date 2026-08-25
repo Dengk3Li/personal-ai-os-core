@@ -376,7 +376,7 @@ class RuntimeApplication:
             self.presentation,
             live_task_ids=self.broker.active_task_ids(),
             codex_dispatches=(
-                codex_adapters[0].active_dispatches()
+                codex_adapters[0].projection_dispatches()
                 if self.projection_mode == "private-local"
                 and len(codex_adapters) == 1
                 else []

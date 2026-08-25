@@ -621,6 +621,15 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertTrue(completed["ok"])
         self.assertEqual("REVIEW", completed["status"])
         self.assertEqual("REVIEW", self.store.get_task("science:hypothesis")["status"])
+        _, reviewed_projection = self.request("/api/runtime")
+        reviewed_task = next(
+            item
+            for item in reviewed_projection["state"]["tasks"]
+            if item["task_id"] == "science:hypothesis"
+        )
+        self.assertEqual("SUCCEEDED", reviewed_task["codex_dispatch"]["status"])
+        self.assertEqual("codex-thread-1", reviewed_task["codex_dispatch"]["thread_id"])
+        self.assertEqual("codex-project-1", reviewed_task["codex_dispatch"]["project_id"])
 
     def test_runtime_projection_surfaces_codex_project_queue_and_bound_thread(self):
         project = Path(self.temp.name) / "science-project"

@@ -1252,15 +1252,25 @@
       CLAIMED: "已被执行总管领取",
       RUNNING: "已绑定原生任务",
       COMPLETING: "正在登记结果",
+      SUCCEEDED: "结果已登记，等待验收",
+      BLOCKED: "执行已阻断，等待处理",
     };
     const project = dispatch.project || {};
     const environment = project.environment === "worktree" ? "独立工作树" : project.environment === "local" ? "当前项目目录" : "执行环境已登记";
     const thread = dispatch.thread_id
       ? `<small>任务线程：${escapeHtml(dispatch.thread_id)}</small>`
       : `<small>等待 Codex 项目总管创建原生任务</small>`;
+    const receipt = dispatch.dispatch_id
+      ? `<small>派发回执：${escapeHtml(dispatch.dispatch_id)}</small>`
+      : "";
+    const projectReceipt = dispatch.project_id
+      ? `<small>项目回执：${escapeHtml(dispatch.project_id)}</small>`
+      : "";
     return `<section class="codex-dispatch" aria-label="Codex 项目执行状态">
       <div class="codex-dispatch-head"><strong>Codex 项目执行</strong><span class="settings-status">${escapeHtml(statusLabels[dispatch.status] || dispatch.status || "状态读取中")}</span></div>
       <p>${escapeHtml(project.label || "Codex 项目")} · ${escapeHtml(environment)}</p>
+      ${receipt}
+      ${projectReceipt}
       ${thread}
     </section>`;
   }

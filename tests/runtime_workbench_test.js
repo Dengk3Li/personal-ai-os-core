@@ -514,6 +514,31 @@ test("task detail shows the native Codex project execution state", () => {
   assert.match(html, /codex-thread-1/);
 });
 
+test("task detail keeps a completed Codex receipt visible for review", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "science:hypothesis",
+      public_label: "任务 01",
+      title: "科研任务",
+      status: "REVIEW",
+      action: "ACCEPT",
+      attempts: 1,
+      events: [],
+      codex_dispatch: {
+        status: "SUCCEEDED",
+        project: { label: "科研项目", environment: "worktree" },
+        thread_id: "codex-thread-1",
+        project_id: "codex-project-1",
+      },
+    },
+    { runtime: true, defaultModel: "model-a", adapters: [{ adapter_id: "codex-project", available: true }] },
+  );
+
+  assert.match(html, /结果已登记，等待验收/);
+  assert.match(html, /codex-thread-1/);
+  assert.match(html, /codex-project-1/);
+});
+
 test("Codex project binding replaces only the active workline mapping", () => {
   const payload = workbench.codexProjectSettingsPayload({
     activeLineId: "science",

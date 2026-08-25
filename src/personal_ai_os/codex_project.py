@@ -177,6 +177,22 @@ class CodexProjectAdapter:
             ).fetchall()
         return [_decode(row) for row in rows]
 
+    def projection_dispatches(self) -> list[dict[str, Any]]:
+        """Return durable execution receipts for task projection.
+
+        The queue endpoint intentionally exposes only live work. The workbench
+        needs the durable Codex receipt as well after a run moves to REVIEW, so
+        a completed dispatch remains traceable without reopening the queue. The
+        projection selects the newest row per task from this creation-ordered
+        list.
+        """
+        with self.store._connect() as connection:
+            rows = connection.execute(
+                """SELECT * FROM codex_project_dispatches
+                   ORDER BY created_at, dispatch_id"""
+            ).fetchall()
+        return [_decode(row) for row in rows]
+
     def claim_next(self, *, worker_id: str) -> dict[str, Any] | None:
         worker_id = str(worker_id or "").strip()
         if not worker_id:
