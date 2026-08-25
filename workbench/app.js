@@ -1102,8 +1102,15 @@
   }
 
   function renderSettings(runtimeState) {
+    const petPreference = runtimeState && runtimeState.petPreference ? runtimeState.petPreference : "blue-whale-maid";
+    const petOptions = [
+      ["blue-whale-maid", "蓝鲸女仆"],
+      ["model-animal", "跟随模型"],
+      ["off", "关闭工作宠物"],
+    ].map(([value, label]) => `<option value="${value}"${petPreference === value ? " selected" : ""}>${label}</option>`).join("");
+    const interfaceSettings = `<section class="settings-group settings-interface"><span>界面偏好</span><h3>工作宠物</h3><p>运行中的任务根据这里的偏好显示宠物；该选项只影响本机界面。</p><label class="settings-field" for="pet-preference"><span>宠物显示</span><select id="pet-preference">${petOptions}</select></label><button class="settings-secondary" type="button" data-reset-demo>${runtimeState && runtimeState.runtime ? "刷新本地状态" : "重置演示数据"}</button></section>`;
     if (!runtimeState || !runtimeState.runtime) {
-      return '<div class="settings-layout"><section class="settings-group"><span>本地运行</span><h3>尚未连接运行服务</h3><p>启动本地运行服务后，这里会显示已保存的模型路由、执行适配器与记忆候选。</p></section></div>';
+      return `<div class="settings-layout">${interfaceSettings}<section class="settings-group"><span>本地运行</span><h3>尚未连接运行服务</h3><p>启动本地运行服务后，这里会显示已保存的模型路由、执行适配器与记忆候选。</p></section></div>`;
     }
     const execution = runtimeState.execution || {};
     const settings = runtimeState.executionSettings || {};
@@ -1117,7 +1124,7 @@
     const adapterRows = adapters.length
       ? adapters.map((adapter) => `<li><div><strong>${escapeHtml(adapter.adapter_id)}</strong><span>${escapeHtml(adapter.protocol || "执行协议")}</span></div><b class="settings-status">${adapter.available ? "可用" : "未连接"}</b></li>`).join("")
       : '<li><div><strong>尚未连接执行适配器</strong><span>执行端点与凭据由本地服务加载。</span></div><b class="settings-status">未连接</b></li>';
-    return `<div class="settings-layout">
+    return `<div class="settings-layout">${interfaceSettings}
       <section class="settings-group"><span>任务路由</span><h3>${mode}</h3><p>工作区按已保存的任务能力与模型策略运行，台前只保留“开始”和“继续”。</p><ul class="settings-list">${routeRows}</ul></section>
       <section class="settings-group"><span>执行连接</span><h3>适配器与 API</h3><p>API 凭据只从服务端环境变量读取，不进入浏览器、任务卡或运行事件。</p><ul class="settings-list">${adapterRows}</ul><p>凭据来源：${settings.credential_source === "server-environment" ? "服务端环境变量" : "本地运行服务"}</p></section>
       <section class="settings-group"><span>个人认知</span><h3>经验候选与已确认习惯</h3><p>${Number(learning.proposed || 0)} 项等待确认 · ${Number(learning.approved || 0)} 项已进入任务上下文。工作结果只发起经验复核；候选经证据整理后创建，明确确认后才进入后续任务。</p></section>
@@ -1267,7 +1274,6 @@
       byId("source-note-title").textContent = state.runtime ? "本地运行状态" : "公开演示数据";
       byId("source-note-copy").textContent = state.runtime ? "任务、运行、产物与裁决保存在当前 SQLite 运行库。模型密钥只从服务端环境变量读取。" : "只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。";
       byId("work-source-label").textContent = state.runtime ? "真实运行状态" : "任务内容已匿名";
-      byId("reset-demo").textContent = state.runtime ? "刷新状态" : "重置演示";
       byId("footer-mode").textContent = state.runtime ? "本地持久化运行库" : "匿名结构演示";
       const durableGoalStrip = byId("durable-goal-strip");
       const durableGoal = state.runtime && state.durableGoals && state.durableGoals[0];
@@ -1433,6 +1439,30 @@
         settingsOpen = false;
         render();
         byId("settings-toggle").focus();
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-reset-demo]")) {
+        if (state.runtime && runtimeClient) {
+          try {
+            await refreshRuntime();
+            announce("本地状态已刷新");
+          } catch (error) {
+            announce(`状态未刷新：${error.message}`);
+          }
+          return;
+        }
+        state = createShowcaseState();
+        moduleMapMode = "system";
+        modulePath = [];
+        selectedModule = "secretary-entry";
+        moduleTopology = null;
+        moduleTopologySignature = "";
+        moduleViewFitted = false;
+        moduleFocusEnabled = true;
+        proposal = null;
+        lineComposerOpen = false;
+        render();
+        announce("演示数据已重置");
         return;
       }
       const boardButton = event.target.closest && event.target.closest("[data-board]");
@@ -1884,23 +1914,6 @@
     }
     byId("domain-tabs").addEventListener("keydown", (event) => selectSiblingTab(event, ".domain-tab", (tab) => { state = selectDomain(state, tab.dataset.domainId); }));
     byId("line-tabs").addEventListener("keydown", (event) => selectSiblingTab(event, ".line-tab", (tab) => { state = selectBusinessLine(state, tab.dataset.lineId); }));
-    byId("reset-demo").addEventListener("click", async () => {
-      if (state.runtime && runtimeClient) {
-        try { await refreshRuntime(); } catch (error) { announce(`状态未刷新：${error.message}`); }
-        return;
-      }
-      state = createShowcaseState();
-      moduleMapMode = "system";
-      modulePath = [];
-      selectedModule = "secretary-entry";
-      moduleTopology = null;
-      moduleTopologySignature = "";
-      moduleViewFitted = false;
-      moduleFocusEnabled = true;
-      proposal = null;
-      lineComposerOpen = false;
-      render();
-    });
     render();
     if (runtimeClient) refreshRuntime().catch(() => announce("未连接本地运行库，当前使用合成演示"));
   }

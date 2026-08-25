@@ -249,6 +249,30 @@ test("settings explain saved routing and keep credentials on the server", () => 
   assert.doesNotMatch(html, /api_key|Bearer|password/i);
 });
 
+test("low-frequency controls are reachable only from the top-right settings surface", () => {
+  const page = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../workbench/index.html"),
+    "utf8",
+  );
+  const script = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../workbench/app.js"),
+    "utf8",
+  );
+  const topActions = page.match(/<div class="top-actions">([\s\S]*?)<\/div>/)?.[1] || "";
+  const settings = workbench.renderSettings({
+    runtime: false,
+    petPreference: "off",
+  });
+
+  assert.equal((topActions.match(/<button/g) || []).length, 1);
+  assert.match(topActions, /id="settings-toggle"/);
+  assert.doesNotMatch(topActions, /pet-preference|reset-demo|data-board/);
+  assert.match(settings, /id="pet-preference"/);
+  assert.match(settings, /value="off" selected/);
+  assert.match(settings, /data-reset-demo/);
+  assert.doesNotMatch(script, /byId\("reset-demo"\)/);
+});
+
 
 test("runtime client calls finite task run transition and decision endpoints", async () => {
   const calls = [];

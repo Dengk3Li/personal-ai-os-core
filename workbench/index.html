@@ -15,19 +15,15 @@
       <p>Personal AI OS · Local first</p>
     </a>
     <div class="top-actions">
-      <label class="pet-picker" for="pet-preference"><span>工作宠物</span><select id="pet-preference">
-        <option value="blue-whale-maid">蓝鲸女仆</option>
-        <option value="model-animal">模型动物</option>
-        <option value="off">关闭</option>
-      </select></label>
-      <button class="ghost-button" data-board="global" type="button">模块地图</button>
-      <button class="ghost-button" id="settings-toggle" type="button" aria-controls="settings-panel" aria-expanded="false">设置</button>
-      <button class="primary-button" id="reset-demo" type="button">重置演示</button>
+      <button class="ghost-button settings-button" id="settings-toggle" type="button" aria-controls="settings-panel" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25Zm8.25 3.75-.06-.78 1.59-1.24-1.8-3.12-1.88.76a8.5 8.5 0 0 0-1.35-.78L16.47 4.8h-3.6l-.3 2.02c-.5.2-.95.46-1.36.78l-1.88-.76-1.8 3.12 1.6 1.25a8.9 8.9 0 0 0 0 1.56l-1.6 1.25 1.8 3.12 1.88-.76c.42.32.87.58 1.36.78l.3 2.02h3.6l.29-2.02c.5-.2.95-.46 1.36-.78l1.88.76 1.8-3.12-1.6-1.25.05-.77Z"/></svg>
+        <span>设置</span>
+      </button>
     </div>
   </header>
 
   <aside class="settings-panel" id="settings-panel" aria-labelledby="settings-title" tabindex="-1" hidden>
-    <header><div><span>后台设置</span><h2 id="settings-title">执行与记忆</h2></div><button class="ghost-button" type="button" data-close-settings>关闭</button></header>
+    <header><div><span>后台设置</span><h2 id="settings-title">工作设置</h2></div><button class="ghost-button" type="button" data-close-settings>关闭</button></header>
     <div id="settings-content"></div>
   </aside>
 
