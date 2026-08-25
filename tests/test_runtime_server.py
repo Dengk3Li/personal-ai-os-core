@@ -849,6 +849,7 @@ class RuntimeServerTests(unittest.TestCase):
             reviewed_task["codex_dispatch"]["thread_verification"]["source"],
         )
         self.assertFalse(reviewed_task["codex_dispatch"]["completion_receipt"]["human_gate"])
+        self.assertEqual("VERIFIED", reviewed_task["codex_dispatch"]["receipt_state"])
 
     def test_runtime_projection_surfaces_codex_project_queue_and_bound_thread(self):
         project = Path(self.temp.name) / "science-project"

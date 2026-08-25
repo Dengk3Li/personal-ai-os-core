@@ -621,6 +621,36 @@ test("task detail marks a legacy Codex result without a terminal receipt for man
   assert.match(html, /需人工复核/);
 });
 
+test("task detail does not verify a receipt that still needs a user decision", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "science:hypothesis",
+      public_label: "任务 01",
+      title: "科研任务",
+      status: "REVIEW",
+      action: "ACCEPT",
+      attempts: 1,
+      events: [],
+      codex_dispatch: {
+        status: "SUCCEEDED",
+        project: { label: "科研项目", environment: "worktree" },
+        thread_id: "codex-thread-gated",
+        project_id: "codex-project-1",
+        completion_receipt: {
+          status: "completed",
+          verified: true,
+          needs_user_input: true,
+          human_gate: false,
+        },
+      },
+    },
+    { runtime: true, defaultModel: "model-a", adapters: [{ adapter_id: "codex-project", available: true }] },
+  );
+
+  assert.match(html, /历史终态回执缺失/);
+  assert.doesNotMatch(html, /终态回执已验证/);
+});
+
 test("Codex project binding replaces only the active workline mapping", () => {
   const payload = workbench.codexProjectSettingsPayload({
     activeLineId: "science",

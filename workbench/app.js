@@ -1270,7 +1270,8 @@
       ? dispatch.completion_receipt
       : {};
     const receiptState = dispatch.receipt_state || (
-      completionReceipt.verified === true && completionReceipt.status === "completed"
+      completionReceipt.verified === true && completionReceipt.status === "completed" &&
+      completionReceipt.needs_user_input === false && completionReceipt.human_gate === false
         ? "VERIFIED"
         : dispatch.status === "SUCCEEDED"
           ? "LEGACY_MISSING"
