@@ -17,6 +17,7 @@ from .planning import project_plan, ready_tasks, validate_plan
 from .promotion import promote_candidate
 from .routing import compile_domain_context, route_task
 from .automation import AutoAdvanceEngine
+from .goals import GoalController, load_goal_definition
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .route_config import load_runtime_routes
@@ -183,7 +184,7 @@ def demo_payload() -> dict[str, object]:
     }
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="personal-ai-os")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("demo", help="run the synthetic safety demo")
@@ -227,6 +228,38 @@ def main(argv: list[str] | None = None) -> int:
     runtime_sync.add_argument("--plan", required=True)
     runtime_brief = runtime_commands.add_parser("brief", help="read the secretary brief")
     runtime_brief.add_argument("--store", required=True)
+    runtime_goal_create = runtime_commands.add_parser(
+        "goal-create", help="register one versioned durable goal"
+    )
+    runtime_goal_create.add_argument("--store", required=True)
+    runtime_goal_create.add_argument("--goal", required=True)
+    runtime_goal_status = runtime_commands.add_parser(
+        "goal-status", help="read one durable goal"
+    )
+    runtime_goal_status.add_argument("--store", required=True)
+    runtime_goal_status.add_argument("--goal-id", required=True)
+    runtime_goal_continue = runtime_commands.add_parser(
+        "goal-continue", help="continue one durable goal through bounded dispatch"
+    )
+    runtime_goal_continue.add_argument("--store", required=True)
+    runtime_goal_continue.add_argument("--goal-id", required=True)
+    runtime_goal_continue.add_argument("--model")
+    runtime_goal_continue.add_argument("--adapter", default="openai-compatible")
+    runtime_goal_continue.add_argument("--routes")
+    runtime_goal_continue.add_argument("--route")
+    runtime_goal_pause = runtime_commands.add_parser("goal-pause", help="pause a goal")
+    runtime_goal_pause.add_argument("--store", required=True)
+    runtime_goal_pause.add_argument("--goal-id", required=True)
+    runtime_goal_pause.add_argument("--reason", required=True)
+    runtime_goal_resume = runtime_commands.add_parser("goal-resume", help="resume a goal")
+    runtime_goal_resume.add_argument("--store", required=True)
+    runtime_goal_resume.add_argument("--goal-id", required=True)
+    runtime_goal_complete = runtime_commands.add_parser(
+        "goal-complete", help="accept and complete a goal"
+    )
+    runtime_goal_complete.add_argument("--store", required=True)
+    runtime_goal_complete.add_argument("--goal-id", required=True)
+    runtime_goal_complete.add_argument("--evidence", required=True)
     runtime_run = runtime_commands.add_parser("run", help="dispatch one queued task")
     runtime_run.add_argument("--store", required=True)
     runtime_run.add_argument("--task", required=True)
@@ -312,6 +345,32 @@ def main(argv: list[str] | None = None) -> int:
             }
         elif args.runtime_command == "brief":
             payload = {"status": store.integrity()["status"], **build_secretary_brief(store.snapshot())}
+        elif args.runtime_command == "goal-create":
+            payload = {
+                "status": "READY",
+                "goal": store.create_goal(load_goal_definition(args.goal)),
+            }
+        elif args.runtime_command == "goal-status":
+            payload = {"status": "READY", "goal": store.get_goal(args.goal_id)}
+        elif args.runtime_command == "goal-pause":
+            payload = {
+                "status": "READY",
+                "goal": store.pause_goal(
+                    args.goal_id, by="owner", reason=args.reason
+                ),
+            }
+        elif args.runtime_command == "goal-resume":
+            payload = {
+                "status": "READY",
+                "goal": store.resume_goal(args.goal_id, by="owner"),
+            }
+        elif args.runtime_command == "goal-complete":
+            payload = {
+                "status": "READY",
+                "goal": store.complete_goal(
+                    args.goal_id, by="owner", evidence=args.evidence
+                ),
+            }
         elif args.runtime_command == "resolve":
             payload = {
                 "status": "READY",
@@ -356,6 +415,24 @@ def main(argv: list[str] | None = None) -> int:
                         failure_budget=args.failure_budget,
                         workflow_id=args.workflow,
                     )
+                    payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
+            elif args.runtime_command == "goal-continue":
+                if not args.routes and not args.model:
+                    payload = {
+                        "status": "BLOCKED",
+                        "reason": "--model is required in fixed route mode",
+                    }
+                elif args.route and not args.routes:
+                    payload = {"status": "BLOCKED", "reason": "--route requires --routes"}
+                else:
+                    routes = load_runtime_routes(args.routes) if args.routes else None
+                    payload = GoalController(
+                        ExecutionBroker(store, adapters),
+                        adapter_id=args.adapter,
+                        model=args.model,
+                        routes=routes,
+                        requested_route=args.route,
+                    ).continue_goal(args.goal_id)
                     payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
             else:
                 routes = load_runtime_routes(args.routes) if args.routes else None
@@ -420,3 +497,14 @@ def main(argv: list[str] | None = None) -> int:
                         return 0
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0 if payload.get("status") not in {"UNKNOWN", "BLOCKED"} else 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except KeyError:
+        payload = {"status": "UNKNOWN", "reason": "NOT_FOUND"}
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError):
+        payload = {"status": "BLOCKED", "reason": "COMMAND_REJECTED"}
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 2

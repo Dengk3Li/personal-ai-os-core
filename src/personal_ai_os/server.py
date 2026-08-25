@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 from .runtime import ExecutionBroker, RuntimeStore
 from .automation import AutoAdvanceEngine
+from .goals import GoalController
 from .secretary import build_secretary_brief
 from .presentation import (
     apply_presentation,
@@ -135,6 +136,54 @@ def runtime_workbench_state(
                 }
             )
         pending_decisions = projected_decisions
+    recovering_workflows = {
+        task["workflow_id"]
+        for task in snapshot.get("tasks", [])
+        if task["status"] == "IN_PROGRESS"
+    }
+    recovering_task_ids = {
+        run["task_id"]
+        for run in snapshot.get("runs", [])
+        if run["status"] == "RUNNING"
+    }
+    recovering_workflows.update(
+        task["workflow_id"]
+        for task in snapshot.get("tasks", [])
+        if task["task_id"] in recovering_task_ids
+    )
+
+    def goal_recovery_required(item: dict[str, Any]) -> bool:
+        return bool(item["active_continuation_id"]) or item["status"] == "RECOVERY_REQUIRED" or (
+            item["usage"].get("last_stop_reason") == "RECOVERY_REQUIRED"
+        ) or bool(set(item["workflow_ids"]) & recovering_workflows)
+
+    if presentation is None:
+        durable_goals = [
+            {
+                "goal_id": item["goal_id"],
+                "title": item["title"],
+                "objective": item["objective"],
+                "status": item["status"],
+                "workflow_ids": item["workflow_ids"],
+                "completion_criteria": item["completion_criteria"],
+                "continuation_policy": item["continuation_policy"],
+                "usage": item["usage"],
+                "recovery_required": goal_recovery_required(item),
+            }
+            for item in snapshot.get("goals", [])
+        ]
+    else:
+        durable_goals = [
+            {
+                "goal_id": f"goal-{index:02d}",
+                "title": f"长期目标 {index:02d}",
+                "status": item["status"],
+                "workflow_count": len(item["workflow_ids"]),
+                "usage": item["usage"],
+                "recovery_required": goal_recovery_required(item),
+            }
+            for index, item in enumerate(snapshot.get("goals", []), start=1)
+        ]
     return {
         "goal": goal,
         "activeBoard": "work",
@@ -147,6 +196,7 @@ def runtime_workbench_state(
         "decisions": decisions,
         "pendingDecisions": pending_decisions,
         "assignments": snapshot["assignments"],
+        "durableGoals": durable_goals,
         "onboarding": {
             "status": "RUNTIME_READY",
             "readOnly": False,
@@ -389,6 +439,10 @@ class RuntimeApplication:
             "advanced_count",
             "failure_count",
             "stop_reason",
+            "goal_id",
+            "steps_used",
+            "tokens_used",
+            "failure_count",
         )
         projected = {key: result[key] for key in allowed if key in result}
         for key in ("reason", "stop_reason"):
@@ -552,6 +606,50 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                 if not result.get("ok"):
                     self._json(422, self.server.app.public_result(result))
                     return
+            elif path.startswith("/api/goals/") and path.endswith("/continue"):
+                if self.server.app.presentation is not None:
+                    raise ValueError("goal control requires private-local projection")
+                goal_id = path[len("/api/goals/") : -len("/continue")].strip("/")
+                default_route_mode = (
+                    "automatic"
+                    if self.server.app.runtime_routes and not self.server.app.default_model
+                    else "fixed"
+                )
+                route_mode = str(payload.get("route_mode") or default_route_mode)
+                if route_mode not in {"fixed", "automatic"}:
+                    raise ValueError("route_mode must be fixed or automatic")
+                controller = (
+                    GoalController(
+                        self.server.app.broker,
+                        routes=self.server.app.runtime_routes,
+                        requested_route=str(payload.get("requested_route") or "") or None,
+                    )
+                    if route_mode == "automatic"
+                    else GoalController(
+                        self.server.app.broker,
+                        adapter_id=self.server.app.resolve_adapter_id(
+                            payload.get("adapter_id")
+                        ),
+                        model=(
+                            self.server.app.resolve_model(payload.get("model"))
+                            if payload.get("model")
+                            else self.server.app.default_model
+                        ),
+                    )
+                )
+                result = controller.continue_goal(goal_id)
+                if not result.get("ok"):
+                    self._json(422, self.server.app.public_result(result))
+                    return
+            elif path.startswith("/api/goals/") and path.endswith("/complete"):
+                if self.server.app.presentation is not None:
+                    raise ValueError("goal control requires private-local projection")
+                goal_id = path[len("/api/goals/") : -len("/complete")].strip("/")
+                result = self.server.app.store.complete_goal(
+                    goal_id,
+                    by=str(payload.get("by") or "owner"),
+                    evidence=str(payload.get("evidence") or ""),
+                )
             elif path.startswith("/api/tasks/") and path.endswith("/transition"):
                 task_id = path[len("/api/tasks/") : -len("/transition")].strip("/")
                 result = self.server.app.store.transition(

@@ -297,6 +297,93 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertTrue(advanced["ok"])
         self.assertEqual("deep-science", advanced["actions"][0]["route"])
 
+    def test_private_runtime_projects_and_continues_a_durable_goal(self):
+        self.store.create_goal(
+            {
+                "goal_id": "goal:science-release",
+                "title": "完成本轮科研验证",
+                "objective": "推进已登记科研任务，并把结论交回人工验收。",
+                "workflow_ids": ["science"],
+                "completion_criteria": "全部任务经过人工验收",
+                "continuation_policy": {
+                    "max_steps_per_continuation": 1,
+                    "max_total_steps": 10,
+                    "max_total_tokens": 10000,
+                    "failure_budget_per_continuation": 1,
+                },
+            }
+        )
+
+        _, initial = self.request("/api/runtime")
+        continued_status, continued = self.request(
+            "/api/goals/goal%3Ascience-release/continue",
+            {"adapter_id": "test-adapter", "model": "model-a"},
+        )
+        _, after = self.request("/api/runtime")
+
+        self.assertEqual("完成本轮科研验证", initial["state"]["durableGoals"][0]["title"])
+        self.assertEqual(200, continued_status)
+        self.assertEqual(1, continued["steps_used"])
+        self.assertEqual("WAITING_REVIEW", continued["stop_reason"])
+        self.assertEqual(1, after["state"]["durableGoals"][0]["usage"]["continuation_count"])
+
+    def test_public_safe_goal_projection_never_exposes_private_goal_copy(self):
+        self.store.create_goal(
+            {
+                "goal_id": "goal:private-client-release",
+                "title": "PRIVATE_GOAL_TITLE_SENTINEL",
+                "objective": "PRIVATE_OBJECTIVE_SENTINEL",
+                "workflow_ids": ["science"],
+                "completion_criteria": "PRIVATE_CRITERIA_SENTINEL",
+                "continuation_policy": {},
+            }
+        )
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="model-a",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            presentation={
+                "schema_version": "personal-ai-os.presentation/v1",
+                "workflows": {},
+                "tasks": {},
+            },
+            projection_mode="public-safe",
+        )
+
+        serialized = json.dumps(app.projection(), ensure_ascii=False)
+
+        self.assertNotIn("private-client", serialized)
+        self.assertNotIn("PRIVATE_GOAL", serialized)
+        self.assertNotIn("PRIVATE_OBJECTIVE", serialized)
+        self.assertNotIn("PRIVATE_CRITERIA", serialized)
+        self.assertIn("长期目标 01", serialized)
+
+    def test_running_goal_is_projected_as_recovery_required(self):
+        self.store.create_goal(
+            {
+                "goal_id": "goal:science-release",
+                "title": "完成本轮科研验证",
+                "objective": "推进后等待外部运行回执。",
+                "workflow_ids": ["science"],
+                "completion_criteria": "全部任务经过人工验收",
+                "continuation_policy": {},
+            }
+        )
+        run = self.store.claim_run(
+            task_id="science:hypothesis",
+            adapter_id="test-adapter",
+            model="model-a",
+            by="adapter:test-adapter",
+        )
+        self.assertTrue(run["ok"])
+
+        projection = self.server.app.projection()
+
+        self.assertTrue(
+            projection["state"]["durableGoals"][0]["recovery_required"]
+        )
+
     def test_advance_api_rejects_non_integer_limits_without_dropping_the_connection(self):
         with self.assertRaises(urllib.error.HTTPError) as invalid:
             self.request(

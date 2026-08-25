@@ -21,6 +21,7 @@ test("runtime payload replaces the synthetic fixture without changing its state 
       taskStates: { "science:hypothesis": "QUEUED" },
       decisions: {},
       assignments: {},
+      durableGoals: [{ goal_id: "goal-01", title: "持续封包", status: "ACTIVE", usage: { steps_used: 2 } }],
       onboarding: { status: "RUNTIME_READY", readOnly: false, detectedLines: ["science"] },
     },
   });
@@ -30,6 +31,7 @@ test("runtime payload replaces the synthetic fixture without changing its state 
   assert.equal(state.defaultModel, "model-a");
   assert.equal(state.taskStates["science:hypothesis"], "QUEUED");
   assert.equal(state.adapters[0].adapter_id, "openai-compatible");
+  assert.equal(state.durableGoals[0].title, "持续封包");
 });
 
 
@@ -225,6 +227,7 @@ test("runtime client calls finite task run transition and decision endpoints", a
   await client.createTask({ task_id: "task:2", workflow_id: "science" });
   await client.resolveDecision("decision:1", "B");
   await client.advance("openai-compatible", "model-a", 4, "science");
+  await client.continueGoal("goal:1", "openai-compatible", "model-a");
 
   assert.deepEqual(calls.map((call) => call.url), [
     "/api/runtime",
@@ -233,12 +236,14 @@ test("runtime client calls finite task run transition and decision endpoints", a
     "/api/tasks",
     "/api/decisions/decision%3A1/resolve",
     "/api/advance",
+    "/api/goals/goal%3A1/continue",
   ]);
   assert.equal(JSON.parse(calls[1].options.body).adapter_id, "openai-compatible");
   assert.equal(JSON.parse(calls[2].options.body).to, "DONE");
   assert.equal(JSON.parse(calls[4].options.body).selected_option, "B");
   assert.equal(JSON.parse(calls[5].options.body).max_steps, 4);
   assert.equal(JSON.parse(calls[5].options.body).workflow_id, "science");
+  assert.equal(JSON.parse(calls[6].options.body).model, "model-a");
 });
 
 
@@ -252,6 +257,72 @@ test("runtime client surfaces HTTP failures instead of pretending the action ran
   await assert.rejects(
     client.runTask("task:1", "missing", "model-a"),
     /ADAPTER_UNAVAILABLE/,
+  );
+});
+
+test("durable goal strip distinguishes continuation limits from completion", () => {
+  const active = workbench.renderDurableGoal({
+    goal_id: "goal:release",
+    title: "持续完成公开封包",
+    objective: "推进已登记任务并等待人工验收",
+    status: "ACTIVE",
+    continuation_policy: { max_total_steps: 20, max_total_tokens: 1000 },
+    usage: { steps_used: 4, tokens_used: 300, continuation_count: 2 },
+    recovery_required: false,
+  }, { advanceReady: true });
+  const limited = workbench.renderDurableGoal({
+    goal_id: "goal:release",
+    title: "持续完成公开封包",
+    status: "BUDGET_LIMITED",
+    continuation_policy: { max_total_steps: 20, max_total_tokens: 1000 },
+    usage: { steps_used: 20, tokens_used: 900, continuation_count: 5 },
+    recovery_required: false,
+  }, { advanceReady: true });
+  const recovering = workbench.renderDurableGoal({
+    goal_id: "goal:release",
+    title: "持续完成公开封包",
+    status: "RECOVERY_REQUIRED",
+    continuation_policy: { max_total_steps: 20, max_total_tokens: 1000 },
+    usage: { steps_used: 5, tokens_used: 400, continuation_count: 3 },
+    recovery_required: true,
+  }, { advanceReady: true });
+
+  assert.match(active, /持续完成公开封包/);
+  assert.match(active, /<b>4<\/b> \/ 20 步/);
+  assert.match(active, /data-goal-continue="goal:release"/);
+  assert.match(limited, /预算受限/);
+  assert.match(limited, /核验收口状态/);
+  assert.match(limited, /data-goal-continue="goal:release"/);
+  assert.doesNotMatch(limited, /确认完成/);
+  assert.match(recovering, /等待恢复确认/);
+  assert.doesNotMatch(recovering, /data-goal-continue/);
+});
+
+test("private operating domains use report-ready Chinese labels", () => {
+  const state = workbench.runtimeStateFromPayload({
+    status: "READY",
+    data_source: "runtime",
+    default_model: "",
+    adapters: [],
+    state: {
+      goal: "Persistent goal",
+      activeBoard: "work",
+      activeLineId: "foundation",
+      activeTaskId: null,
+      planApproved: true,
+      tasks: [],
+      businessLines: [
+        { line_id: "foundation", domain_id: "system", name: "长期任务运行底座", caption: "", layout: "milestones", stages: [] },
+        { line_id: "public-extraction", domain_id: "governance", name: "公共能力抽离", caption: "", layout: "milestones", stages: [] },
+      ],
+      taskStates: {}, decisions: {}, assignments: {},
+      onboarding: { status: "RUNTIME_READY", readOnly: false, detectedLines: [] },
+    },
+  });
+
+  assert.deepEqual(
+    workbench.workspaceView(state).work.domains.map((domain) => domain.name),
+    ["资产与治理", "系统建设"],
   );
 });
 

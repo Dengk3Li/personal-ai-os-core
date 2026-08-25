@@ -38,6 +38,32 @@ def _stable_error_code(value: Any, default: str) -> str:
     return default
 
 
+def _goal_policy(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        raise ValueError("continuation_policy must be an object")
+    defaults = {
+        "max_steps_per_continuation": 3,
+        "max_total_steps": 25,
+        "max_total_tokens": 200000,
+        "failure_budget_per_continuation": 1,
+    }
+    limits = {
+        "max_steps_per_continuation": (1, 100),
+        "max_total_steps": (1, 100000),
+        "max_total_tokens": (1, 1000000000),
+        "failure_budget_per_continuation": (1, 20),
+    }
+    unknown = set(value) - set(defaults)
+    if unknown:
+        raise ValueError(f"unknown continuation policy fields: {sorted(unknown)}")
+    policy = {**defaults, **value}
+    for field, (minimum, maximum) in limits.items():
+        item = policy[field]
+        if isinstance(item, bool) or not isinstance(item, int) or not minimum <= item <= maximum:
+            raise ValueError(f"{field} must be between {minimum} and {maximum}")
+    return policy
+
+
 class RuntimeStore:
     """SQLite authority for tasks, runs, events, artifacts, and decisions."""
 
@@ -140,9 +166,35 @@ class RuntimeStore:
                     resolved_at TEXT,
                     resolved_by TEXT
                 );
+                CREATE TABLE IF NOT EXISTS goals (
+                    goal_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    objective TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    workflow_ids_json TEXT NOT NULL,
+                    completion_criteria TEXT NOT NULL,
+                    continuation_policy_json TEXT NOT NULL,
+                    steps_used INTEGER NOT NULL,
+                    tokens_used INTEGER NOT NULL,
+                    continuation_count INTEGER NOT NULL,
+                    last_stop_reason TEXT NOT NULL,
+                    active_continuation_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    completed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS goal_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    goal_id TEXT NOT NULL REFERENCES goals(goal_id),
+                    continuation_id TEXT,
+                    event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    at TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_task ON runs(task_id, attempt);
                 CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id, event_id);
                 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_goal_events_goal ON goal_events(goal_id, event_id);
                 """
             )
             workflow_columns = {
@@ -213,6 +265,314 @@ class RuntimeStore:
         if row is None:
             raise KeyError(f"workflow not found: {workflow_id}")
         return dict(row)
+
+    @staticmethod
+    def _decode_goal(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+        goal = dict(row)
+        goal["workflow_ids"] = json.loads(goal.pop("workflow_ids_json"))
+        goal["continuation_policy"] = json.loads(
+            goal.pop("continuation_policy_json")
+        )
+        goal["usage"] = {
+            "steps_used": goal.pop("steps_used"),
+            "tokens_used": goal.pop("tokens_used"),
+            "continuation_count": goal.pop("continuation_count"),
+            "last_stop_reason": goal.pop("last_stop_reason"),
+        }
+        return goal
+
+    @staticmethod
+    def _record_goal_event(
+        connection: sqlite3.Connection,
+        goal_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+        *,
+        continuation_id: str | None = None,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO goal_events (
+                goal_id, continuation_id, event_type, payload_json, at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (goal_id, continuation_id, event_type, _json(payload), _now()),
+        )
+
+    def create_goal(self, value: dict[str, Any]) -> dict[str, Any]:
+        goal_id = str(value.get("goal_id") or "").strip()
+        title = str(value.get("title") or "").strip()
+        objective = str(value.get("objective") or "").strip()
+        completion_criteria = str(value.get("completion_criteria") or "").strip()
+        workflow_ids = value.get("workflow_ids")
+        if not goal_id or not title or not objective or not completion_criteria:
+            raise ValueError("goal_id, title, objective, and completion_criteria are required")
+        if (
+            not isinstance(workflow_ids, list)
+            or not workflow_ids
+            or any(not str(item).strip() for item in workflow_ids)
+        ):
+            raise ValueError("workflow_ids must be a non-empty list")
+        normalized_workflows = [str(item).strip() for item in workflow_ids]
+        if len(set(normalized_workflows)) != len(normalized_workflows):
+            raise ValueError("workflow_ids must be unique")
+        policy = _goal_policy(value.get("continuation_policy") or {})
+        now = _now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = {
+                row["workflow_id"]
+                for row in connection.execute(
+                    "SELECT workflow_id FROM workflows WHERE workflow_id IN ({})".format(
+                        ",".join("?" for _ in normalized_workflows)
+                    ),
+                    normalized_workflows,
+                ).fetchall()
+            }
+            missing = [item for item in normalized_workflows if item not in existing]
+            if missing:
+                raise ValueError(f"workflow is not registered: {missing[0]}")
+            connection.execute(
+                """
+                INSERT INTO goals (
+                    goal_id, title, objective, status, workflow_ids_json,
+                    completion_criteria, continuation_policy_json, steps_used,
+                    tokens_used, continuation_count, last_stop_reason,
+                    active_continuation_id, created_at, updated_at, completed_at
+                ) VALUES (?, ?, ?, 'ACTIVE', ?, ?, ?, 0, 0, 0, '', '', ?, ?, NULL)
+                """,
+                (
+                    goal_id,
+                    title,
+                    objective,
+                    _json(normalized_workflows),
+                    completion_criteria,
+                    _json(policy),
+                    now,
+                    now,
+                ),
+            )
+            self._record_goal_event(
+                connection,
+                goal_id,
+                "GOAL_CREATED",
+                {"workflow_count": len(normalized_workflows)},
+            )
+        return self.get_goal(goal_id)
+
+    def get_goal(self, goal_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM goals WHERE goal_id = ?", (goal_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"goal not found: {goal_id}")
+        return self._decode_goal(row)
+
+    def claim_goal_continuation(self, goal_id: str) -> dict[str, Any]:
+        continuation_id = _identifier("continuation")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM goals WHERE goal_id = ?", (goal_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"goal not found: {goal_id}")
+            goal = self._decode_goal(row)
+            if goal["active_continuation_id"]:
+                return {"ok": False, "reason": "GOAL_ALREADY_CONTINUING", "goal": goal}
+            if goal["status"] not in {"ACTIVE", "BUDGET_LIMITED"}:
+                return {
+                    "ok": False,
+                    "reason": f"GOAL_{goal['status']}",
+                    "goal": goal,
+                }
+            updated = connection.execute(
+                """
+                UPDATE goals
+                SET active_continuation_id = ?, updated_at = ?
+                WHERE goal_id = ? AND status = ? AND active_continuation_id = ''
+                """,
+                (continuation_id, _now(), goal_id, goal["status"]),
+            )
+            if updated.rowcount != 1:
+                return {"ok": False, "reason": "GOAL_STATE_CHANGED", "goal": goal}
+            self._record_goal_event(
+                connection,
+                goal_id,
+                "GOAL_CONTINUATION_STARTED",
+                {},
+                continuation_id=continuation_id,
+            )
+        return {"ok": True, "continuation_id": continuation_id, "goal": goal}
+
+    def finish_goal_continuation(
+        self,
+        goal_id: str,
+        continuation_id: str,
+        *,
+        steps: int,
+        tokens: int,
+        stop_reason: str,
+        status: str = "ACTIVE",
+    ) -> dict[str, Any]:
+        if status not in {
+            "ACTIVE",
+            "BUDGET_LIMITED",
+            "AWAITING_ACCEPTANCE",
+            "RECOVERY_REQUIRED",
+            "ERROR",
+        }:
+            raise ValueError("invalid continuation goal status")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            updated = connection.execute(
+                """
+                UPDATE goals
+                SET status = ?, steps_used = steps_used + ?,
+                    tokens_used = tokens_used + ?,
+                    continuation_count = continuation_count + 1,
+                    last_stop_reason = ?, active_continuation_id = '', updated_at = ?
+                WHERE goal_id = ? AND active_continuation_id = ?
+                """,
+                (status, steps, tokens, stop_reason, _now(), goal_id, continuation_id),
+            )
+            if updated.rowcount != 1:
+                raise RuntimeError("goal continuation state changed")
+            self._record_goal_event(
+                connection,
+                goal_id,
+                "GOAL_CONTINUATION_FINISHED",
+                {
+                    "steps": steps,
+                    "tokens": tokens,
+                    "stop_reason": stop_reason,
+                    "status": status,
+                },
+                continuation_id=continuation_id,
+            )
+        return self.get_goal(goal_id)
+
+    def _change_goal_status(
+        self,
+        goal_id: str,
+        *,
+        allowed_from: set[str],
+        to: str,
+        by: str,
+        reason: str,
+        completed: bool = False,
+    ) -> dict[str, Any]:
+        if not str(by).strip():
+            raise ValueError("by is required")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT status, active_continuation_id FROM goals WHERE goal_id = ?",
+                (goal_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"goal not found: {goal_id}")
+            if row["active_continuation_id"]:
+                raise RuntimeError("goal continuation is active")
+            if row["status"] not in allowed_from:
+                raise ValueError(f"goal cannot move from {row['status']} to {to}")
+            now = _now()
+            connection.execute(
+                """
+                UPDATE goals
+                SET status = ?, updated_at = ?, completed_at = ?
+                WHERE goal_id = ?
+                """,
+                (to, now, now if completed else None, goal_id),
+            )
+            self._record_goal_event(
+                connection,
+                goal_id,
+                "GOAL_STATUS_CHANGED",
+                {"from": row["status"], "to": to, "by": str(by), "reason": str(reason)},
+            )
+        return self.get_goal(goal_id)
+
+    def pause_goal(self, goal_id: str, *, by: str, reason: str) -> dict[str, Any]:
+        return self._change_goal_status(
+            goal_id,
+            allowed_from={"ACTIVE"},
+            to="PAUSED",
+            by=by,
+            reason=reason,
+        )
+
+    def resume_goal(self, goal_id: str, *, by: str) -> dict[str, Any]:
+        goal = self.get_goal(goal_id)
+        if goal["status"] == "BUDGET_LIMITED":
+            policy = goal["continuation_policy"]
+            usage = goal["usage"]
+            if (
+                usage["steps_used"] >= policy["max_total_steps"]
+                or usage["tokens_used"] >= policy["max_total_tokens"]
+            ):
+                raise ValueError("goal budget must be increased before resume")
+        return self._change_goal_status(
+            goal_id,
+            allowed_from={"PAUSED", "BUDGET_LIMITED", "ERROR"},
+            to="ACTIVE",
+            by=by,
+            reason="Goal resumed",
+        )
+
+    def complete_goal(self, goal_id: str, *, by: str, evidence: str) -> dict[str, Any]:
+        if not str(evidence).strip():
+            raise ValueError("completion evidence is required")
+        if not str(by).strip():
+            raise ValueError("by is required")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM goals WHERE goal_id = ?", (goal_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"goal not found: {goal_id}")
+            goal = self._decode_goal(row)
+            if goal["active_continuation_id"]:
+                raise RuntimeError("goal continuation is active")
+            if goal["status"] != "AWAITING_ACCEPTANCE":
+                raise ValueError(
+                    f"goal cannot move from {goal['status']} to COMPLETE"
+                )
+            placeholders = ",".join("?" for _ in goal["workflow_ids"])
+            task_states = [
+                item["status"]
+                for item in connection.execute(
+                    f"SELECT status FROM tasks WHERE workflow_id IN ({placeholders})",
+                    goal["workflow_ids"],
+                ).fetchall()
+            ]
+            if not task_states or any(
+                status not in {"DONE", "ARCHIVED"} for status in task_states
+            ):
+                raise ValueError("goal scope changed; continuation is required")
+            now = _now()
+            connection.execute(
+                """
+                UPDATE goals
+                SET status = 'COMPLETE', updated_at = ?, completed_at = ?
+                WHERE goal_id = ? AND status = 'AWAITING_ACCEPTANCE'
+                """,
+                (now, now, goal_id),
+            )
+            self._record_goal_event(
+                connection,
+                goal_id,
+                "GOAL_STATUS_CHANGED",
+                {
+                    "from": "AWAITING_ACCEPTANCE",
+                    "to": "COMPLETE",
+                    "by": str(by),
+                    "reason": str(evidence),
+                },
+            )
+        return self.get_goal(goal_id)
 
     def create_task(self, task: dict[str, Any]) -> dict[str, Any]:
         with self._connect() as connection:
@@ -792,6 +1152,10 @@ class RuntimeStore:
             event_rows = connection.execute("SELECT * FROM events ORDER BY event_id").fetchall()
             artifact_rows = connection.execute("SELECT * FROM artifacts ORDER BY rowid").fetchall()
             decision_rows = connection.execute("SELECT * FROM decisions ORDER BY rowid").fetchall()
+            goal_rows = connection.execute("SELECT * FROM goals ORDER BY rowid").fetchall()
+            goal_event_rows = connection.execute(
+                "SELECT * FROM goal_events ORDER BY event_id"
+            ).fetchall()
         route_by_run_id = {}
         for row in event_rows:
             if row["event_type"] != "AUTO_ROUTE_SELECTED" or not row["run_id"]:
@@ -834,6 +1198,11 @@ class RuntimeStore:
             decision = dict(row)
             decision["options"] = json.loads(decision.pop("options_json"))
             decisions.append(decision)
+        goal_events = []
+        for row in goal_event_rows:
+            event = dict(row)
+            event["payload"] = json.loads(event.pop("payload_json"))
+            goal_events.append(event)
         return {
             "schema_version": "personal-ai-os.runtime/v1",
             "workflows": [dict(row) for row in workflow_rows],
@@ -843,6 +1212,8 @@ class RuntimeStore:
             "artifacts": artifacts,
             "decisions": decisions,
             "assignments": assignments,
+            "goals": [self._decode_goal(row) for row in goal_rows],
+            "goal_events": goal_events,
         }
 
     def integrity(self) -> dict[str, Any]:

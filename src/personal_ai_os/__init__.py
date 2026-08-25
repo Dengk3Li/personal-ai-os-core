@@ -4,6 +4,7 @@ from .continuity import build_capsule
 from .dispatching import assign_task, select_execution_route
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
+from .goals import GoalController, load_goal_definition
 from .intake import build_candidate_plan, inspect_workspace
 from .modules import build_module_graph, module_catalog
 from .operations import operation_spec
@@ -21,7 +22,7 @@ from .truth import compile_truth
 from .workflow import transition_task
 from .workflow_structure import compile_workflow_structure, evaluate_workflow_structure
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 __all__ = [
     "build_capsule",
@@ -38,11 +39,13 @@ __all__ = [
     "evaluate_git_closure",
     "evaluate_workflow_structure",
     "ExecutionBroker",
+    "GoalController",
     "freeze_assets",
     "inspect_workspace",
     "install_workflow_preset",
     "load_runtime_plan",
     "load_runtime_routes",
+    "load_goal_definition",
     "load_presentation",
     "module_catalog",
     "operation_spec",

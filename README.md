@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.11 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.11.md)
+[中文说明](README.zh-CN.md) · [v0.12 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.12.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -139,6 +139,28 @@ personal-ai-os runtime serve \
   --model "your-model-id" \
   --projection-mode private-local
 ```
+
+## v0.12 durable goals and bounded continuation
+
+A durable goal now sits above individual worklines. It stores the objective, scoped workflow IDs, completion criteria, continuation limits, cumulative steps, observed model-token usage, and an append-only goal event trail in SQLite. A goal survives process restarts without being inferred again from chat.
+
+Goal continuation reuses the existing dependency, Human Gate, routing, task-claim, review, and recovery boundaries. One continuation can advance several registered worklines, but it remains bounded by per-call and total budgets. Reaching a step or token limit sets `BUDGET_LIMITED`; closing every scoped task sets `AWAITING_ACCEPTANCE`. Neither state is success. Only an explicit owner action with completion evidence sets `COMPLETE`.
+
+```bash
+personal-ai-os runtime goal-create \
+  --store .personal-ai-os/runtime.db \
+  --goal examples/durable-goal.json
+
+personal-ai-os runtime goal-continue \
+  --store .personal-ai-os/runtime.db \
+  --goal-id goal:science-release \
+  --adapter openai-compatible \
+  --model "your-model-id"
+```
+
+The private-local Workbench shows the current durable goal, persisted budget usage, and one continuation action above the Domain/workline tabs. A SQLite continuation claim prevents competing processes from advancing the same goal twice. An unfinished claim after a crash fails closed as `GOAL_RECOVERY_REQUIRED`; v0.12 does not pretend to reconcile an unknown external side effect.
+
+This slice independently implements general control-plane mechanisms after reviewing Prime Agent, LangGraph, OpenHands, Letta Code, and LoopX. It does not copy their source code, product UI, trademarks, or brand assets. See [reference project license notes](docs/REFERENCE_PROJECT_LICENSES_V0.12.md).
 
 ## Operating model
 

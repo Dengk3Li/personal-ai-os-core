@@ -89,8 +89,11 @@
     analysis: "专业分析",
     writing: "长文与文书",
     general: "综合事务",
+    governance: "资产与治理",
+    system: "系统建设",
+    secretary: "秘书与路由",
   };
-  const DOMAIN_ORDER = ["research", "science", "product", "software", "analysis", "writing", "general"];
+  const DOMAIN_ORDER = ["governance", "system", "secretary", "research", "science", "product", "software", "analysis", "writing", "general"];
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -157,6 +160,8 @@
       load: () => request("/api/runtime"),
       runTask: (taskId, adapterId, model) => post("/api/runs", { task_id: taskId, adapter_id: adapterId, model }),
       advance: (adapterId, model, maxSteps = 25, workflowId = null) => post("/api/advance", { adapter_id: adapterId, model, max_steps: maxSteps, failure_budget: 1, workflow_id: workflowId }),
+      continueGoal: (goalId, adapterId, model) => post(`/api/goals/${encodeURIComponent(goalId)}/continue`, { adapter_id: adapterId, model }),
+      completeGoal: (goalId) => post(`/api/goals/${encodeURIComponent(goalId)}/complete`, { by: "owner", evidence: "范围内任务已逐项验收。" }),
       transitionTask: (taskId, to, reason) => post(`/api/tasks/${encodeURIComponent(taskId)}/transition`, { to, reason, by: "owner" }),
       createTask: (task) => post("/api/tasks", task),
       createWorkflow: (workflow) => post("/api/workflows", workflow),
@@ -775,6 +780,11 @@
         lines: domainLines,
         progress: progress(state, taskIds),
       };
+    }).sort((left, right) => {
+      const leftOrder = DOMAIN_ORDER.indexOf(left.domain_id);
+      const rightOrder = DOMAIN_ORDER.indexOf(right.domain_id);
+      return (leftOrder < 0 ? DOMAIN_ORDER.length : leftOrder)
+        - (rightOrder < 0 ? DOMAIN_ORDER.length : rightOrder);
     });
     const activeDomain = domains.find((domain) => domain.domain_id === (activeLine && activeLine.domain_id)) || domains[0];
     const domainLines = activeDomain ? activeDomain.lines : [];
@@ -928,6 +938,33 @@
 
   function renderLineButton(line, active) {
     return `<button class="line-tab${active ? " active" : ""}" type="button" role="tab" data-line-id="${escapeHtml(line.line_id)}" data-domain-id="${escapeHtml(line.domain_id)}" aria-selected="${active ? "true" : "false"}" aria-controls="workflow-content" tabindex="${active ? "0" : "-1"}"><b>${escapeHtml(line.name)}</b><em>${line.progress.done}/${line.progress.total}</em></button>`;
+  }
+
+  function renderDurableGoal(goal, readiness = {}) {
+    if (!goal) return "";
+    const statusLabels = {
+      ACTIVE: "持续推进中",
+      PAUSED: "已暂停",
+      BUDGET_LIMITED: "预算受限",
+      AWAITING_ACCEPTANCE: "等待最终验收",
+      RECOVERY_REQUIRED: "等待恢复确认",
+      COMPLETE: "已完成",
+      ERROR: "需要处理",
+    };
+    const policy = goal.continuation_policy || {};
+    const usage = goal.usage || {};
+    const status = goal.recovery_required ? "RECOVERY_REQUIRED" : goal.status;
+    let action = "";
+    if (status === "ACTIVE") {
+      action = `<button class="durable-goal-action" type="button" data-goal-continue="${escapeHtml(goal.goal_id)}" ${readiness.advanceReady ? "" : "disabled"}>${readiness.advanceReady ? "继续目标" : "配置执行层后继续"}</button>`;
+    } else if (status === "AWAITING_ACCEPTANCE") {
+      action = `<button class="durable-goal-action" type="button" data-goal-complete="${escapeHtml(goal.goal_id)}">确认完成</button>`;
+    } else if (status === "BUDGET_LIMITED") {
+      action = `<button class="durable-goal-action" type="button" data-goal-continue="${escapeHtml(goal.goal_id)}">核验收口状态</button>`;
+    } else if (status === "RECOVERY_REQUIRED") {
+      action = '<button class="durable-goal-action" type="button" disabled>需要恢复确认</button>';
+    }
+    return `<div class="durable-goal-copy"><span>${escapeHtml(statusLabels[status] || "长期目标")}</span><strong>${escapeHtml(goal.title || "长期目标")}</strong><small>${escapeHtml(goal.objective || "目标状态由本地运行库持续保存")}</small></div><div class="durable-goal-usage"><span><b>${Number(usage.steps_used || 0)}</b> / ${Number(policy.max_total_steps || 0)} 步</span><span><b>${Number(usage.tokens_used || 0)}</b> / ${Number(policy.max_total_tokens || 0)} Token</span></div>${action}`;
   }
 
   function renderDomainButton(domain, active) {
@@ -1162,6 +1199,12 @@
       byId("work-source-label").textContent = state.runtime ? "真实运行状态" : "任务内容已匿名";
       byId("reset-demo").textContent = state.runtime ? "刷新状态" : "重置演示";
       byId("footer-mode").textContent = state.runtime ? "本地持久化运行库" : "匿名结构演示";
+      const durableGoalStrip = byId("durable-goal-strip");
+      const durableGoal = state.runtime && state.durableGoals && state.durableGoals[0];
+      durableGoalStrip.hidden = !durableGoal;
+      durableGoalStrip.innerHTML = durableGoal
+        ? renderDurableGoal(durableGoal, executionReadiness(state))
+        : "";
       doc.querySelectorAll('[role="tab"][data-board]').forEach((button) => {
         const active = button.dataset.board === view.activeBoard;
         button.classList.toggle("active", active);
@@ -1454,6 +1497,29 @@
           );
           announce(`当前工作线已推进 ${result.advanced_count || 0} 项，停在 ${result.stop_reason || "UNKNOWN"}`);
         } catch (error) { announce(`自动推进未执行：${error.message}`); }
+        return;
+      }
+      const continueGoal = event.target.closest && event.target.closest("[data-goal-continue]");
+      if (continueGoal && state.runtime && runtimeClient) {
+        const adapter = byId("auto-advance-adapter");
+        const model = byId("auto-advance-model");
+        try {
+          announce("正在继续当前长期目标");
+          const result = await runTaskWithPolling(
+            () => runtimeClient.continueGoal(continueGoal.dataset.goalContinue, adapter ? adapter.value : "", model ? model.value : state.defaultModel),
+            refreshRuntime,
+          );
+          announce(`长期目标已推进 ${result.steps_used || 0} 步，停在 ${result.stop_reason || "UNKNOWN"}`);
+        } catch (error) { announce(`长期目标未继续：${error.message}`); }
+        return;
+      }
+      const completeGoal = event.target.closest && event.target.closest("[data-goal-complete]");
+      if (completeGoal && state.runtime && runtimeClient) {
+        try {
+          await runtimeClient.completeGoal(completeGoal.dataset.goalComplete);
+          await refreshRuntime();
+          announce("长期目标已完成验收");
+        } catch (error) { announce(`目标验收未记录：${error.message}`); }
         return;
       }
       const decisionCard = event.target.closest && event.target.closest("[data-decision-task]");
@@ -1763,6 +1829,7 @@
     recordDecision,
     renderDecisionCard,
     renderRunDetail,
+    renderDurableGoal,
     renderWorkflowNode,
     renderModuleTopology,
     renderTaskCard,

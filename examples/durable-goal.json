@@ -1,0 +1,16 @@
+{
+  "schema_version": "personal-ai-os.goal/v1",
+  "goal_id": "goal:science-release",
+  "title": "Complete one accepted science loop",
+  "objective": "Advance the registered scientific workflow through bounded model runs and human review.",
+  "workflow_ids": [
+    "science"
+  ],
+  "completion_criteria": "Every scoped task has an accepted result and the owner confirms the goal outcome.",
+  "continuation_policy": {
+    "max_steps_per_continuation": 3,
+    "max_total_steps": 25,
+    "max_total_tokens": 200000,
+    "failure_budget_per_continuation": 1
+  }
+}

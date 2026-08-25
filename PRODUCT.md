@@ -47,11 +47,13 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 - Secretary 已提供最小上下文包和只读简报：从运行库汇总进行中、待验收、阻塞、暂停、待决定和下一动作，不复制记忆正文。
 - `personal-ai-os.domain-context/v1` 按 `domain contract → active project → current state → relevant knowledge → historical decisions → constraints → excluded context` 的固定顺序编译一个领域的引用清单；领域歧义和未知层级 fail closed。
 - `personal-ai-os.auto-advance/v1` 有界扫描当前就绪任务，逐项调用同一个 Broker，并记录 `AUTO_ADVANCE_SELECTED / FINISHED` 事件。它不会自动批准 Human Gate、接受 `REVIEW`、解除阻塞或重派遗留的 `IN_PROGRESS` 任务。
+- `personal-ai-os.goal/v1` 把跨工作线长期目标独立于聊天和工作线说明持久化。目标保存完成条件、单次与累计预算、累计步数、已观测 Token 和追加式事件；预算耗尽进入 `BUDGET_LIMITED`，范围任务收口进入 `AWAITING_ACCEPTANCE`，只有人工验收才进入 `COMPLETE`。
+- GoalController 复用现有依赖、Human Gate、路由、原子任务占用与结果验收。SQLite 目标续推占用阻止两个进程重复续推；未结束占用在重启后进入恢复确认，不自动重放未知外部动作。
 - 自动推进可以读取 `personal-ai-os.runtime-routes/v1` 服务端目录，按每项任务的能力、层级、预计上下文和可用性选择模型与 Adapter。路线只在任务原子 claim 成功后写入同一 run 的事件；竞争失败方不留下路线证据。
 - 内置工作流预设包括 science、meeting notes 和 analytical report。Science 预设实现五类 Agent 与并行实验路径的任务合同，但不把工程运行状态当作科学结论。
 - 首次扫描与计划生成仍是候选结果，未经用户确认不写入被分析的工作区。
 - 静态演示中的心跳仍是合成事件。连接本地运行库后，working 宠物只消费真实 `IN_PROGRESS` 状态；它不会反向改变任务状态。
-- 当前版本没有 SSE、流式 token 展示、运行取消或续接、服务端宠物注册表、模型自动发现、Codex App Server Adapter、VS Code Adapter、远程执行 Adapter，也没有自动递归理解整仓内部结构的分形扫描。
+- 当前版本没有后台 daemon、心跳续租、未知外部运行对账、SSE、流式 token 展示、运行取消或续接、服务端宠物注册表、模型自动发现、Codex App Server Adapter、VS Code Adapter、远程执行 Adapter，也没有自动递归理解整仓内部结构的分形扫描。
 - 过往对话学习目前只在系统地图中标为规划能力。公开内核没有自动推断人格，也不会未经证据核验和人工确认改写个人模型。
 - Token Manager 仍是规划中的可组合模块，不能标为已可用。
 
@@ -63,7 +65,7 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 
 - `src/personal_ai_os/` 已包含计划拆分、动态路由、任务分配、统一状态、SQLite 运行库、Execution Broker、OpenAI-compatible Adapter、Secretary 简报、连续性和验收能力。
 - `workbench/` 能在本地 API 可用时读取运行投影，并在连接失败时回到匿名合成演示。
-- 当前全量测试通过 134 个 Python 用例和 55 个 Workbench 用例，覆盖 Domain 持久化、Domain/工作线双层分页、单线路聚焦、执行模式就绪判断、公开执行标签匿名映射、模块连接说明、反馈边分离、递归系统图与下钻、工作流结构校验和求值、本地展示投影、运行标识匿名映射及操作还原、逐任务路由、单次可用性快照、路线与 run 原子绑定、工作线作用域、外部运行失败、失败预算与 CLI 失败码、有界自动推进、遗留运行恢复门、Git closure 阻塞、Human Gate 裁决竞态、单一待决定卡、Domain Context 编译、计划整批回滚与定义漂移保护、持久化恢复、模型上下文隔离与限长、依赖产物接续、跨 RuntimeStore 派发竞争、调用期间真实运行态、原子状态与裁决、异常脱敏、证据边界、模块批注交接、同源本地 API、真实兼容 HTTP 调用、API 类型错误和静态回退。
+- 当前全量测试通过 154 个 Python 用例和 57 个 Workbench 用例，覆盖持久目标、跨工作线续推、累计步数与 Token、预算受限、显式完成验收、续推竞争与崩溃恢复门，以及 Domain 持久化、Domain/工作线双层分页、单线路聚焦、执行模式就绪判断、公开执行标签匿名映射、模块连接说明、反馈边分离、递归系统图与下钻、工作流结构校验和求值、本地展示投影、运行标识匿名映射及操作还原、逐任务路由、单次可用性快照、路线与 run 原子绑定、工作线作用域、外部运行失败、失败预算与 CLI 失败码、有界自动推进、遗留运行恢复门、Git closure 阻塞、Human Gate 裁决竞态、单一待决定卡、Domain Context 编译、计划整批回滚与定义漂移保护、持久化恢复、模型上下文隔离与限长、依赖产物接续、跨 RuntimeStore 派发竞争、调用期间真实运行态、原子状态与裁决、异常脱敏、证据边界、模块批注交接、同源本地 API、真实兼容 HTTP 调用、API 类型错误和静态回退。
 - SQLite 原子状态转换保证同一任务只有一个模型调用方；完整的多进程调度、租约续期和崩溃恢复仍未交付。
 - 公开仓库不包含真实用户工作区数据、模型密钥、商业指标或研究结论；用户选择的本地 SQLite 文件可能保存模型输出，必须按本地敏感数据管理，不能提交到 Git。
 

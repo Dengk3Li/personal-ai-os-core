@@ -141,6 +141,147 @@ class DemoCliTests(unittest.TestCase):
         self.assertEqual(1, payload["created_tasks"])
         self.assertNotIn(private_path, result.stdout)
 
+    def test_runtime_cli_registers_and_reads_a_versioned_durable_goal(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = str(root / "runtime.db")
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "init",
+                    "--store",
+                    store,
+                    "--preset",
+                    "science",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            goal_file = root / "goal.json"
+            goal_file.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "personal-ai-os.goal/v1",
+                        "goal_id": "goal:science",
+                        "title": "Complete one science loop",
+                        "objective": "Continue bounded science work",
+                        "workflow_ids": ["science"],
+                        "completion_criteria": "Owner accepts every result",
+                        "continuation_policy": {"max_total_steps": 12},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            created = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "goal-create",
+                    "--store",
+                    store,
+                    "--goal",
+                    str(goal_file),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            status = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "goal-status",
+                    "--store",
+                    store,
+                    "--goal-id",
+                    "goal:science",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, created.returncode, created.stderr)
+        self.assertEqual("ACTIVE", json.loads(created.stdout)["goal"]["status"])
+        self.assertEqual(0, status.returncode, status.stderr)
+        self.assertEqual(12, json.loads(status.stdout)["goal"]["continuation_policy"]["max_total_steps"])
+
+    def test_runtime_goal_status_missing_is_structured_json(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "goal-status",
+                    "--store",
+                    str(Path(directory) / "runtime.db"),
+                    "--goal-id",
+                    "goal:missing",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(
+            {"status": "UNKNOWN", "reason": "NOT_FOUND"},
+            json.loads(result.stdout),
+        )
+
+    def test_installed_cli_entry_keeps_goal_errors_machine_readable(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    "from personal_ai_os.cli import main; raise SystemExit(main())",
+                    "runtime",
+                    "goal-status",
+                    "--store",
+                    str(Path(directory) / "runtime.db"),
+                    "--goal-id",
+                    "goal:missing",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(
+            {"status": "UNKNOWN", "reason": "NOT_FOUND"},
+            json.loads(result.stdout),
+        )
+
     def test_domain_context_cli_compiles_only_the_selected_profile(self):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(REPO_ROOT / "src")

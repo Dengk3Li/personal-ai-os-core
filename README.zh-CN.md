@@ -4,7 +4,7 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 
 单个 AI 对话适合处理边界清楚的小任务。任务一旦跨越多次对话，新的对话需要重新核验旧内容；计划生成后缺少稳定的推进方式；多个执行分支也很快变得难以检查。Personal AI OS 补上长期目标和单次 AI 运行之间的操作层。
 
-[English](README.md) · [v0.11 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.11.md)
+[English](README.md) · [v0.12 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.12.md)
 
 它不打算重复做一套通用 Agent 工具箱。浏览器、终端、定时任务、记忆、子 Agent 和远程运行已经有成熟产品。Personal AI OS 处理这些执行器之上的问题：工作区结构、可移交的任务现场、证据验收、人工决定和跨执行器连续性。
 
@@ -139,6 +139,28 @@ personal-ai-os runtime serve \
   --model "你的模型 ID" \
   --projection-mode private-local
 ```
+
+## v0.12 持久目标与有界续推
+
+持久目标位于单条工作线之上。SQLite 单独保存目标、覆盖的工作线、完成条件、续推预算、累计步数、已观测模型 Token 和追加式目标事件。服务重启后，系统直接读取目标事实，不需要再从聊天内容猜测目标。
+
+目标续推继续经过现有依赖检查、Human Gate、动态路由、任务原子占用、结果验收和恢复边界。一次续推可以覆盖多条已登记工作线，但同时受单次步数和总预算限制。达到步数或 Token 上限只进入 `BUDGET_LIMITED`；全部范围任务收口只进入 `AWAITING_ACCEPTANCE`。两者都不等于完成。只有用户提供验收依据并明确确认后，目标才进入 `COMPLETE`。
+
+```bash
+personal-ai-os runtime goal-create \
+  --store .personal-ai-os/runtime.db \
+  --goal examples/durable-goal.json
+
+personal-ai-os runtime goal-continue \
+  --store .personal-ai-os/runtime.db \
+  --goal-id goal:science-release \
+  --adapter openai-compatible \
+  --model "你的模型 ID"
+```
+
+私人本地工作台在 Domain 与工作线分页上方显示当前长期目标、持久预算使用量和一个续推动作。SQLite 续推占用保证同一目标只有一个续推方。进程崩溃留下的未结束占用会返回 `GOAL_RECOVERY_REQUIRED`，等待恢复确认，不会盲目重放外部动作。
+
+本切片在研究 Prime Agent、LangGraph、OpenHands、Letta Code 和 LoopX 后独立实现通用机制，不复制第三方源码、界面、商标或品牌素材。许可证边界见[参考项目许可证说明](docs/REFERENCE_PROJECT_LICENSES_V0.12.md)。
 
 ## 操作闭环
 
