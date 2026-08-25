@@ -1,0 +1,69 @@
+{
+  "schema_version": "personal-ai-os.research-report-acceptance/v1",
+  "synthetic_only": true,
+  "brief": {
+    "brief_id": "brief-example",
+    "question": "Example question for a bounded report",
+    "scope": "Example scope with synthetic records only"
+  },
+  "source_manifest": [
+    {
+      "source_id": "source-a",
+      "kind": "synthetic",
+      "status": "KNOWN"
+    },
+    {
+      "source_id": "source-b",
+      "kind": "synthetic",
+      "status": "UNKNOWN"
+    },
+    {
+      "source_id": "source-c",
+      "kind": "synthetic",
+      "status": "CONFLICT"
+    }
+  ],
+  "evidence_matrix": [
+    {
+      "evidence_id": "evidence-example",
+      "claim_ref": "claim-example",
+      "source_ids": [
+        "source-a"
+      ],
+      "status": "SUPPORTED"
+    }
+  ],
+  "outline": [
+    {
+      "section_id": "section-example",
+      "title": "Example section"
+    }
+  ],
+  "chapters": [
+    {
+      "chapter_id": "chapter-example",
+      "outline_id": "section-example",
+      "status": "DRAFT"
+    }
+  ],
+  "visual": [
+    {
+      "visual_id": "visual-example",
+      "kind": "synthetic-figure",
+      "status": "DRAFT"
+    }
+  ],
+  "final_receipt": {
+    "artifact_terminal": true,
+    "human_accepted": false,
+    "receipt_ref": "receipt-example"
+  },
+  "review": {
+    "status": "IN_REVIEW",
+    "accepted": false,
+    "reasons": [
+      "SOURCE_UNKNOWN",
+      "SOURCE_CONFLICT"
+    ]
+  }
+}
