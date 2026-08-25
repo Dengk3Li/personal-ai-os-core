@@ -345,6 +345,8 @@ class RuntimeApplication:
         self.presentation = (
             validate_presentation(presentation) if presentation is not None else None
         )
+        if self.projection_mode == "private-local":
+            self._restore_execution_settings(self.store.load_execution_settings())
         if self.presentation is not None:
             validate_runtime_label(default_model)
             for adapter_id, adapter in adapters.items():
@@ -357,6 +359,78 @@ class RuntimeApplication:
                     validate_runtime_label(capability)
             apply_presentation(self.store.snapshot(), self.presentation)
         self.web_root = Path(web_root).expanduser().resolve()
+
+    def _restore_execution_settings(self, settings: dict[str, Any] | None) -> None:
+        """Restore safe browser configuration without restoring credentials."""
+        if not settings:
+            return
+        self.runtime_routes = [dict(route) for route in settings.get("routes") or []]
+        mode = str(settings.get("mode") or "fixed")
+        saved_model = str(settings.get("default_model") or "")
+        saved_adapter_id = str(settings.get("default_adapter_id") or "")
+        adapter_kind = str(settings.get("adapter_kind") or "")
+        if adapter_kind == "codex-project" and settings.get("codex_projects"):
+            try:
+                adapter = CodexProjectAdapter(
+                    self.store,
+                    project_bindings=settings.get("codex_projects") or [],
+                )
+            except (OSError, ValueError):
+                self.default_adapter_id = ""
+                self.default_model = ""
+                self.credential_source = "recovery-required"
+                return
+            self.broker.adapters[adapter.adapter_id] = adapter
+            saved_adapter_id = adapter.adapter_id
+            self.credential_source = "codex-session"
+        elif adapter_kind == "openai-compatible":
+            # The adapter may be recreated from a process environment, but the
+            # browser-supplied key itself is intentionally never restored.
+            if saved_adapter_id not in self.broker.adapters:
+                saved_adapter_id = ""
+                self.credential_source = "recovery-required"
+            else:
+                self.credential_source = "server-environment"
+        else:
+            saved_adapter_id = ""
+            self.credential_source = "recovery-required"
+        self.default_adapter_id = saved_adapter_id
+        self.default_model = saved_model
+        if mode == "automatic":
+            self.default_adapter_id = ""
+            self.default_model = ""
+
+    def _persist_execution_settings(self, mode: str) -> None:
+        """Persist routes and project bindings, never API credentials."""
+        active = self.broker.adapters.get(self.default_adapter_id)
+        codex_adapters = [
+            adapter
+            for adapter in self.broker.adapters.values()
+            if isinstance(adapter, CodexProjectAdapter)
+        ]
+        adapter_kind = ""
+        codex_projects: list[dict[str, Any]] = []
+        if isinstance(active, CodexProjectAdapter):
+            adapter_kind = "codex-project"
+            codex_projects = [dict(item) for item in active.project_bindings]
+        elif isinstance(active, OpenAICompatibleAdapter):
+            adapter_kind = "openai-compatible"
+        elif codex_adapters and any(
+            str(route.get("adapter_id") or "") == CodexProjectAdapter.adapter_id
+            for route in self.runtime_routes
+        ):
+            adapter_kind = "codex-project"
+            codex_projects = [dict(item) for item in codex_adapters[0].project_bindings]
+        self.store.save_execution_settings(
+            {
+                "mode": mode,
+                "default_model": self.default_model,
+                "default_adapter_id": self.default_adapter_id,
+                "adapter_kind": adapter_kind,
+                "routes": self.runtime_routes,
+                "codex_projects": codex_projects,
+            }
+        )
 
     def projection(self) -> dict[str, Any]:
         snapshot = self.store.snapshot()
@@ -480,6 +554,7 @@ class RuntimeApplication:
         self.default_model = default_model
         self.runtime_routes = [dict(route) for route in routes]
         self.credential_source = credential_source
+        self._persist_execution_settings(mode)
         return self.projection()
 
     def public_execution_settings(self) -> dict[str, Any]:

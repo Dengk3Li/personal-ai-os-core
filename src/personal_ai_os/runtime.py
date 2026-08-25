@@ -231,6 +231,16 @@ class RuntimeStore:
                     confirmed_at TEXT,
                     PRIMARY KEY (task_id, module_id, relation)
                 );
+                CREATE TABLE IF NOT EXISTS execution_settings (
+                    setting_id INTEGER PRIMARY KEY CHECK (setting_id = 1),
+                    mode TEXT NOT NULL,
+                    default_model TEXT NOT NULL,
+                    default_adapter_id TEXT NOT NULL,
+                    adapter_kind TEXT NOT NULL,
+                    routes_json TEXT NOT NULL,
+                    codex_projects_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_task ON runs(task_id, attempt);
                 CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id, event_id);
                 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status, created_at);
@@ -274,6 +284,74 @@ class RuntimeStore:
             connection.execute(
                 """UPDATE workflows SET protocol_id = 'meeting-source-first-v1'
                    WHERE workflow_id = 'meeting-notes' AND protocol_id = ''"""
+            )
+
+    def load_execution_settings(self) -> dict[str, Any] | None:
+        """Load non-sensitive browser execution settings from the local store.
+
+        Credentials and API endpoints are intentionally not part of this record.
+        A missing record is normal for a fresh runtime.
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM execution_settings WHERE setting_id = 1"
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "mode": row["mode"],
+            "default_model": row["default_model"],
+            "default_adapter_id": row["default_adapter_id"],
+            "adapter_kind": row["adapter_kind"],
+            "routes": json.loads(row["routes_json"]),
+            "codex_projects": json.loads(row["codex_projects_json"]),
+            "updated_at": row["updated_at"],
+        }
+
+    def save_execution_settings(self, settings: dict[str, Any]) -> None:
+        """Persist only non-sensitive execution configuration.
+
+        This table deliberately has no API key or endpoint field. Callers must
+        pass already-normalized routes and project bindings.
+        """
+        if not isinstance(settings, dict):
+            raise ValueError("execution settings must be an object")
+        mode = str(settings.get("mode") or "fixed")
+        default_model = str(settings.get("default_model") or "")
+        default_adapter_id = str(settings.get("default_adapter_id") or "")
+        adapter_kind = str(settings.get("adapter_kind") or "")
+        routes = settings.get("routes") or []
+        codex_projects = settings.get("codex_projects") or []
+        if mode not in {"fixed", "automatic"}:
+            raise ValueError("execution mode must be fixed or automatic")
+        if not isinstance(routes, list) or not isinstance(codex_projects, list):
+            raise ValueError("execution routes and projects must be lists")
+        now = _now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO execution_settings (
+                    setting_id, mode, default_model, default_adapter_id,
+                    adapter_kind, routes_json, codex_projects_json, updated_at
+                ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(setting_id) DO UPDATE SET
+                    mode = excluded.mode,
+                    default_model = excluded.default_model,
+                    default_adapter_id = excluded.default_adapter_id,
+                    adapter_kind = excluded.adapter_kind,
+                    routes_json = excluded.routes_json,
+                    codex_projects_json = excluded.codex_projects_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    mode,
+                    default_model,
+                    default_adapter_id,
+                    adapter_kind,
+                    _json(routes),
+                    _json(codex_projects),
+                    now,
+                ),
             )
 
     def create_workflow(self, workflow: dict[str, Any]) -> dict[str, Any]:

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -567,6 +568,101 @@ class RuntimeServerTests(unittest.TestCase):
             ],
             configured["execution_settings"]["codex_projects"],
         )
+
+    def test_private_execution_settings_restore_codex_binding_after_application_restart(self):
+        project = Path(self.temp.name) / "science-project"
+        project.mkdir()
+        _, configured = self.request(
+            "/api/settings/execution",
+            {
+                "mode": "fixed",
+                "adapter": {
+                    "kind": "codex-project",
+                    "model": "gpt-5.6-sol",
+                    "projects": [
+                        {
+                            "project_key": "science-workspace",
+                            "label": "科研项目",
+                            "path": str(project),
+                            "workflow_ids": ["science"],
+                            "environment": "worktree",
+                        }
+                    ],
+                },
+            },
+        )
+
+        restarted_store = RuntimeStore(self.store.database)
+        restarted = RuntimeApplication(
+            store=restarted_store,
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="fallback-model",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+        )
+        projection = restarted.projection()
+
+        self.assertTrue(configured["execution"]["task_dispatch_ready"])
+        self.assertEqual("gpt-5.6-sol", projection["default_model"])
+        self.assertEqual("codex-project", projection["execution_settings"]["default_adapter_id"])
+        self.assertEqual("科研项目", projection["execution_settings"]["codex_projects"][0]["label"])
+        self.assertTrue(projection["execution"]["task_dispatch_ready"])
+
+    def test_private_api_key_never_enters_persisted_execution_settings(self):
+        secret = "sk-persisted-settings-must-not-contain-me"
+        self.request(
+            "/api/settings/execution",
+            {
+                "mode": "fixed",
+                "adapter": {
+                    "kind": "openai-compatible",
+                    "api_base": "https://example.invalid/v1",
+                    "api_key": secret,
+                    "model": "model-browser",
+                },
+            },
+        )
+
+        with sqlite3.connect(self.store.database) as connection:
+            rows = connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'execution_settings'"
+            ).fetchall()
+            persisted = " ".join(str(row[0]) for row in rows)
+            values = connection.execute("SELECT * FROM execution_settings").fetchall()
+            persisted += " " + json.dumps(values, ensure_ascii=False)
+
+        self.assertNotIn("api_key", persisted)
+        self.assertNotIn(secret, persisted)
+
+    def test_private_task_routes_restore_after_application_restart(self):
+        routes = [
+            {
+                "route": "research-deep",
+                "tier": "deep",
+                "capabilities": ["research", "evidence"],
+                "max_context_tokens": 160000,
+                "adapter_id": "test-adapter",
+                "model": "research-model",
+                "enabled": True,
+            }
+        ]
+        status, configured = self.request(
+            "/api/settings/execution",
+            {"mode": "automatic", "routes": routes},
+        )
+
+        restarted = RuntimeApplication(
+            store=RuntimeStore(self.store.database),
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="fallback-model",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+        )
+        projection = restarted.projection()
+
+        self.assertEqual(200, status)
+        self.assertTrue(configured["execution"]["advance_ready"])
+        self.assertEqual("automatic", projection["execution_settings"]["mode"])
+        self.assertEqual(routes, projection["execution_settings"]["routes"])
+        self.assertTrue(projection["execution"]["advance_ready"])
 
     def test_codex_project_bridge_claims_binds_and_completes_a_browser_dispatch(self):
         project = Path(self.temp.name) / "science-project"
