@@ -119,10 +119,12 @@ class RuntimeApplication:
         default_model: str,
         web_root: str | Path,
         domain_profiles: dict[str, dict[str, Any]] | None = None,
+        runtime_routes: list[dict[str, Any]] | None = None,
     ):
         self.store = store
         self.broker = ExecutionBroker(store, adapters, domain_profiles=domain_profiles)
         self.default_model = default_model
+        self.runtime_routes = [dict(route) for route in runtime_routes or []]
         self.web_root = Path(web_root).expanduser().resolve()
 
     def projection(self) -> dict[str, Any]:
@@ -219,11 +221,30 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                     self._json(422, result)
                     return
             elif path == "/api/advance":
-                result = AutoAdvanceEngine(
-                    self.server.app.broker,
-                    adapter_id=str(payload.get("adapter_id") or ""),
-                    model=str(payload.get("model") or self.server.app.default_model),
-                ).advance(
+                default_route_mode = (
+                    "automatic"
+                    if self.server.app.runtime_routes and not self.server.app.default_model
+                    else "fixed"
+                )
+                route_mode = str(payload.get("route_mode") or default_route_mode)
+                if route_mode not in {"fixed", "automatic"}:
+                    raise ValueError("route_mode must be fixed or automatic")
+                if route_mode == "automatic" and not self.server.app.runtime_routes:
+                    raise ValueError("runtime routes are not configured")
+                engine = (
+                    AutoAdvanceEngine(
+                        self.server.app.broker,
+                        routes=self.server.app.runtime_routes,
+                        requested_route=str(payload.get("requested_route") or "") or None,
+                    )
+                    if route_mode == "automatic"
+                    else AutoAdvanceEngine(
+                        self.server.app.broker,
+                        adapter_id=str(payload.get("adapter_id") or ""),
+                        model=str(payload.get("model") or self.server.app.default_model),
+                    )
+                )
+                result = engine.advance(
                     max_steps=payload.get("max_steps", 25),
                     failure_budget=payload.get("failure_budget", 1),
                     workflow_id=payload.get("workflow_id"),
@@ -276,6 +297,7 @@ def create_runtime_server(
     default_model: str,
     web_root: str | Path,
     domain_profiles: dict[str, dict[str, Any]] | None = None,
+    runtime_routes: list[dict[str, Any]] | None = None,
 ) -> RuntimeHTTPServer:
     server = RuntimeHTTPServer(address, RuntimeRequestHandler)
     server.app = RuntimeApplication(
@@ -284,5 +306,6 @@ def create_runtime_server(
         default_model=default_model,
         web_root=web_root,
         domain_profiles=domain_profiles,
+        runtime_routes=runtime_routes,
     )
     return server

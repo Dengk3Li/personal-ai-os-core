@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .dispatching import select_execution_route
 from .presets import get_workflow_preset
 from .secretary import build_context_pack, model_context_for_task
 from .states import TASK_STATES
@@ -432,6 +433,7 @@ class RuntimeStore:
         adapter_id: str,
         model: str,
         by: str,
+        route_binding: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Atomically claim a queued task and create its local run."""
 
@@ -490,6 +492,15 @@ class RuntimeStore:
                 },
                 at=event["at"],
             )
+            if route_binding:
+                self._record_event(
+                    connection,
+                    task_id=task_id,
+                    run_id=run_id,
+                    event_type="AUTO_ROUTE_SELECTED",
+                    payload=route_binding,
+                    at=event["at"],
+                )
         return {"ok": True, "run": self.get_run(run_id)}
 
     def get_run(self, run_id: str) -> dict[str, Any]:
@@ -748,6 +759,13 @@ class RuntimeStore:
             event_rows = connection.execute("SELECT * FROM events ORDER BY event_id").fetchall()
             artifact_rows = connection.execute("SELECT * FROM artifacts ORDER BY rowid").fetchall()
             decision_rows = connection.execute("SELECT * FROM decisions ORDER BY rowid").fetchall()
+        route_by_run_id = {}
+        for row in event_rows:
+            if row["event_type"] != "AUTO_ROUTE_SELECTED" or not row["run_id"]:
+                continue
+            payload = json.loads(row["payload_json"])
+            if payload.get("route"):
+                route_by_run_id[row["run_id"]] = str(payload["route"])
         runs = []
         attempts: dict[str, int] = {}
         assignments: dict[str, dict[str, Any]] = {}
@@ -757,7 +775,7 @@ class RuntimeStore:
             runs.append(run)
             attempts[run["task_id"]] = max(attempts.get(run["task_id"], 0), run["attempt"])
             assignments[run["task_id"]] = {
-                "route": run["adapter_id"],
+                "route": route_by_run_id.get(run["run_id"], run["adapter_id"]),
                 "model": run["model"],
                 "executor": run["adapter_id"],
             }
@@ -834,7 +852,74 @@ class ExecutionBroker:
         finally:
             lock.release()
 
-    def _dispatch(self, task_id: str, *, adapter_id: str, model: str) -> dict[str, Any]:
+    def dispatch_routed(
+        self,
+        task_id: str,
+        *,
+        routes: list[dict[str, Any]],
+        requested_route: str | None = None,
+    ) -> dict[str, Any]:
+        lock = self.store.task_lock(task_id)
+        if not lock.acquire(blocking=False):
+            return {"ok": False, "reason": "TASK_ALREADY_DISPATCHING"}
+        binding: dict[str, Any] = {}
+        try:
+            result = self._dispatch(
+                task_id,
+                adapter_id="",
+                model="",
+                routes=routes,
+                requested_route=requested_route,
+                selected_binding=binding,
+            )
+        finally:
+            lock.release()
+        return {**result, **binding}
+
+    def _resolve_task_route(
+        self,
+        task: dict[str, Any],
+        routes: list[dict[str, Any]],
+        requested_route: str | None,
+    ) -> dict[str, Any]:
+        routing = (task.get("context") or {}).get("routing") or {}
+        if not isinstance(routing, dict):
+            return {"status": "BLOCKED", "reason": "ROUTING_CONTEXT_INVALID"}
+        estimated_tokens = routing.get("estimated_context_tokens", 0)
+        if type(estimated_tokens) is not int or estimated_tokens < 0:
+            return {"status": "BLOCKED", "reason": "ROUTING_CONTEXT_INVALID"}
+        available_routes = []
+        adapter_availability: dict[str, bool] = {}
+        for route in routes:
+            route_adapter_id = str(route.get("adapter_id") or "")
+            available = False
+            if route.get("enabled", True):
+                if route_adapter_id not in adapter_availability:
+                    adapter = self.adapters.get(route_adapter_id)
+                    try:
+                        adapter_availability[route_adapter_id] = bool(
+                            adapter and adapter.probe().get("available")
+                        )
+                    except Exception:
+                        adapter_availability[route_adapter_id] = False
+                available = adapter_availability[route_adapter_id]
+            available_routes.append({**route, "available": available})
+        return select_execution_route(
+            {**task, "estimated_context_tokens": estimated_tokens},
+            available_routes,
+            requested_route=requested_route,
+        )
+
+    def _dispatch(
+        self,
+        task_id: str,
+        *,
+        adapter_id: str,
+        model: str,
+        routes: list[dict[str, Any]] | None = None,
+        requested_route: str | None = None,
+        selected_binding: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         task = self.store.get_task(task_id)
         if task["status"] != "QUEUED":
             return {"ok": False, "reason": "TASK_NOT_QUEUED", "status": task["status"]}
@@ -878,12 +963,26 @@ class ExecutionBroker:
                 task = self.store.get_task(task_id)
                 if task["status"] != "QUEUED":
                     return {"ok": False, "reason": "TASK_NOT_QUEUED", "status": task["status"]}
+        route_binding = None
+        if routes is not None:
+            selected = self._resolve_task_route(task, routes, requested_route)
+            if selected.get("status") != "RESOLVED":
+                return {"ok": False, "reason": selected.get("reason") or "ROUTE_NOT_FOUND"}
+            adapter_id = str(selected["adapter_id"])
+            model = str(selected["model"])
+            route_binding = {
+                "route": str(selected["route"]),
+                "adapter_id": adapter_id,
+                "model": model,
+                "selection": str(selected["selection"]),
+            }
         adapter = self.adapters.get(adapter_id)
         if adapter is None:
             return {"ok": False, "reason": "ADAPTER_NOT_FOUND"}
-        probe = adapter.probe()
-        if not probe.get("available"):
-            return {"ok": False, "reason": "ADAPTER_UNAVAILABLE"}
+        if routes is None:
+            probe = adapter.probe()
+            if not probe.get("available"):
+                return {"ok": False, "reason": "ADAPTER_UNAVAILABLE"}
         profile = self.domain_profiles.get(task["domain_id"])
         upstream_artifacts = [
             artifact
@@ -895,10 +994,13 @@ class ExecutionBroker:
             adapter_id=adapter_id,
             model=model,
             by=f"adapter:{adapter_id}",
+            route_binding=route_binding,
         )
         if not claim["ok"]:
             return claim
         run = claim["run"]
+        if route_binding and selected_binding is not None:
+            selected_binding.update(route_binding)
         with self.store._connect() as connection:
             self.store._record_event(
                 connection,

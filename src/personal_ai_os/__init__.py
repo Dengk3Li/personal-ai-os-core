@@ -14,11 +14,12 @@ from .routing import compile_domain_context, route_task
 from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
+from .route_config import load_runtime_routes
 from .secretary import build_context_pack, build_secretary_brief
 from .truth import compile_truth
 from .workflow import transition_task
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "build_capsule",
@@ -36,6 +37,7 @@ __all__ = [
     "inspect_workspace",
     "install_workflow_preset",
     "load_runtime_plan",
+    "load_runtime_routes",
     "module_catalog",
     "operation_spec",
     "promote_candidate",

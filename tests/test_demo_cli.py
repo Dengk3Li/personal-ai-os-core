@@ -226,6 +226,72 @@ class DemoCliTests(unittest.TestCase):
         self.assertEqual("ADAPTER_UNAVAILABLE", payload["stop_reason"])
         self.assertEqual(1, len(payload["actions"]))
 
+    def test_runtime_advance_loads_a_versioned_route_catalog(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        env.pop("PERSONAL_AI_OS_API_BASE", None)
+        env.pop("PERSONAL_AI_OS_API_KEY", None)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = str(root / "runtime.db")
+            routes = root / "routes.json"
+            routes.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "personal-ai-os.runtime-routes/v1",
+                        "routes": [
+                            {
+                                "route": "deep-science",
+                                "tier": "deep",
+                                "capabilities": ["reasoning", "evidence"],
+                                "max_context_tokens": 160000,
+                                "adapter_id": "openai-compatible",
+                                "model": "model-routed",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            initialized = subprocess.run(
+                [sys.executable, "-m", "personal_ai_os", "runtime", "init", "--store", store, "--preset", "science"],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            advanced = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "advance",
+                    "--store",
+                    store,
+                    "--workflow",
+                    "science",
+                    "--routes",
+                    str(routes),
+                    "--max-steps",
+                    "10",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(0, initialized.returncode, initialized.stderr)
+        self.assertTrue(advanced.stdout, advanced.stderr)
+        payload = json.loads(advanced.stdout)
+        self.assertEqual(2, advanced.returncode, advanced.stderr)
+        self.assertFalse(payload["ok"])
+        self.assertEqual("ROUTE_NOT_FOUND", payload["stop_reason"])
+        self.assertEqual(1, len(payload["actions"]))
+
 
 if __name__ == "__main__":
     unittest.main()

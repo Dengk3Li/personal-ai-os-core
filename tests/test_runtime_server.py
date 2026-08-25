@@ -92,6 +92,69 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("science:hypothesis", advanced["actions"][0]["task_id"])
         self.assertEqual("WAITING_REVIEW", advanced["stop_reason"])
 
+    def test_advance_api_uses_the_server_route_catalog_not_client_injection(self):
+        self.server.app.runtime_routes = [
+            {
+                "route": "deep-science",
+                "tier": "deep",
+                "capabilities": ["reasoning", "evidence"],
+                "max_context_tokens": 160000,
+                "adapter_id": "test-adapter",
+                "model": "model-routed",
+                "enabled": True,
+            }
+        ]
+        try:
+            status, advanced = self.request(
+                "/api/advance",
+                {
+                    "route_mode": "automatic",
+                    "workflow_id": "science",
+                    "max_steps": 1,
+                    "routes": [
+                        {
+                            "route": "client-injected",
+                            "adapter_id": "missing",
+                            "model": "untrusted-model",
+                        }
+                    ],
+                },
+            )
+        except urllib.error.HTTPError as exc:
+            self.fail(f"automatic route request must use the server catalog: HTTP {exc.code}")
+
+        self.assertEqual(200, status)
+        self.assertTrue(advanced["ok"])
+        self.assertEqual("deep-science", advanced["actions"][0]["route"])
+        self.assertEqual("model-routed", advanced["actions"][0]["model"])
+        self.assertEqual(
+            "model-routed",
+            self.store.snapshot()["assignments"]["science:hypothesis"]["model"],
+        )
+
+    def test_routes_only_server_advances_the_workbench_request_automatically(self):
+        self.server.app.default_model = ""
+        self.server.app.runtime_routes = [
+            {
+                "route": "deep-science",
+                "tier": "deep",
+                "capabilities": ["reasoning", "evidence"],
+                "max_context_tokens": 160000,
+                "adapter_id": "test-adapter",
+                "model": "model-routed",
+                "enabled": True,
+            }
+        ]
+
+        status, advanced = self.request(
+            "/api/advance",
+            {"workflow_id": "science", "max_steps": 1},
+        )
+
+        self.assertEqual(200, status)
+        self.assertTrue(advanced["ok"])
+        self.assertEqual("deep-science", advanced["actions"][0]["route"])
+
     def test_advance_api_rejects_non_integer_limits_without_dropping_the_connection(self):
         with self.assertRaises(urllib.error.HTTPError) as invalid:
             self.request(

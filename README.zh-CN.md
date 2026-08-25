@@ -4,7 +4,7 @@ Personal AI OS 是一个面向长期 AI 工作的本地操作层。它把长期�
 
 单个 AI 对话适合处理边界清楚的小任务。任务一旦跨越多次对话，新的对话需要重新核验旧内容；计划生成后缺少稳定的推进方式；多个执行分支也很快变得难以检查。Personal AI OS 补上长期目标和单次 AI 运行之间的操作层。
 
-[English](README.md) · [v0.8 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.8.md)
+[English](README.md) · [v0.9 开发任务书](docs/DEVELOPMENT_TASKBOOK_V0.9.md)
 
 它不打算重复做一套通用 Agent 工具箱。浏览器、终端、定时任务、记忆、子 Agent 和远程运行已经有成熟产品。Personal AI OS 处理这些执行器之上的问题：工作区结构、可移交的任务现场、证据验收、人工决定和跨执行器连续性。
 
@@ -75,7 +75,7 @@ personal-ai-os runtime advance \
 
 工作进度页提供同一项“推进当前工作线”操作。模型调用期间，页面持续读取持久化状态，因此任务轨迹和工作宠物都来自真实运行。CLI 只有在明确省略 `--workflow` 时才执行全局推进。
 
-同一次调用为选中任务使用同一组模型与 Adapter，并按稳定顺序执行。逐任务能力路由、后台无人值守推进、流式、取消和外部运行中断对账仍属于下一阶段。
+v0.8 的同一次调用为选中任务使用同一组模型与 Adapter，并按稳定顺序执行。后台无人值守推进、流式、取消和外部运行中断对账仍属于后续工作。
 
 v0.8 同时增加引用式 Domain Context 编译器。它只选择一个领域，按固定顺序装配获准的上下文引用；领域歧义或未知层级会停止，私人记忆正文不会被加载。
 
@@ -84,6 +84,26 @@ personal-ai-os domain-context \
   --registry examples/domain-profiles.json \
   --domain software
 ```
+
+## v0.9 逐任务执行路由
+
+自动推进现在可以从服务端版本化路由目录中，为每项任务独立选择模型与 Adapter。系统同时检查任务层级、所需能力、预计上下文长度和路线可用性，并选择满足要求的最小路线；人工指定路线也不能降低任务要求。
+
+路由目录只保存模型与 Adapter 标识，不保存 API 密钥和服务地址。密钥继续由服务进程环境变量提供。
+
+```bash
+personal-ai-os runtime advance \
+  --store .personal-ai-os/runtime.db \
+  --workflow science \
+  --routes examples/runtime-routes.json \
+  --max-steps 25
+
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --routes examples/runtime-routes.json
+```
+
+Human Gate 先于路线可用性检查。只有原子取得任务执行权的进程会登记所选路线，路线证据与真实 run ID 绑定；多个进程竞争时不会留下互相冲突的路线。多条路线共用同一 Adapter 时，每次派发只探测一次。
 
 ## 操作闭环
 
@@ -160,7 +180,7 @@ personal-ai-os spec
 | 人类确认 | AI 生成的计划保持候选状态，人确认后才能执行。 |
 | 依赖调度 | 只开放前置任务和 Human Gate 均满足的短任务。 |
 | 有界自动推进 | 每项就绪任务只派发一次，记录选择与结果，并在待验收、待决定、阻塞、恢复门或步数上限处停止。 |
-| 动态路由原语 | 纯选择逻辑按能力和上下文要求选择最小执行层；尚未接入 Runtime AutoAdvance。 |
+| 逐任务执行路由 | 自动推进按能力、层级和上下文要求选择最小可用路线，并与成功取得执行权的 run 原子绑定。 |
 | Domain Context 编译 | 按固定引用白名单只加载一个领域；歧义和未知层级直接停止。 |
 | 任务分配 | 选择能力兼容且仍有容量的执行者。 |
 | 模块组合 | 解析带版本的 capability manifest，组合断裂时停止。 |
@@ -192,7 +212,7 @@ tests/                Python 与工作台行为测试
 examples/             合成状态记录和示例模块 manifest
 .github/workflows/    Python 3.10-3.12 安装与测试矩阵
 PRODUCT.md            稳定的产品边界
-docs/DEVELOPMENT_TASKBOOK_V0.8.md  自动推进、领域上下文与真实使用验收任务书
+docs/DEVELOPMENT_TASKBOOK_V0.9.md  逐任务路由与运行证据验收任务书
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 封包验收边界
 ```
 

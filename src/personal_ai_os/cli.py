@@ -19,6 +19,7 @@ from .routing import compile_domain_context, route_task
 from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
+from .route_config import load_runtime_routes
 from .secretary import build_secretary_brief
 from .server import create_runtime_server
 from .truth import compile_truth
@@ -234,8 +235,10 @@ def main(argv: list[str] | None = None) -> int:
         "advance", help="boundedly dispatch every currently ready task"
     )
     runtime_advance.add_argument("--store", required=True)
-    runtime_advance.add_argument("--model", required=True)
+    runtime_advance.add_argument("--model")
     runtime_advance.add_argument("--adapter", default="openai-compatible")
+    runtime_advance.add_argument("--routes")
+    runtime_advance.add_argument("--route")
     runtime_advance.add_argument("--max-steps", type=int, default=25)
     runtime_advance.add_argument("--failure-budget", type=int, default=1)
     runtime_advance.add_argument("--workflow")
@@ -250,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_serve.add_argument("--host", default="127.0.0.1")
     runtime_serve.add_argument("--port", type=int, default=8787)
     runtime_serve.add_argument("--model", default=os.environ.get("PERSONAL_AI_OS_DEFAULT_MODEL", ""))
+    runtime_serve.add_argument("--routes")
     args = parser.parse_args(argv)
     if args.command == "demo":
         payload = demo_payload()
@@ -322,23 +326,38 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
             elif args.runtime_command == "advance":
-                payload = AutoAdvanceEngine(
-                    ExecutionBroker(store, adapters),
-                    adapter_id=args.adapter,
-                    model=args.model,
-                ).advance(
-                    max_steps=args.max_steps,
-                    failure_budget=args.failure_budget,
-                    workflow_id=args.workflow,
-                )
-                payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
+                if not args.routes and not args.model:
+                    payload = {
+                        "status": "BLOCKED",
+                        "reason": "--model is required in fixed route mode",
+                    }
+                elif args.route and not args.routes:
+                    payload = {
+                        "status": "BLOCKED",
+                        "reason": "--route requires --routes",
+                    }
+                else:
+                    routes = load_runtime_routes(args.routes) if args.routes else None
+                    payload = AutoAdvanceEngine(
+                        ExecutionBroker(store, adapters),
+                        adapter_id=args.adapter,
+                        model=args.model,
+                        routes=routes,
+                        requested_route=args.route,
+                    ).advance(
+                        max_steps=args.max_steps,
+                        failure_budget=args.failure_budget,
+                        workflow_id=args.workflow,
+                    )
+                    payload.setdefault("status", "READY" if payload.get("ok") else "BLOCKED")
             else:
+                routes = load_runtime_routes(args.routes) if args.routes else None
                 if args.host not in {"127.0.0.1", "localhost", "::1"}:
                     payload = {
                         "status": "BLOCKED",
                         "reason": "runtime server binds to loopback only",
                     }
-                elif not args.model:
+                elif not args.model and not routes:
                     payload = {
                         "status": "BLOCKED",
                         "reason": "--model or PERSONAL_AI_OS_DEFAULT_MODEL is required",
@@ -350,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
                         adapters=adapters,
                         default_model=args.model,
                         web_root=args.web_root,
+                        runtime_routes=routes,
                     )
                     print(
                         json.dumps(

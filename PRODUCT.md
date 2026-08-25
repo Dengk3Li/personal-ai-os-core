@@ -41,7 +41,7 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 - Secretary 已提供最小上下文包和只读简报：从运行库汇总进行中、待验收、阻塞、暂停、待决定和下一动作，不复制记忆正文。
 - `personal-ai-os.domain-context/v1` 按 `domain contract → active project → current state → relevant knowledge → historical decisions → constraints → excluded context` 的固定顺序编译一个领域的引用清单；领域歧义和未知层级 fail closed。
 - `personal-ai-os.auto-advance/v1` 有界扫描当前就绪任务，逐项调用同一个 Broker，并记录 `AUTO_ADVANCE_SELECTED / FINISHED` 事件。它不会自动批准 Human Gate、接受 `REVIEW`、解除阻塞或重派遗留的 `IN_PROGRESS` 任务。
-- 当前一次自动推进请求使用一组人工配置的模型与 Adapter，并按稳定顺序逐项执行。动态路由和任务分配已作为独立纯函数存在，尚未接入 Runtime AutoAdvance。
+- 自动推进可以读取 `personal-ai-os.runtime-routes/v1` 服务端目录，按每项任务的能力、层级、预计上下文和可用性选择模型与 Adapter。路线只在任务原子 claim 成功后写入同一 run 的事件；竞争失败方不留下路线证据。
 - 内置工作流预设包括 science、meeting notes 和 analytical report。Science 预设实现五类 Agent 与并行实验路径的任务合同，但不把工程运行状态当作科学结论。
 - 首次扫描与计划生成仍是候选结果，未经用户确认不写入被分析的工作区。
 - 静态演示中的心跳仍是合成事件。连接本地运行库后，working 宠物只消费真实 `IN_PROGRESS` 状态；它不会反向改变任务状态。
@@ -56,7 +56,7 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 
 - `src/personal_ai_os/` 已包含计划拆分、动态路由、任务分配、统一状态、SQLite 运行库、Execution Broker、OpenAI-compatible Adapter、Secretary 简报、连续性和验收能力。
 - `workbench/` 能在本地 API 可用时读取运行投影，并在连接失败时回到匿名合成演示。
-- 当前全量测试通过 91 个 Python 用例和 39 个 Workbench 用例，覆盖工作线作用域、外部运行失败、失败预算与 CLI 失败码、有界自动推进、遗留运行恢复门、Git closure 阻塞、Human Gate 裁决竞态、单一待决定卡、Domain Context 编译、计划整批回滚与定义漂移保护、持久化恢复、模型上下文隔离与限长、依赖产物接续、跨 RuntimeStore 派发竞争、调用期间真实运行态、原子状态与裁决、异常脱敏、证据边界、模块批注交接、同源本地 API、真实兼容 HTTP 调用、API 类型错误和静态回退。
+- 当前全量测试通过 106 个 Python 用例和 39 个 Workbench 用例，覆盖逐任务路由、单次可用性快照、路线与 run 原子绑定、工作线作用域、外部运行失败、失败预算与 CLI 失败码、有界自动推进、遗留运行恢复门、Git closure 阻塞、Human Gate 裁决竞态、单一待决定卡、Domain Context 编译、计划整批回滚与定义漂移保护、持久化恢复、模型上下文隔离与限长、依赖产物接续、跨 RuntimeStore 派发竞争、调用期间真实运行态、原子状态与裁决、异常脱敏、证据边界、模块批注交接、同源本地 API、真实兼容 HTTP 调用、API 类型错误和静态回退。
 - SQLite 原子状态转换保证同一任务只有一个模型调用方；完整的多进程调度、租约续期和崩溃恢复仍未交付。
 - 公开仓库不包含真实用户工作区数据、模型密钥、商业指标或研究结论；用户选择的本地 SQLite 文件可能保存模型输出，必须按本地敏感数据管理，不能提交到 Git。
 

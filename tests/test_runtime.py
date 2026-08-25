@@ -554,6 +554,129 @@ class RuntimeStoreTests(unittest.TestCase):
         runs = RuntimeStore(self.database).snapshot()["runs"]
         self.assertEqual(["SUCCEEDED"], [item["status"] for item in runs])
 
+    def test_routed_competitors_persist_only_the_winning_route(self):
+        barrier = threading.Barrier(2)
+
+        class RacingStore(RuntimeStore):
+            def claim_run(self, **kwargs):
+                barrier.wait(timeout=2)
+                return super().claim_run(**kwargs)
+
+        installed_by = RuntimeStore(self.database)
+        install_workflow_preset(installed_by, "science")
+        adapter = SlowAdapter()
+        routes = [
+            {
+                "route": "route-a",
+                "tier": "deep",
+                "capabilities": ["reasoning", "evidence"],
+                "max_context_tokens": 160000,
+                "adapter_id": adapter.adapter_id,
+                "model": "model-a",
+                "enabled": True,
+            },
+            {
+                "route": "route-b",
+                "tier": "deep",
+                "capabilities": ["reasoning", "evidence"],
+                "max_context_tokens": 160000,
+                "adapter_id": adapter.adapter_id,
+                "model": "model-b",
+                "enabled": True,
+            },
+        ]
+        brokers = [
+            ExecutionBroker(RacingStore(self.database), {adapter.adapter_id: adapter})
+            for _ in range(2)
+        ]
+        outcomes = []
+
+        def dispatch(broker, route):
+            outcomes.append(
+                broker.dispatch_routed(
+                    "science:hypothesis",
+                    routes=routes,
+                    requested_route=route,
+                )
+            )
+
+        threads = [
+            threading.Thread(target=dispatch, args=(broker, route))
+            for broker, route in zip(brokers, ("route-a", "route-b"))
+        ]
+        for thread in threads:
+            thread.start()
+        self.assertTrue(adapter.started.wait(timeout=2))
+        adapter.release.set()
+        for thread in threads:
+            thread.join(timeout=3)
+
+        winner = next(item for item in outcomes if item.get("ok"))
+        loser = next(item for item in outcomes if not item.get("ok"))
+        snapshot = RuntimeStore(self.database).snapshot()
+        route_events = [
+            event
+            for event in snapshot["events"]
+            if event["event_type"] == "AUTO_ROUTE_SELECTED"
+        ]
+        self.assertEqual(1, adapter.calls)
+        self.assertNotIn("route", loser)
+        self.assertEqual(1, len(route_events))
+        self.assertTrue(route_events[0]["run_id"])
+        self.assertEqual(winner["route"], route_events[0]["payload"]["route"])
+        self.assertEqual(
+            winner["route"],
+            snapshot["assignments"]["science:hypothesis"]["route"],
+        )
+
+    def test_routed_dispatch_uses_one_adapter_availability_snapshot(self):
+        class FlappingAdapter(SuccessfulAdapter):
+            adapter_id = "flapping-adapter"
+
+            def __init__(self):
+                self.probe_calls = 0
+
+            def probe(self):
+                self.probe_calls += 1
+                return {
+                    "adapter_id": self.adapter_id,
+                    "available": self.probe_calls == 1,
+                }
+
+        store = RuntimeStore(self.database)
+        install_workflow_preset(store, "science")
+        adapter = FlappingAdapter()
+        broker = ExecutionBroker(store, {adapter.adapter_id: adapter})
+
+        result = broker.dispatch_routed(
+            "science:hypothesis",
+            routes=[
+                {
+                    "route": "quick-route",
+                    "tier": "quick",
+                    "capabilities": ["reasoning", "evidence"],
+                    "max_context_tokens": 160000,
+                    "adapter_id": adapter.adapter_id,
+                    "model": "quick-model",
+                    "enabled": True,
+                },
+                {
+                    "route": "research-route",
+                    "tier": "deep",
+                    "capabilities": ["reasoning", "evidence"],
+                    "max_context_tokens": 160000,
+                    "adapter_id": adapter.adapter_id,
+                    "model": "research-model",
+                    "enabled": True,
+                }
+            ],
+            requested_route="research-route",
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(1, adapter.probe_calls)
+        self.assertEqual("research-route", result["route"])
+
     def test_run_claim_rolls_back_if_its_assignment_event_cannot_be_recorded(self):
         class FailingClaimStore(RuntimeStore):
             def _record_event(self, connection, **kwargs):

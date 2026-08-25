@@ -21,13 +21,17 @@ class AutoAdvanceEngine:
         self,
         broker: ExecutionBroker,
         *,
-        adapter_id: str,
-        model: str,
+        adapter_id: str | None = None,
+        model: str | None = None,
+        routes: list[dict[str, Any]] | None = None,
+        requested_route: str | None = None,
     ):
         self.broker = broker
         self.store = broker.store
         self.adapter_id = str(adapter_id or "").strip()
         self.model = str(model or "").strip()
+        self.routes = [dict(route) for route in routes] if routes is not None else None
+        self.requested_route = str(requested_route or "").strip() or None
 
     @staticmethod
     def _scoped(snapshot: dict[str, Any], workflow_id: str | None) -> dict[str, Any]:
@@ -101,10 +105,11 @@ class AutoAdvanceEngine:
         failure_budget: int = 1,
         workflow_id: str | None = None,
     ) -> dict[str, Any]:
-        if not self.adapter_id:
-            raise ValueError("adapter_id is required")
-        if not self.model:
-            raise ValueError("model is required")
+        if self.routes is None:
+            if not self.adapter_id:
+                raise ValueError("adapter_id is required")
+            if not self.model:
+                raise ValueError("model is required")
         if not isinstance(max_steps, int) or not 1 <= max_steps <= 100:
             raise ValueError("max_steps must be between 1 and 100")
         if not isinstance(failure_budget, int) or not 1 <= failure_budget <= 20:
@@ -129,13 +134,24 @@ class AutoAdvanceEngine:
             self.store.record_task_event(
                 task_id,
                 "AUTO_ADVANCE_SELECTED",
-                {"adapter_id": self.adapter_id, "model": self.model},
+                (
+                    {"route_mode": "automatic", "requested_route": self.requested_route}
+                    if self.routes is not None
+                    else {"adapter_id": self.adapter_id, "model": self.model}
+                ),
             )
-            result = self.broker.dispatch(
-                task_id,
-                adapter_id=self.adapter_id,
-                model=self.model,
-            )
+            if self.routes is not None:
+                result = self.broker.dispatch_routed(
+                    task_id,
+                    routes=self.routes,
+                    requested_route=self.requested_route,
+                )
+            else:
+                result = self.broker.dispatch(
+                    task_id,
+                    adapter_id=self.adapter_id,
+                    model=self.model,
+                )
             outcome = str(result.get("reason") or result.get("status") or "UNKNOWN")
             failure = not result.get("ok") and outcome not in NON_FATAL_OUTCOMES
             self.store.record_task_event(
@@ -150,6 +166,15 @@ class AutoAdvanceEngine:
                     "ok": bool(result.get("ok")),
                     "outcome": outcome,
                     "failure": failure,
+                    **(
+                        {
+                            "route": result["route"],
+                            "adapter_id": result["adapter_id"],
+                            "model": result["model"],
+                        }
+                        if result.get("route")
+                        else {}
+                    ),
                 }
             )
             if result.get("ok"):

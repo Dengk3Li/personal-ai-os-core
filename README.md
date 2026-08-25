@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.8 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.8.md)
+[中文说明](README.zh-CN.md) · [v0.9 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.9.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -75,7 +75,7 @@ personal-ai-os runtime advance \
 
 The Work Progress page exposes the same action as **Advance current workflow** and keeps polling persisted state while model calls are active. The CLI can omit `--workflow` for an explicitly global run.
 
-One invocation uses the same configured model and Adapter for its selected tasks and processes them in stable order. Capability-aware per-task routing, background unattended progression, streaming, cancellation, and interrupted external-run reconciliation remain next-stage work.
+One v0.8 invocation uses the same configured model and Adapter for its selected tasks and processes them in stable order. Background unattended progression, streaming, cancellation, and interrupted external-run reconciliation remain follow-up work.
 
 The second v0.8 slice is a references-only Domain Context compiler. It selects exactly one domain profile, orders its approved context layers, and rejects ambiguous domains or unrecognized layers. It does not load memory bodies.
 
@@ -84,6 +84,26 @@ personal-ai-os domain-context \
   --registry examples/domain-profiles.json \
   --domain software
 ```
+
+## v0.9 per-task execution routes
+
+Auto advance can now choose a route for each task from a versioned server-side catalog. Selection uses the task tier, required capabilities, estimated context size, route availability, and an optional explicit route. The smallest compatible route wins; an explicit route cannot lower task requirements.
+
+Route catalogs contain model and Adapter identifiers, never API keys or endpoint credentials. Secrets remain in the server process environment.
+
+```bash
+personal-ai-os runtime advance \
+  --store .personal-ai-os/runtime.db \
+  --workflow science \
+  --routes examples/runtime-routes.json \
+  --max-steps 25
+
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --routes examples/runtime-routes.json
+```
+
+Human Gates are evaluated before route availability. The chosen route is recorded only by the process that atomically claims the task, and is tied to that run ID. Competing processes cannot leave conflicting route evidence. Each Adapter is probed once per dispatch even when several routes use it.
 
 ## Operating model
 
@@ -160,7 +180,7 @@ The commands emit machine-readable JSON. `inspect` and `plan` remain read-only; 
 | Human confirmation | Keeps generated plans as candidates until a person accepts them. |
 | Dependency scheduling | Releases only tasks whose prerequisites and Human Gates are satisfied. |
 | Bounded auto advance | Dispatches every currently ready task once, records selection and outcome events, and stops at review, decisions, blocked work, recovery, or the step limit. |
-| Dynamic routing primitive | Pure selection logic chooses the smallest available tier that meets capability and context requirements; Runtime AutoAdvance integration is pending. |
+| Per-task execution routing | Auto advance chooses the smallest available route that satisfies capability, tier, and context requirements, then atomically binds it to the claimed run. |
 | Domain context compiler | Loads one domain through a fixed references-only allowlist and fails closed on ambiguity or unknown layers. |
 | Task assignment | Selects a compatible executor with capacity. |
 | Module composition | Resolves versioned capability manifests and fails closed on broken graphs. |
@@ -192,7 +212,7 @@ tests/                Python and workbench behavior tests
 examples/             synthetic state records and an example module manifest
 .github/workflows/    Python 3.10-3.12 install and test matrix
 PRODUCT.md            durable product boundaries
-docs/DEVELOPMENT_TASKBOOK_V0.8.md  automatic progression, domain context, and real-use acceptance plan
+docs/DEVELOPMENT_TASKBOOK_V0.9.md  per-task routing and runtime-evidence acceptance plan
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 package acceptance boundary
 ```
 

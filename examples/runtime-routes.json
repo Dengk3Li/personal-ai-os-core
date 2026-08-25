@@ -1,0 +1,23 @@
+{
+  "schema_version": "personal-ai-os.runtime-routes/v1",
+  "routes": [
+    {
+      "route": "quick-writing",
+      "tier": "quick",
+      "capabilities": ["writing"],
+      "max_context_tokens": 64000,
+      "adapter_id": "openai-compatible",
+      "model": "your-fast-model-id",
+      "enabled": true
+    },
+    {
+      "route": "deep-research",
+      "tier": "deep",
+      "capabilities": ["writing", "research", "reasoning", "evidence", "code"],
+      "max_context_tokens": 200000,
+      "adapter_id": "openai-compatible",
+      "model": "your-deep-model-id",
+      "enabled": true
+    }
+  ]
+}
