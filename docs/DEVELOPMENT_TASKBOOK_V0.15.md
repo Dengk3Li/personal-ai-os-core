@@ -27,7 +27,7 @@
 
 ## 验收
 
-- 250 个 Python 用例通过。
+- 251 个 Python 用例通过。
 - 88 个 Workbench 用例通过。
 - 本机 Codex app-server 只读探测返回真实 thread/turn 回执。
 - 私人 LongTask 浏览器完成 Codex 与自动路由绑定，并启动第一项有界任务。
