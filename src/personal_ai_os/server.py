@@ -14,6 +14,7 @@ from .codex_adapter import CodexAppServerAdapter
 from .codex_project import CodexProjectAdapter
 from .route_config import RUNTIME_ROUTES_SCHEMA, validate_runtime_routes
 from .runtime import ExecutionBroker, RuntimeStore
+from .runtime_events import EventValidationError, from_legacy_event
 from .automation import AutoAdvanceEngine
 from .goals import GoalController
 from .secretary import build_secretary_brief
@@ -40,6 +41,11 @@ def runtime_workbench_state(
         if item.get("task_id")
     }
     events_by_task: dict[str, list[dict[str, Any]]] = {}
+    attempts_by_run = {
+        str(run.get("run_id")): int(run.get("attempt") or 1)
+        for run in snapshot.get("runs", [])
+        if run.get("run_id")
+    }
     labels = {
         "RUN_ASSIGNED": "已分配执行器",
         "ADAPTER_STARTED": "执行适配器已启动",
@@ -54,16 +60,40 @@ def runtime_workbench_state(
         "AUTO_ADVANCE_FINISHED": "自动推进步骤已结束",
     }
     for event in snapshot["events"]:
-        events_by_task.setdefault(event["task_id"], []).append(
-            {
-                "event_id": str(event["event_id"]),
-                "kind": event["event_type"].lower(),
-                "label": labels.get(event["event_type"], "运行状态已更新"),
-                "at": event["at"][11:16] if len(event["at"]) >= 16 else event["at"],
-                "occurred_at": event["at"],
-                "run_id": event.get("run_id"),
-            }
-        )
+        projected_event = {
+            "event_id": str(event["event_id"]),
+            "kind": event["event_type"].lower(),
+            "label": labels.get(event["event_type"], "运行状态已更新"),
+            "at": event["at"][11:16] if len(event["at"]) >= 16 else event["at"],
+            "occurred_at": event["at"],
+            "run_id": event.get("run_id"),
+        }
+        run_id = str(event.get("run_id") or "").strip()
+        if run_id:
+            payload = event.get("payload") or {}
+            if presentation is not None:
+                payload = {
+                    key: payload[key]
+                    for key in ("selected_option", "from", "to", "status")
+                    if key in payload
+                }
+            try:
+                projected_event["runtime"] = from_legacy_event(
+                    {
+                        "event_id": event["event_id"],
+                        "task_id": event["task_id"],
+                        "run_id": run_id,
+                        "event_type": event["event_type"],
+                        "payload": payload,
+                        "at": event["at"],
+                        "attempt": attempts_by_run.get(run_id, 1),
+                    }
+                )["runtime"]
+            except EventValidationError:
+                # Legacy events remain visible; an uncorrelatable event is not
+                # upgraded into a misleading run receipt.
+                pass
+        events_by_task.setdefault(event["task_id"], []).append(projected_event)
     artifacts_by_task: dict[str, list[dict[str, Any]]] = {}
     for artifact in snapshot.get("artifacts", []):
         result = {

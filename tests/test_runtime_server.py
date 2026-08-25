@@ -153,6 +153,10 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertTrue(task["events"])
         self.assertRegex(task["events"][0]["occurred_at"], r"^\d{4}-\d{2}-\d{2}T")
         self.assertIn("run_id", task["events"][0])
+        self.assertEqual("process", task["events"][0]["runtime"]["event"]["kind"])
+        self.assertEqual(
+            task["task_id"], task["events"][0]["runtime"]["run"]["task_id"]
+        )
 
     def test_public_safe_result_feedback_omits_private_preview(self):
         app = RuntimeApplication(

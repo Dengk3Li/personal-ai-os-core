@@ -38,6 +38,7 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 - `personal-ai-os.presentation/v1` 通过严格白名单替换工作线和任务的浏览器文案，并允许设置仅供阅读器使用的 `sequence / branch / join / condition / loop` 结构提示。结构提示不参与调度或状态判断；运行标识和关系标签在浏览器中使用稳定顺序别名，操作由服务端还原；展示包不修改 SQLite 事实，也不接受上下文、本机路径、Git 收口或模型载荷。
 - 通用任务状态为 `QUEUED`、`IN_PROGRESS`、`REVIEW`、`DONE`、`BLOCKED`、`PAUSED` 和 `ARCHIVED`；UI 分别呈现待分配、进行中、待验收、已收口、已阻塞、已暂停和已归档。
 - SQLite 运行库持久保存工作流、任务、运行、事件、模型输出产物和人工决定，并支持服务重启后读回。
+- `personal-ai-os.runtime-event/v1` 为有 `run_id` 的运行事件提供统一动作、观察和回执信封，分开表达产物、验收、决定、恢复门与终态；旧事件字段保持不变，并可序列化为兼容 SSE 的 `data` 帧。当前仍没有后台 SSE 推送端点。
 - Execution Broker 在依赖、Human Gate 和 Adapter 可用性通过校验后，以同一 SQLite 事务完成任务执行权占用、本地 run 创建和分配事件登记。只有取得执行权的实例会调用模型；外部运行标识在 Adapter 响应后补入 run。
 - 当前本地服务使用 Python 标准库 HTTP server，提供运行投影、工作流与任务创建、任务转换、运行启动和决定记录的有限 JSON API。
 - 本地服务显式区分 `private-local` 与 `public-safe`：前者只允许 loopback 并保留本地真实任务文案；后者要求展示包并输出安全浏览器投影。两种模式都对白名单外的 Adapter 探测字段和异常详情关闭输出。
