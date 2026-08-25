@@ -21,6 +21,12 @@ from .research_report_acceptance import (
     synthetic_research_report_fixture,
     validate_research_report_acceptance,
 )
+from .research_input_gate import (
+    ResearchInputGateValidationError,
+    preview_research_input,
+    preview_research_task_inputs,
+    validate_research_task_inputs,
+)
 from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
@@ -102,6 +108,9 @@ __all__ = [
     "RuntimeStore",
     "run_codex_dispatch_once",
     "ResearchReportAcceptanceError",
+    "ResearchInputGateValidationError",
+    "preview_research_input",
+    "preview_research_task_inputs",
     "select_ready_task",
     "select_execution_route",
     "submit_for_review",
@@ -111,6 +120,7 @@ __all__ = [
     "validate_plan",
     "validate_memory_candidate",
     "validate_research_report_acceptance",
+    "validate_research_task_inputs",
     "validate_task_module_link",
     "verify_freeze",
     "expire_lease",

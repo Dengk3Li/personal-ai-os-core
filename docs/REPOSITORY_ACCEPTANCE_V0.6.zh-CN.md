@@ -29,6 +29,7 @@
 | `POST` | `/api/workflows` | 创建工作流 |
 | `POST` | `/api/tasks` | 创建任务并校验依赖存在且属于同一工作流 |
 | `POST` | `/api/runs` | 通过 Broker 启动一次 Adapter 调用 |
+| `POST` | `/api/research/report-input-preview` | 只读校验研究任务输入；缺失或占位时返回结构化缺口，完整输入只返回 `READY_FOR_INPUT` |
 | `POST` | `/api/tasks/{id}/transition` | 按统一状态机转换任务 |
 | `POST` | `/api/decisions/{id}/resolve` | 记录 Human Gate 选择并按合同恢复任务 |
 

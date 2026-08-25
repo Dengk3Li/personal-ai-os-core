@@ -24,10 +24,11 @@
 - 任务详情补充真实验收回执：展示已登记产物的摘要、产出时间和私有本地模式下的有界预览；公开投影只保留通用登记状态，不暴露正文。
 - 时间线使用运行事件的完整发生时间与 `run_id`；侧栏同步展示任务前因、当前结果和后果/下一步，依赖关系直接来自工作流图。
 - 公开核心新增只读 `personal-ai-os.acceptance/v1` 投影：统一返回任务身份、因果关系、执行状态、按 `run_id` 关联的真实时间线、阶段产物引用和验收边界。它只消费 RuntimeStore 已登记事实，不写状态，也不把终态运行误当成人工验收；`public-safe` 会匿名化执行标识并移除产物正文。
+- 公开核心新增 `personal-ai-os.research-input-gate/v1` 输入门：CLI `research-input-preview` 与 `POST /api/research/report-input-preview` 共用纯校验，只检查研究问题、范围、受众、格式和来源策略是否缺失或占位；缺口结构化返回，完整输入只返回 `READY_FOR_INPUT`，不创建任务、不调用模型、不回显提交值。
 
 ## 验收
 
-- 251 个 Python 用例通过。
+- 256 个 Python 用例通过。
 - 88 个 Workbench 用例通过。
 - 本机 Codex app-server 只读探测返回真实 thread/turn 回执。
 - 私人 LongTask 浏览器完成 Codex 与自动路由绑定，并启动第一项有界任务。

@@ -15,6 +15,7 @@ from .modules import build_module_graph, discover_module_manifests, module_catal
 from .operations import operation_spec
 from .planning import project_plan, ready_tasks, validate_plan
 from .promotion import promote_candidate
+from .research_input_gate import preview_research_input
 from .routing import compile_domain_context, route_task
 from .automation import AutoAdvanceEngine
 from .goals import GoalController, load_goal_definition
@@ -209,6 +210,11 @@ def _main(argv: list[str] | None = None) -> int:
     )
     context_parser.add_argument("--registry", required=True)
     context_parser.add_argument("--domain", required=True)
+    research_input_parser = subparsers.add_parser(
+        "research-input-preview",
+        help="validate research inputs without creating runtime state",
+    )
+    research_input_parser.add_argument("--input", required=True)
     runtime_parser = subparsers.add_parser(
         "runtime", help="operate the persistent long-task runtime"
     )
@@ -344,6 +350,10 @@ def _main(argv: list[str] | None = None) -> int:
             payload = {"status": "BLOCKED", "reason": "DOMAIN_REGISTRY_INVALID"}
         else:
             payload = compile_domain_context(args.domain, profiles)
+    elif args.command == "research-input-preview":
+        payload = preview_research_input(
+            json.loads(Path(args.input).read_text(encoding="utf-8"))
+        )
     else:
         store = RuntimeStore(args.store)
         if args.runtime_command == "init":
