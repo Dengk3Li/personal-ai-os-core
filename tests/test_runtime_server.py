@@ -9,7 +9,7 @@ from pathlib import Path
 
 from personal_ai_os.runtime import RuntimeStore, install_workflow_preset
 from personal_ai_os.presentation import validate_presentation
-from personal_ai_os.server import RuntimeApplication, create_runtime_server
+from personal_ai_os.server import RuntimeApplication, create_runtime_server, runtime_workbench_state
 
 
 class SuccessfulAdapter:
@@ -104,6 +104,25 @@ class RuntimeServerTests(unittest.TestCase):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(request, timeout=3) as response:
             return response.status, json.loads(response.read())
+
+    def test_runtime_projection_marks_succeeded_dispatch_without_terminal_receipt_as_legacy(self):
+        projection = runtime_workbench_state(
+            self.store,
+            codex_dispatches=[
+                {
+                    "task_id": "science:hypothesis",
+                    "status": "SUCCEEDED",
+                    "dispatch_id": "dispatch-legacy",
+                    "project": {"label": "科研项目", "environment": "worktree"},
+                    "thread_id": "thread-legacy",
+                    "project_id": "project-1",
+                    "completion_receipt": {},
+                }
+            ],
+        )
+
+        task = next(item for item in projection["tasks"] if item["task_id"] == "science:hypothesis")
+        self.assertEqual("LEGACY_MISSING", task["codex_dispatch"]["receipt_state"])
 
     def test_api_reads_runtime_and_dispatches_a_real_adapter(self):
         status, initial = self.request("/api/runtime")

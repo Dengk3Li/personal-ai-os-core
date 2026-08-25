@@ -1266,11 +1266,27 @@
     const projectReceipt = dispatch.project_id
       ? `<small>项目回执：${escapeHtml(dispatch.project_id)}</small>`
       : "";
+    const completionReceipt = dispatch.completion_receipt && typeof dispatch.completion_receipt === "object"
+      ? dispatch.completion_receipt
+      : {};
+    const receiptState = dispatch.receipt_state || (
+      completionReceipt.verified === true && completionReceipt.status === "completed"
+        ? "VERIFIED"
+        : dispatch.status === "SUCCEEDED"
+          ? "LEGACY_MISSING"
+          : "PENDING"
+    );
+    const receiptCopy = receiptState === "VERIFIED"
+      ? '<small class="codex-receipt-ok">终态回执已验证</small>'
+      : receiptState === "LEGACY_MISSING"
+        ? '<small class="codex-receipt-warning">历史终态回执缺失，需人工复核</small>'
+        : "";
     return `<section class="codex-dispatch" aria-label="Codex 项目执行状态">
       <div class="codex-dispatch-head"><strong>Codex 项目执行</strong><span class="settings-status">${escapeHtml(statusLabels[dispatch.status] || dispatch.status || "状态读取中")}</span></div>
       <p>${escapeHtml(project.label || "Codex 项目")} · ${escapeHtml(environment)}</p>
       ${receipt}
       ${projectReceipt}
+      ${receiptCopy}
       ${thread}
     </section>`;
   }

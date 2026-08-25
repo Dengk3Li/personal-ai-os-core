@@ -356,6 +356,8 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .codex-dispatch-head strong { color: var(--accent); font-size: .74rem; }
 .codex-dispatch p, .codex-dispatch small { margin: 0; font-size: .64rem; line-height: 1.4; }
 .codex-dispatch small { color: var(--muted); }
+.codex-dispatch .codex-receipt-ok { color: var(--accent); font-weight: 800; }
+.codex-dispatch .codex-receipt-warning { color: #7f2e28; font-weight: 800; }
 .auto-advance-controls { display: grid; grid-template-columns: minmax(10rem, 1fr) auto; gap: var(--space-2); align-items: center; width: 100%; padding-top: var(--space-2); border-top: 1px solid rgba(255, 255, 255, .16); }
 .auto-advance-controls[hidden] { display: none; }
 .advance-readiness { color: rgba(255, 255, 255, .82); font-size: .75rem; }

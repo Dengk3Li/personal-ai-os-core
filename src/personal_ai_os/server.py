@@ -244,6 +244,19 @@ def runtime_workbench_state(
                         "host_id": str(dispatch.get("host_id") or "") or None,
                         "thread_verification": dict(dispatch.get("thread_verification") or {}),
                         "completion_receipt": dict(dispatch.get("completion_receipt") or {}),
+                        "receipt_state": (
+                            "VERIFIED"
+                            if (
+                                isinstance(dispatch.get("completion_receipt"), dict)
+                                and dispatch["completion_receipt"].get("status") == "completed"
+                                and dispatch["completion_receipt"].get("verified") is True
+                                and dispatch["completion_receipt"].get("needs_user_input") is False
+                                and dispatch["completion_receipt"].get("human_gate") is False
+                            )
+                            else "LEGACY_MISSING"
+                            if str(dispatch.get("status") or "") == "SUCCEEDED"
+                            else "PENDING"
+                        ),
                     }
                 }
                 if presentation is None and (dispatch := codex_dispatch_by_task.get(task["task_id"]))

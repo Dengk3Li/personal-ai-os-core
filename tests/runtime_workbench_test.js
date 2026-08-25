@@ -596,6 +596,31 @@ test("task detail keeps a completed Codex receipt visible for review", () => {
   assert.match(html, /codex-project-1/);
 });
 
+test("task detail marks a legacy Codex result without a terminal receipt for manual review", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "science:hypothesis",
+      public_label: "任务 01",
+      title: "科研任务",
+      status: "REVIEW",
+      action: "ACCEPT",
+      attempts: 1,
+      events: [],
+      codex_dispatch: {
+        status: "SUCCEEDED",
+        project: { label: "科研项目", environment: "worktree" },
+        thread_id: "codex-thread-legacy",
+        project_id: "codex-project-1",
+        completion_receipt: {},
+      },
+    },
+    { runtime: true, defaultModel: "model-a", adapters: [{ adapter_id: "codex-project", available: true }] },
+  );
+
+  assert.match(html, /历史终态回执缺失/);
+  assert.match(html, /需人工复核/);
+});
+
 test("Codex project binding replaces only the active workline mapping", () => {
   const payload = workbench.codexProjectSettingsPayload({
     activeLineId: "science",
