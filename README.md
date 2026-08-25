@@ -237,8 +237,10 @@ Inspection and planning produce read-only candidates. Workspace changes begin af
 | Entrance | Responsibility |
 |---|---|
 | Module Map | Shows the whole operating loop and its internal module graphs, together with real dependencies, inputs, outputs, feedback edges, availability, and replaceable slots. A module annotation becomes a bounded task in the active workflow. |
-| Work Progress | Shows allocation totals, loops, parallel branches, repeated attempts, and the selected node's run trace. |
+| Work Progress | Shows allocation totals, loops, parallel branches, repeated attempts, and the selected node's run trace. Task detail also explains prerequisites, the latest registered result, and downstream work using real event timestamps. |
 | Decisions | Collects plan approval, blocked work, and Human Gates in one place. |
+
+Task detail is an acceptance surface, not only a status card: a completed run exposes its registered artifact summary and production time, while a private-local projection may include a bounded preview. The causal sidebar follows the persisted dependency graph (前因 → 本轮结果 → 后果与下一步); public-safe projections keep the result generic and omit private artifact content.
 
 This is an operating interface, not a management dashboard. The product proves execution through state transitions, run events, artifacts, and human acceptance. Feature count and presentation do not substitute for a working loop.
 
