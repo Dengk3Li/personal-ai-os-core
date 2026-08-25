@@ -18,6 +18,21 @@ from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .route_config import load_runtime_routes
+from .single_owner_progression import (
+    ContractViolation,
+    acknowledge_recovery,
+    authorize_step,
+    claim_owner,
+    create_execution_state,
+    enqueue_trigger,
+    expire_lease,
+    record_step_result,
+    renew_lease,
+    request_human_stop,
+    resume_after_human_stop,
+    select_ready_task,
+    submit_for_review,
+)
 from .codex_adapter import CodexAppServerAdapter
 from .codex_project import CodexProjectAdapter
 from .secretary import build_context_pack, build_secretary_brief
@@ -44,6 +59,12 @@ __all__ = [
     "compile_workflow_structure",
     "CodexAppServerAdapter",
     "CodexProjectAdapter",
+    "ContractViolation",
+    "acknowledge_recovery",
+    "authorize_step",
+    "claim_owner",
+    "create_execution_state",
+    "enqueue_trigger",
     "evaluate_git_closure",
     "evaluate_workflow_structure",
     "ExecutionBroker",
@@ -63,14 +84,21 @@ __all__ = [
     "project_plan",
     "ready_tasks",
     "route_task",
+    "record_step_result",
+    "renew_lease",
+    "request_human_stop",
+    "resume_after_human_stop",
     "RuntimeStore",
+    "select_ready_task",
     "select_execution_route",
+    "submit_for_review",
     "sync_runtime_plan",
     "transition_task",
     "validate_plan",
     "validate_memory_candidate",
     "validate_task_module_link",
     "verify_freeze",
+    "expire_lease",
     "get_workflow_preset",
     "workflow_preset_catalog",
     "work_protocol_catalog",

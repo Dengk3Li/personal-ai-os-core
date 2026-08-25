@@ -47,6 +47,7 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 - Secretary 已提供最小上下文包和只读简报：从运行库汇总进行中、待验收、阻塞、暂停、待决定和下一动作，不复制记忆正文。
 - `personal-ai-os.domain-context/v1` 按 `domain contract → active project → current state → relevant knowledge → historical decisions → constraints → excluded context` 的固定顺序编译一个领域的引用清单；领域歧义和未知层级 fail closed。
 - `personal-ai-os.auto-advance/v1` 有界扫描当前就绪任务，逐项调用同一个 Broker，并记录 `AUTO_ADVANCE_SELECTED / FINISHED` 事件。它不会自动批准 Human Gate、接受 `REVIEW`、解除阻塞或重派遗留的 `IN_PROGRESS` 任务。
+- `personal-ai-os.single-owner-progression/v1` 为其他执行适配器提供无存储的单一执行权合同：显式 READY 选择、CAS 版本、租约、触发去重、步骤与 Token 预算、恢复边界和人工验收边界均由稳定状态转换表达。该合同不启动进程、不调用模型、不写入运行库，也不自动接受结果。
 - `personal-ai-os.goal/v1` 把跨工作线长期目标独立于聊天和工作线说明持久化。目标保存完成条件、单次与累计预算、累计步数、已观测 Token 和追加式事件；预算耗尽进入 `BUDGET_LIMITED`，范围任务收口进入 `AWAITING_ACCEPTANCE`，只有人工验收才进入 `COMPLETE`。
 - GoalController 复用现有依赖、Human Gate、路由、原子任务占用与结果验收。SQLite 目标续推占用阻止两个进程重复续推；未结束占用在重启后进入恢复确认，不自动重放未知外部动作。
 - `personal-ai-os.memory-candidate/v1` 按个人或团队、领域、类别和证据保存工作方式候选。新候选必须为 `PROPOSED`；只有带非空审核主体的显式审核可以写为 `APPROVED / REJECTED`，审核事件追加保存。模型上下文只加载主体与领域同时匹配的已确认规则，并与显式模型上下文共享 12,000 字符预算。
