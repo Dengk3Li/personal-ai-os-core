@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>Personal AI OS · Long Work</title>
   <meta name="description" content="把长期目标拆成可分配、可重复运行、可由人类裁决的短任务。">
-  <link rel="stylesheet" href="style.css?v=0.9.0">
+  <link rel="stylesheet" href="style.css?v=0.10.0">
 </head>
 <body>
   <header class="topbar">
@@ -76,23 +76,28 @@
 
         <section class="board-panel" id="panel-global" data-panel="global" role="tabpanel" aria-labelledby="tab-global" hidden>
           <div class="feed-heading">
-            <div><h2>模块地图</h2><p>模块通过版本化 capability 接口装配，不直接引用彼此。</p></div>
-            <span class="count-chip">manifest 驱动</span>
+            <div><h2>模块地图</h2><p>从系统全景下钻到模块内部，同时查看输入、处理、输出与反馈关系。</p></div>
+            <span class="count-chip">递归系统图</span>
           </div>
 
           <div class="module-map-shell">
             <section class="map-frame" aria-label="工作区全局模块拓扑">
               <div class="map-heading">
-                <div><strong>工作区系统流</strong><span><b id="module-count">0</b> 个模块 · <b id="module-edge-count">0</b> 条连接 · <b id="module-unresolved-count">0</b> 个待接入</span></div>
-                <span>拖动整理布局 · 右键添加批注</span>
+                <div><strong id="module-map-title">个人 AI 操作系统</strong><span><b id="module-count">0</b> 个模块 · <b id="module-edge-count">0</b> 条连接 · <b id="module-unresolved-count">0</b> 个待接入</span></div>
+                <span>拖动整理 · 双击下钻 · 右键批注</span>
               </div>
               <div class="map-toolbar" aria-label="模块地图控制">
+                <div class="map-mode-switch" role="group" aria-label="地图视图">
+                  <button class="active" type="button" data-map-mode="system">系统全景</button>
+                  <button type="button" data-map-mode="modules">运行模块</button>
+                </div>
                 <button type="button" data-map-zoom="out">缩小</button>
                 <output id="map-zoom-value" aria-live="polite">100%</output>
                 <button type="button" data-map-zoom="in">放大</button>
                 <button type="button" data-map-fit>适应画布</button>
                 <button type="button" data-map-reset>重置布局</button>
               </div>
+              <nav class="map-breadcrumbs" id="module-breadcrumbs" aria-label="模块层级"></nav>
               <div class="map-viewport" id="module-map-viewport" tabindex="0" aria-label="可平移缩放的模块依赖地图">
                 <div class="module-scene" id="module-scene"></div>
               </div>
@@ -106,8 +111,14 @@
                 <div><dt>下游模块</dt><dd id="module-downstream-list"></dd></div>
                 <div><dt>提供的 capability</dt><dd id="module-provides"></dd></div>
                 <div><dt>需要的 capability</dt><dd id="module-requires"></dd></div>
+                <div><dt>外部输入</dt><dd id="module-inputs"></dd></div>
+                <div><dt>主要输出</dt><dd id="module-outputs"></dd></div>
+                <div><dt>运行控制</dt><dd id="module-control"></dd></div>
               </dl>
-              <button class="map-focus-button" type="button" data-map-focus-toggle>只看上下游</button>
+              <div class="module-detail-actions">
+                <button class="map-focus-button" type="button" data-map-focus-toggle>只看上下游</button>
+                <button class="map-drill-button" type="button" data-map-drill hidden>进入内部结构</button>
+              </div>
               <form class="module-annotation" id="module-annotation-form">
                 <label for="module-annotation"><b>模块批注</b><span>批注会生成一项可分派的修正任务。</span></label>
                 <textarea id="module-annotation" maxlength="500" placeholder="记录接口、依赖或流程问题" required></textarea>
@@ -134,12 +145,12 @@
           <section class="operation-contract">
             <div class="contract-copy"><h3>所有执行者遵守同一条操作链</h3><p>确认之前保持只读；执行只发生在已确认的任务边界内。</p></div>
             <ol class="operation-rail">
-              <li><b>01</b><span>INSPECT</span></li><li><b>02</b><span>MAP</span></li><li><b>03</b><span>PLAN</span></li><li class="human"><b>04</b><span>CONFIRM</span></li><li><b>05</b><span>ROUTE</span></li><li><b>06</b><span>EXECUTE</span></li><li><b>07</b><span>REVIEW</span></li><li><b>08</b><span>ARCHIVE</span></li>
+              <li><b>01</b><span>检查</span></li><li><b>02</b><span>建图</span></li><li><b>03</b><span>规划</span></li><li class="human"><b>04</b><span>确认</span></li><li><b>05</b><span>路由</span></li><li><b>06</b><span>执行</span></li><li><b>07</b><span>验收</span></li><li><b>08</b><span>归档</span></li>
             </ol>
-            <pre class="terminal"><span>$ personal-ai-os inspect ./workspace</span>
+            <details class="technical-reference"><summary>命令行参考</summary><pre class="terminal"><span>$ personal-ai-os inspect ./workspace</span>
 <span>$ personal-ai-os modules</span>
 <span>$ personal-ai-os plan ./workspace</span>
-<span>$ personal-ai-os spec</span></pre>
+<span>$ personal-ai-os spec</span></pre></details>
           </section>
         </section>
 
@@ -169,7 +180,7 @@
 
           <div class="workflow-reader">
             <section class="workflow-canvas" aria-label="非线性工作流">
-              <div class="canvas-heading"><strong>运行结构</strong><span id="line-progress">0%</span></div>
+              <div class="canvas-heading"><div><strong>运行结构</strong><span class="logic-legend">顺序 · 分支 · 汇合 · 条件 · 循环</span></div><span id="line-progress">0%</span></div>
               <div id="workflow-canvas"></div>
             </section>
             <aside class="run-detail" id="run-detail" aria-label="任务运行轨迹"></aside>
@@ -187,7 +198,7 @@
 
         <section class="board-panel" id="panel-decision" data-panel="decision" role="tabpanel" aria-labelledby="tab-decision" hidden>
           <div class="feed-heading">
-            <div><h2>待我决定</h2><p>计划确认、阻塞处理和 Human Gate 统一进入这里。</p></div>
+            <div><h2>待我决定</h2><p>计划确认、条件判断和阻塞处理统一进入这里。</p></div>
             <span class="count-chip" id="decision-visible-count"></span>
           </div>
           <div class="decision-intro">
@@ -200,8 +211,9 @@
     </section>
   </main>
 
-  <footer>Personal AI OS · <span id="footer-mode">Synthetic workflow showcase</span> · v0.9.0</footer>
-  <script src="app.js?v=0.9.0"></script>
+  <footer>Personal AI OS · <span id="footer-mode">匿名结构演示</span> · v0.10.0</footer>
+  <script src="architecture.js?v=0.10.0"></script>
+  <script src="app.js?v=0.10.0"></script>
   <script>PersonalAIWorkbench.mount(document);</script>
 </body>
 </html>

@@ -233,7 +233,7 @@ class RuntimeStore:
             str(task.get("public_label") or task_id),
             title,
             acceptance,
-            str(task.get("agent_role") or "General Agent"),
+            str(task.get("agent_role") or "通用执行角色"),
             status,
             task.get("resume_to"),
             _json(dependencies),
@@ -940,22 +940,22 @@ class ExecutionBroker:
                 decision = self.store.ensure_pending_decision(
                     task_id,
                     {
-                        "question": f"Should {task['title']} continue?",
+                        "question": f"是否继续“{task['title']}”？",
                         "context": task["acceptance"],
                         "options": [
                             {
                                 "letter": "A",
-                                "label": "Approve and continue",
+                                "label": "批准并继续",
                                 "action": "continue",
                             },
                             {
                                 "letter": "B",
-                                "label": "Pause this task",
+                                "label": "暂停任务",
                                 "action": "pause",
                             },
                         ],
                         "recommended_option": "A",
-                        "recommendation_reason": "The task is ready and its dependencies are closed.",
+                        "recommendation_reason": "任务依赖已经闭合，可以进入下一步。",
                     },
                 )
                 if decision["status"] != "RECORDED":

@@ -292,6 +292,87 @@ class DemoCliTests(unittest.TestCase):
         self.assertEqual("ROUTE_NOT_FOUND", payload["stop_reason"])
         self.assertEqual(1, len(payload["actions"]))
 
+    def test_runtime_serve_rejects_an_invalid_presentation_without_a_traceback(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            presentation = root / "presentation.json"
+            presentation.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "personal-ai-os.presentation/v1",
+                        "tasks": {"task-a": {"context": "must stay private"}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "serve",
+                    "--store",
+                    str(root / "runtime.db"),
+                    "--model",
+                    "model-a",
+                    "--presentation",
+                    str(presentation),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(
+            {"reason": "PRESENTATION_INVALID", "status": "BLOCKED"},
+            json.loads(result.stdout),
+        )
+
+    def test_runtime_serve_rejects_sensitive_execution_labels_without_a_traceback(self):
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(REPO_ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            presentation = root / "presentation.json"
+            presentation.write_text(
+                json.dumps({"schema_version": "personal-ai-os.presentation/v1"}),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "personal_ai_os",
+                    "runtime",
+                    "serve",
+                    "--store",
+                    str(root / "runtime.db"),
+                    "--model",
+                    "/Users/example/private-model",
+                    "--presentation",
+                    str(presentation),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(
+            {"reason": "PRESENTATION_INVALID", "status": "BLOCKED"},
+            json.loads(result.stdout),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

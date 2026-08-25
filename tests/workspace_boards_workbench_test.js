@@ -161,9 +161,17 @@ test("map zoom keeps the pointer anchor stable and clamps unsafe scales", () => 
   assert.equal(typeof workbench.zoomModuleView, "function");
   const zoomed = workbench.zoomModuleView({ x: 0, y: 0, scale: 1 }, 1.5, { x: 100, y: 80 });
   const clamped = workbench.zoomModuleView(zoomed, 20, { x: 0, y: 0 });
+  const fittedScale = workbench.zoomModuleView(zoomed, .01, { x: 0, y: 0 });
 
   assert.deepEqual(zoomed, { x: -50, y: -40, scale: 1.5 });
   assert.equal(clamped.scale, 1.8);
+  assert.equal(fittedScale.scale, .16);
+});
+
+
+test("module clicks keep their target until a node drag actually starts", () => {
+  assert.equal(workbench.captureMapPointerOnDown("pan"), true);
+  assert.equal(workbench.captureMapPointerOnDown("node"), false);
 });
 
 test("the drag click guard expires when a browser emits no synthetic click", () => {

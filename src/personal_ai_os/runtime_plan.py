@@ -133,7 +133,7 @@ def _task_definition(workflow_id: str, task: dict[str, Any]) -> dict[str, Any]:
         "public_label": str(task.get("public_label") or task_id),
         "title": str(task["title"]).strip(),
         "acceptance": str(task["acceptance"]).strip(),
-        "agent_role": str(task.get("agent_role") or "General Agent"),
+        "agent_role": str(task.get("agent_role") or "通用执行角色"),
         "depends_on": list(task.get("depends_on") or []),
         "human_gate": bool(task.get("human_gate", False)),
         "iteration": int(task.get("iteration") or 1),

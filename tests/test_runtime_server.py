@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 from personal_ai_os.runtime import RuntimeStore, install_workflow_preset
+from personal_ai_os.presentation import validate_presentation
 from personal_ai_os.server import create_runtime_server
 
 
@@ -214,6 +215,90 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertNotIn("context", task)
         self.assertNotIn("git_closure", task)
         self.assertNotIn("SENSITIVE_SENTINEL", serialized)
+
+    def test_presentation_aliases_round_trip_without_exposing_runtime_ids(self):
+        self.store.create_workflow(
+            {
+                "workflow_id": "/Users/example/private-second-line",
+                "name": "Private second line",
+                "caption": "Private",
+                "layout": "branch",
+                "goal": "Private",
+            }
+        )
+        self.server.app.presentation = validate_presentation(
+            {
+                "schema_version": "personal-ai-os.presentation/v1",
+                "workflows": {"science": {"name": "科研工作线"}},
+                "tasks": {
+                    "science:hypothesis": {
+                        "title": "提出可检验假设",
+                        "acceptance": "假设边界清晰",
+                    }
+                },
+            }
+        )
+
+        _, initial = self.request("/api/runtime")
+        task = initial["state"]["tasks"][0]
+        with self.assertRaises(urllib.error.HTTPError) as private_model:
+            self.request(
+                "/api/runs",
+                {
+                    "task_id": task["task_id"],
+                    "adapter_id": "test-adapter",
+                    "model": "/Users/example/private-model",
+                },
+            )
+        private_model_payload = json.loads(private_model.exception.read())
+        self.assertEqual([], self.store.snapshot()["runs"])
+        run_status, dispatched = self.request(
+            "/api/runs",
+            {
+                "task_id": task["task_id"],
+                "adapter_id": "test-adapter",
+                "model": "model-a",
+            },
+        )
+        transition_status, accepted = self.request(
+            f"/api/tasks/{task['task_id']}/transition",
+            {"to": "DONE", "by": "owner", "reason": "Accepted result"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as invalid_dependency:
+            self.request(
+                "/api/tasks",
+                {
+                    "task_id": "public-new-task",
+                    "workflow_id": "line-02",
+                    "line_id": "line-02",
+                    "title": "公开任务",
+                    "acceptance": "形成阶段结果",
+                    "depends_on": ["task-001"],
+                },
+            )
+        error_payload = json.loads(invalid_dependency.exception.read())
+        serialized = json.dumps(
+            {
+                "initial": initial,
+                "dispatched": dispatched,
+                "accepted": accepted,
+                "error": error_payload,
+                "private_model": private_model_payload,
+            },
+            ensure_ascii=False,
+        )
+
+        self.assertEqual("line-01", initial["state"]["activeLineId"])
+        self.assertEqual("task-001", task["task_id"])
+        self.assertEqual(200, run_status)
+        self.assertEqual(200, transition_status)
+        self.assertEqual(422, invalid_dependency.exception.code)
+        self.assertEqual("REQUEST_REJECTED", error_payload["reason"])
+        self.assertEqual("REQUEST_REJECTED", private_model_payload["reason"])
+        self.assertNotIn("science:hypothesis", serialized)
+        self.assertNotIn('"science"', serialized)
+        self.assertNotIn("/Users/", serialized)
+        self.assertEqual("DONE", self.store.get_task("science:hypothesis")["status"])
 
     def test_server_blocks_path_traversal_and_unknown_adapter(self):
         with self.assertRaises(urllib.error.HTTPError) as traversal:

@@ -101,6 +101,32 @@ test("runtime workflow nodes use the persisted task title as their stage", () =>
 });
 
 
+test("task dispatch controls stay disabled until an adapter is available", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "task-001",
+      public_label: "任务 01",
+      title: "公开任务",
+      status: "QUEUED",
+      action: "DISPATCH",
+      attempts: 0,
+      events: [],
+    },
+    {
+      runtime: true,
+      defaultModel: "model-a",
+      adapters: [{ adapter_id: "openai-compatible", available: false }],
+    },
+  );
+
+  assert.match(html, /<select data-runtime-adapter disabled>/);
+  assert.match(html, /暂无可用执行适配器/);
+  assert.match(html, /配置执行适配器后开始/);
+  assert.doesNotMatch(html, /openai-compatible/);
+  assert.match(html, /<button class="task-action"[^>]*disabled/);
+});
+
+
 test("runtime client calls finite task run transition and decision endpoints", async () => {
   const calls = [];
   const client = workbench.createRuntimeClient(async (url, options = {}) => {

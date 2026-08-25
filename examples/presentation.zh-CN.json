@@ -1,0 +1,19 @@
+{
+  "schema_version": "personal-ai-os.presentation/v1",
+  "workflows": {
+    "science": {
+      "name": "科研工作线",
+      "caption": "从科学问题进入实验、分析和下一轮判断",
+      "goal": "形成证据充分、边界清楚的结论候选"
+    }
+  },
+  "tasks": {
+    "science:hypothesis": {
+      "public_label": "科研 01",
+      "title": "提出可检验的科学假设",
+      "acceptance": "假设、证据缺口和验证路径均可检查",
+      "agent_role": "科学假设角色",
+      "flow_kind": "loop"
+    }
+  }
+}

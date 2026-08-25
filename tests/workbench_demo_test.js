@@ -113,7 +113,7 @@ test("the research preset uses five science agents and parallel experiment paths
   assert.ok(projection.groups[1].nodes.some((node) => node.parallel_group === "branch-alpha"));
   assert.deepEqual(
     new Set(projection.groups.flatMap((group) => group.nodes.map((node) => node.agent_role))),
-    new Set(["科学假设 Agent", "Protocol 设计 Agent", "自主实验执行 Agent", "数据分析 Agent", "反馈优化 Agent"]),
+    new Set(["科学假设角色", "实验方案设计角色", "自主实验执行角色", "数据分析角色", "反馈优化角色"]),
   );
   const repeated = projection.groups[1].nodes.find((node) => node.attempts === 2);
   assert.ok(repeated.events.some((event) => event.kind === "heartbeat"));

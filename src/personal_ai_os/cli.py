@@ -22,6 +22,7 @@ from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .route_config import load_runtime_routes
 from .secretary import build_secretary_brief
 from .server import create_runtime_server
+from .presentation import load_presentation
 from .truth import compile_truth
 from .workflow import transition_task
 
@@ -254,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_serve.add_argument("--port", type=int, default=8787)
     runtime_serve.add_argument("--model", default=os.environ.get("PERSONAL_AI_OS_DEFAULT_MODEL", ""))
     runtime_serve.add_argument("--routes")
+    runtime_serve.add_argument("--presentation")
     args = parser.parse_args(argv)
     if args.command == "demo":
         payload = demo_payload()
@@ -363,32 +365,49 @@ def main(argv: list[str] | None = None) -> int:
                         "reason": "--model or PERSONAL_AI_OS_DEFAULT_MODEL is required",
                     }
                 else:
-                    server = create_runtime_server(
-                        (args.host, args.port),
-                        store=store,
-                        adapters=adapters,
-                        default_model=args.model,
-                        web_root=args.web_root,
-                        runtime_routes=routes,
-                    )
-                    print(
-                        json.dumps(
-                            {
-                                "status": "READY",
-                                "url": f"http://{args.host}:{server.server_port}",
-                                "store": str(store.database),
-                            },
-                            ensure_ascii=False,
-                            sort_keys=True,
-                        ),
-                        flush=True,
-                    )
                     try:
-                        server.serve_forever()
-                    except KeyboardInterrupt:
-                        pass
-                    finally:
-                        server.server_close()
-                    return 0
+                        presentation = (
+                            load_presentation(args.presentation)
+                            if args.presentation
+                            else None
+                        )
+                        server = create_runtime_server(
+                            (args.host, args.port),
+                            store=store,
+                            adapters=adapters,
+                            default_model=args.model,
+                            web_root=args.web_root,
+                            runtime_routes=routes,
+                            presentation=presentation,
+                        )
+                    except (OSError, json.JSONDecodeError, ValueError):
+                        payload = {
+                            "status": "BLOCKED",
+                            "reason": (
+                                "PRESENTATION_INVALID"
+                                if args.presentation
+                                else "RUNTIME_SERVER_INVALID"
+                            ),
+                        }
+                    else:
+                        print(
+                            json.dumps(
+                                {
+                                    "status": "READY",
+                                    "url": f"http://{args.host}:{server.server_port}",
+                                    "store": str(store.database),
+                                },
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            ),
+                            flush=True,
+                        )
+                        try:
+                            server.serve_forever()
+                        except KeyboardInterrupt:
+                            pass
+                        finally:
+                            server.server_close()
+                        return 0
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0 if payload.get("status") not in {"UNKNOWN", "BLOCKED"} else 2

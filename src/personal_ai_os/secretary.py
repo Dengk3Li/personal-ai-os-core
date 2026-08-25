@@ -86,8 +86,8 @@ def build_secretary_brief(snapshot: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "personal-ai-os.secretary-brief/v1",
         "summary": (
-            f"{counts['in_progress']} running, {counts['review']} awaiting review, "
-            f"{len(decisions)} awaiting a decision."
+            f"{counts['in_progress']} 项运行中，{counts['review']} 项待验收，"
+            f"{len(decisions)} 项待决定。"
         ),
         "attention": {**counts, "decisions": len(decisions)},
         "next_actions": next_actions[:3],

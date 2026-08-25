@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.9 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.9.md)
+[中文说明](README.zh-CN.md) · [v0.10 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.10.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -105,6 +105,21 @@ personal-ai-os runtime serve \
 
 Human Gates are evaluated before route availability. The chosen route is recorded only by the process that atomically claims the task, and is tied to that run ID. Competing processes cannot leave conflicting route evidence. Each Adapter is probed once per dispatch even when several routes use it.
 
+## v0.10 recursive system map and workflow structure
+
+The Module Map now opens with a recursive view of the whole Personal AI OS: secretary entry, task-scoped personal context, domain abstraction, long-task orchestration, domain work systems, model and tool execution, evidence-backed delivery, and the feedback path into the next round. Real edges remain visible on the draggable canvas. Double-clicking a composite module opens its internal graph; breadcrumbs return to the system view.
+
+The public kernel also defines a versioned workflow structure with six node kinds: task, sequence, branch, join, condition, and bounded loop. Conditions reference registered server predicates instead of arbitrary code. An unknown condition waits for a human decision, and every loop requires a maximum iteration count. The structure compiler and evaluator are reusable today; binding their ready-node result directly to RuntimeStore and AutoAdvance is a follow-up boundary.
+
+A local presentation pack can replace workflow and task display copy without modifying runtime truth. Its schema only accepts workflow names, captions, goals, bounded task labels, titles, acceptance copy, role names, and a presentation-only structure hint from `sequence / branch / join / condition / loop`. The hint changes the workflow reader, not scheduling or task state. Browser-visible workflow, task, domain, group, capability, run, artifact, event, and decision identifiers are replaced by stable ordinal aliases while the server resolves user actions back to runtime truth. Runtime context, paths, Git closure, credentials, and model payloads are rejected.
+
+```bash
+personal-ai-os runtime serve \
+  --store .personal-ai-os/runtime.db \
+  --model "your-model-id" \
+  --presentation examples/presentation.zh-CN.json
+```
+
 ## Operating model
 
 ```mermaid
@@ -128,7 +143,7 @@ Inspection and planning produce read-only candidates. Workspace changes begin af
 
 | Entrance | Responsibility |
 |---|---|
-| Module Map | Shows layers, real dependencies, upstream and downstream relationships, availability, and replaceable slots in a draggable, zoomable topology. A module annotation becomes a bounded task in the active workflow. |
+| Module Map | Shows the whole operating loop and its internal module graphs, together with real dependencies, inputs, outputs, feedback edges, availability, and replaceable slots. A module annotation becomes a bounded task in the active workflow. |
 | Work Progress | Shows allocation totals, loops, parallel branches, repeated attempts, and the selected node's run trace. |
 | Decisions | Collects plan approval, blocked work, and Human Gates in one place. |
 
@@ -181,6 +196,9 @@ The commands emit machine-readable JSON. `inspect` and `plan` remain read-only; 
 | Dependency scheduling | Releases only tasks whose prerequisites and Human Gates are satisfied. |
 | Bounded auto advance | Dispatches every currently ready task once, records selection and outcome events, and stops at review, decisions, blocked work, recovery, or the step limit. |
 | Per-task execution routing | Auto advance chooses the smallest available route that satisfies capability, tier, and context requirements, then atomically binds it to the claimed run. |
+| Recursive system cognition | Presents the operating system from secretary entry to delivery and feedback, with draggable topology, real edges, breadcrumbs, and module drilldown. |
+| Structured workflow grammar | Validates and evaluates task, sequence, branch, join, condition, and bounded-loop nodes without evaluating arbitrary code. |
+| Local presentation projection | Applies a strict display-only allowlist to workflow and task copy while keeping private runtime truth outside public Git and browser payloads. |
 | Domain context compiler | Loads one domain through a fixed references-only allowlist and fails closed on ambiguity or unknown layers. |
 | Task assignment | Selects a compatible executor with capacity. |
 | Module composition | Resolves versioned capability manifests and fails closed on broken graphs. |
@@ -212,7 +230,7 @@ tests/                Python and workbench behavior tests
 examples/             synthetic state records and an example module manifest
 .github/workflows/    Python 3.10-3.12 install and test matrix
 PRODUCT.md            durable product boundaries
-docs/DEVELOPMENT_TASKBOOK_V0.9.md  per-task routing and runtime-evidence acceptance plan
+docs/DEVELOPMENT_TASKBOOK_V0.10.md recursive system map and workflow-structure acceptance plan
 docs/REPOSITORY_ACCEPTANCE_V0.6.zh-CN.md  v0.6 package acceptance boundary
 ```
 

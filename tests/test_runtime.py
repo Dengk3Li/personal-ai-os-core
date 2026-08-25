@@ -121,14 +121,15 @@ class RuntimeStoreTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "Scientific Hypothesis Agent",
-                "Protocol Design Agent",
-                "Autonomous Experiment Agent",
-                "Data Analysis Agent",
-                "Feedback Optimization Agent",
+                "科学假设角色",
+                "实验方案设计角色",
+                "自主实验执行角色",
+                "数据分析角色",
+                "反馈优化角色",
             },
             {task["agent_role"] for task in snapshot["tasks"]},
         )
+        self.assertEqual("科研工作线", snapshot["workflows"][0]["name"])
         analysis = next(task for task in snapshot["tasks"] if task["task_id"] == "science:analysis")
         self.assertEqual(
             ["science:experiment-a", "science:experiment-b"],
@@ -168,6 +169,7 @@ class RuntimeStoreTests(unittest.TestCase):
             [event["event_type"] for event in snapshot["events"] if event["task_id"] == "science:hypothesis"],
         )
         self.assertEqual(1, brief["attention"]["review"])
+        self.assertEqual("0 项运行中，1 项待验收，0 项待决定。", brief["summary"])
         self.assertEqual(["memory://science/accepted"], context_pack["memory_refs"])
         self.assertNotIn("memory_body", context_pack)
 
@@ -277,7 +279,11 @@ class RuntimeStoreTests(unittest.TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual("HUMAN_DECISION_REQUIRED", result["reason"])
-        self.assertEqual(1, len(store.pending_decisions()))
+        decision = store.pending_decisions()[0]
+        self.assertEqual("是否继续“Choose the next path”？", decision["question"])
+        self.assertEqual("批准并继续", decision["options"][0]["label"])
+        self.assertEqual("暂停任务", decision["options"][1]["label"])
+        self.assertEqual("通用执行角色", store.get_task("gate:choose")["agent_role"])
         self.assertEqual([], store.snapshot()["runs"])
 
     def test_separate_runtime_instances_create_one_pending_human_gate(self):

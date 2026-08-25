@@ -1,8 +1,11 @@
 (function (root, factory) {
-  const api = factory();
+  const architecture = typeof module === "object" && module.exports
+    ? require("./architecture.js")
+    : root.PersonalAIArchitecture;
+  const api = factory(architecture);
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.PersonalAIWorkbench = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (architecture) {
   "use strict";
 
   const TASKS = [
@@ -16,36 +19,36 @@
   ];
 
   const BUSINESS_LINES = [
-    { line_id: "research", name: "科研线", caption: "科学假设、Protocol、自主实验、数据分析与反馈优化", layout: "loop", stages: ["科学假设", "Protocol 设计", "自主实验", "分析与反馈"], traceStatus: "PRESET_READY", note: "科学假设、Protocol 设计、自主实验执行、数据分析与反馈优化五类 Agent 共用同一任务状态源。" },
+    { line_id: "research", name: "科研线", caption: "科学假设、实验方案、自主实验、数据分析与反馈优化", layout: "loop", stages: ["科学假设", "实验方案设计", "自主实验", "分析与反馈"], traceStatus: "PRESET_READY", note: "科学假设、实验方案设计、自主实验执行、数据分析与反馈优化五类角色共用同一任务状态源。" },
     { line_id: "product", name: "产品线", caption: "模块、能力与版本里程碑", layout: "milestones", stages: ["系统契约", "核心骨架", "交互实现", "版本验收"] },
     { line_id: "writing", name: "写作线", caption: "资料、结构与长文交付", layout: "pipeline", stages: ["材料整理", "结构确认", "分段写作", "终稿验收"] },
   ];
 
   const SHOWCASE_WORKFLOWS = [
-    { line_id: "research", name: "科研线", caption: "五类 Agent 协作 · 多实验路径 · 反馈进入下一轮", layout: "loop", stages: ["科学假设", "Protocol 设计", "自主实验", "数据分析与反馈"] },
-    { line_id: "meeting-notes", name: "会议纪要", caption: "原始材料、信息抽取、Draft 与内容审核", layout: "milestones", stages: ["获取原件", "信息抽取", "生成 Draft", "审核定稿"] },
-    { line_id: "industry-report", name: "行业研究 / 专业报告", caption: "全网收集、Data pool、报告规划、章节生产与视觉呈现", layout: "branch", stages: ["广泛收集", "Data pool", "论证规划", "写作与视觉"] },
+    { line_id: "research", name: "科研线", caption: "五类角色协作 · 多实验路径 · 反馈进入下一轮", layout: "loop", stages: ["科学假设", "实验方案设计", "自主实验", "数据分析与反馈"] },
+    { line_id: "meeting-notes", name: "会议纪要", caption: "原始材料、信息抽取、初稿与内容审核", layout: "milestones", stages: ["获取原件", "信息抽取", "生成初稿", "审核定稿"] },
+    { line_id: "industry-report", name: "行业研究 / 专业报告", caption: "全网收集、证据池、报告规划、章节生产与视觉呈现", layout: "branch", stages: ["广泛收集", "证据池", "论证规划", "写作与视觉"] },
   ];
 
   const SHOWCASE_TASKS = [
-    { task_id: "flow-a-01", public_label: "任务 A-01", line_id: "research", agent_role: "科学假设 Agent", stage: "澄清问题、识别缺口与生成假设", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 68000 },
-    { task_id: "flow-a-02", public_label: "任务 A-02", line_id: "research", agent_role: "Protocol 设计 Agent", stage: "实验路径 α · 设计与 QC", iteration: 2, parallel_group: "branch-alpha", attempts: 2, depends_on: ["flow-a-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 82000 },
-    { task_id: "flow-a-03", public_label: "任务 A-03", line_id: "research", agent_role: "Protocol 设计 Agent", stage: "实验路径 β · 设计与 QC", iteration: 2, parallel_group: "branch-beta", attempts: 2, depends_on: ["flow-a-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 82000 },
-    { task_id: "flow-a-04", public_label: "任务 A-04", line_id: "research", agent_role: "自主实验执行 Agent", stage: "路径 α · 动作编排与异常诊断", iteration: 3, parallel_group: "branch-alpha", attempts: 1, depends_on: ["flow-a-02"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 96000 },
-    { task_id: "flow-a-05", public_label: "任务 A-05", line_id: "research", agent_role: "自主实验执行 Agent", stage: "路径 β · 动作编排与异常诊断", iteration: 3, parallel_group: "branch-beta", attempts: 0, depends_on: ["flow-a-03"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 96000 },
-    { task_id: "flow-a-06", public_label: "任务 A-06", line_id: "research", agent_role: "数据分析 Agent", stage: "证据更新、数据分析与结论产出", iteration: 4, parallel_group: "main", attempts: 0, depends_on: ["flow-a-04", "flow-a-05"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 76000 },
-    { task_id: "flow-a-07", public_label: "任务 A-07", line_id: "research", agent_role: "反馈优化 Agent", stage: "反馈优化、下轮决策与路径更新", iteration: 4, parallel_group: "gate", attempts: 0, depends_on: ["flow-a-06"], human_gate: true, complexity: "deep", capabilities: ["research"], estimated_tokens: 36000 },
-    { task_id: "flow-b-01", public_label: "任务 B-01", line_id: "meeting-notes", agent_role: "材料摄取 Agent", stage: "获取录音、演示材料与项目资料原件", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 18000 },
-    { task_id: "flow-b-02", public_label: "任务 B-02", line_id: "meeting-notes", agent_role: "信息抽取 Agent", stage: "抽取事实、观点、数字与待确认项", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-b-01"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 32000 },
-    { task_id: "flow-b-03", public_label: "任务 B-03", line_id: "meeting-notes", agent_role: "Draft Agent", stage: "生成结构化会议纪要 Draft", iteration: 3, parallel_group: "main", attempts: 3, depends_on: ["flow-b-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 44000 },
-    { task_id: "flow-b-04", public_label: "任务 B-04", line_id: "meeting-notes", agent_role: "内容审核 Agent", stage: "核对归因、遗漏与表达边界", iteration: 4, parallel_group: "gate", attempts: 0, depends_on: ["flow-b-03"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 42000 },
-    { task_id: "flow-b-05", public_label: "任务 B-05", line_id: "meeting-notes", agent_role: "交付 Agent", stage: "定稿并生成可交付版本", iteration: 5, parallel_group: "main", attempts: 0, depends_on: ["flow-b-04"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 26000 },
-    { task_id: "flow-c-01", public_label: "任务 C-01", line_id: "industry-report", agent_role: "广域检索 Agent", stage: "全网广泛收集信息与来源", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
-    { task_id: "flow-c-02", public_label: "任务 C-02", line_id: "industry-report", agent_role: "Data pool Agent", stage: "建立 Data pool 并提取结构化数据", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-c-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
-    { task_id: "flow-c-03", public_label: "任务 C-03", line_id: "industry-report", agent_role: "报告规划 Agent", stage: "多轮沟通形成结构与论证线", iteration: 3, parallel_group: "plan", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "deep", capabilities: ["research", "writing"], estimated_tokens: 96000 },
-    { task_id: "flow-c-04", public_label: "任务 C-04", line_id: "industry-report", agent_role: "视觉规划 Agent", stage: "规划图表、配图与版式说明", iteration: 3, parallel_group: "visual", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 42000 },
-    { task_id: "flow-c-05", public_label: "任务 C-05", line_id: "industry-report", agent_role: "章节写作 Agent", stage: "按章节动态分配模型并行撰写", iteration: 4, parallel_group: "chapters", attempts: 0, depends_on: ["flow-c-03", "flow-c-04"], human_gate: false, complexity: "deep", capabilities: ["writing"], estimated_tokens: 120000 },
-    { task_id: "flow-c-06", public_label: "任务 C-06", line_id: "industry-report", agent_role: "排版与配图 Agent", stage: "统一排版、配图与最终审核", iteration: 5, parallel_group: "gate", attempts: 0, depends_on: ["flow-c-05"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 76000 },
+    { task_id: "flow-a-01", public_label: "任务 A-01", line_id: "research", agent_role: "科学假设角色", stage: "澄清问题、识别缺口与生成假设", flow_kind: "loop", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 68000 },
+    { task_id: "flow-a-02", public_label: "任务 A-02", line_id: "research", agent_role: "实验方案设计角色", stage: "实验路径 α · 设计与质量控制", flow_kind: "branch", iteration: 2, parallel_group: "branch-alpha", attempts: 2, depends_on: ["flow-a-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 82000 },
+    { task_id: "flow-a-03", public_label: "任务 A-03", line_id: "research", agent_role: "实验方案设计角色", stage: "实验路径 β · 设计与质量控制", flow_kind: "branch", iteration: 2, parallel_group: "branch-beta", attempts: 2, depends_on: ["flow-a-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 82000 },
+    { task_id: "flow-a-04", public_label: "任务 A-04", line_id: "research", agent_role: "自主实验执行角色", stage: "路径 α · 动作编排与异常诊断", iteration: 3, parallel_group: "branch-alpha", attempts: 1, depends_on: ["flow-a-02"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 96000 },
+    { task_id: "flow-a-05", public_label: "任务 A-05", line_id: "research", agent_role: "自主实验执行角色", stage: "路径 β · 动作编排与异常诊断", iteration: 3, parallel_group: "branch-beta", attempts: 0, depends_on: ["flow-a-03"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 96000 },
+    { task_id: "flow-a-06", public_label: "任务 A-06", line_id: "research", agent_role: "数据分析角色", stage: "证据更新、数据分析与结论产出", flow_kind: "join", iteration: 4, parallel_group: "main", attempts: 0, depends_on: ["flow-a-04", "flow-a-05"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 76000 },
+    { task_id: "flow-a-07", public_label: "任务 A-07", line_id: "research", agent_role: "反馈优化角色", stage: "判断是否进入下一轮并更新路径", flow_kind: "condition", iteration: 4, parallel_group: "gate", attempts: 0, depends_on: ["flow-a-06"], human_gate: true, complexity: "deep", capabilities: ["research"], estimated_tokens: 36000 },
+    { task_id: "flow-b-01", public_label: "任务 B-01", line_id: "meeting-notes", agent_role: "材料摄取角色", stage: "获取录音、演示材料与项目资料原件", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 18000 },
+    { task_id: "flow-b-02", public_label: "任务 B-02", line_id: "meeting-notes", agent_role: "信息抽取角色", stage: "抽取事实、观点、数字与待确认项", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-b-01"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 32000 },
+    { task_id: "flow-b-03", public_label: "任务 B-03", line_id: "meeting-notes", agent_role: "初稿生成角色", stage: "生成结构化会议纪要初稿", iteration: 3, parallel_group: "main", attempts: 3, depends_on: ["flow-b-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 44000 },
+    { task_id: "flow-b-04", public_label: "任务 B-04", line_id: "meeting-notes", agent_role: "内容审核角色", stage: "核对归因、遗漏与表达边界", iteration: 4, parallel_group: "gate", attempts: 0, depends_on: ["flow-b-03"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 42000 },
+    { task_id: "flow-b-05", public_label: "任务 B-05", line_id: "meeting-notes", agent_role: "交付角色", stage: "定稿并生成可交付版本", iteration: 5, parallel_group: "main", attempts: 0, depends_on: ["flow-b-04"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 26000 },
+    { task_id: "flow-c-01", public_label: "任务 C-01", line_id: "industry-report", agent_role: "广域检索角色", stage: "全网广泛收集信息与来源", iteration: 1, parallel_group: "main", attempts: 1, depends_on: [], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
+    { task_id: "flow-c-02", public_label: "任务 C-02", line_id: "industry-report", agent_role: "证据池整理角色", stage: "建立证据池并提取结构化数据", iteration: 2, parallel_group: "main", attempts: 1, depends_on: ["flow-c-01"], human_gate: false, complexity: "deep", capabilities: ["research"], estimated_tokens: 120000 },
+    { task_id: "flow-c-03", public_label: "任务 C-03", line_id: "industry-report", agent_role: "报告规划角色", stage: "多轮沟通形成结构与论证线", iteration: 3, parallel_group: "plan", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "deep", capabilities: ["research", "writing"], estimated_tokens: 96000 },
+    { task_id: "flow-c-04", public_label: "任务 C-04", line_id: "industry-report", agent_role: "视觉规划角色", stage: "规划图表、配图与版式说明", iteration: 3, parallel_group: "visual", attempts: 1, depends_on: ["flow-c-02"], human_gate: false, complexity: "standard", capabilities: ["writing"], estimated_tokens: 42000 },
+    { task_id: "flow-c-05", public_label: "任务 C-05", line_id: "industry-report", agent_role: "章节写作角色", stage: "按章节动态分配模型并行撰写", iteration: 4, parallel_group: "chapters", attempts: 0, depends_on: ["flow-c-03", "flow-c-04"], human_gate: false, complexity: "deep", capabilities: ["writing"], estimated_tokens: 120000 },
+    { task_id: "flow-c-06", public_label: "任务 C-06", line_id: "industry-report", agent_role: "排版与配图角色", stage: "统一排版、配图与最终审核", iteration: 5, parallel_group: "gate", attempts: 0, depends_on: ["flow-c-05"], human_gate: true, complexity: "deep", capabilities: ["writing"], estimated_tokens: 76000 },
   ];
 
   const MODULES = [
@@ -71,12 +74,12 @@
   ];
 
   const EXECUTORS = [
-    { executor: "Research Agent", routes: ["standard", "deep"], capabilities: ["research", "writing"] },
-    { executor: "Product Agent", routes: ["standard", "deep"], capabilities: ["engineering"] },
-    { executor: "Writing Agent", routes: ["quick", "standard"], capabilities: ["writing"] },
+    { executor: "研究执行器", routes: ["standard", "deep"], capabilities: ["research", "writing"] },
+    { executor: "产品执行器", routes: ["standard", "deep"], capabilities: ["engineering"] },
+    { executor: "写作执行器", routes: ["quick", "standard"], capabilities: ["writing"] },
   ];
 
-  const OPERATION_CHAIN = ["INSPECT", "MAP", "PLAN", "CONFIRM", "ROUTE", "EXECUTE", "REVIEW", "ARCHIVE"];
+  const OPERATION_CHAIN = ["检查", "建图", "规划", "确认", "路由", "执行", "验收", "归档"];
   const PET_PREFERENCES = new Set(["blue-whale-maid", "model-animal", "off"]);
 
   function clone(value) {
@@ -196,17 +199,17 @@
       "flow-c-01": "DONE", "flow-c-02": "DONE", "flow-c-03": "REVIEW", "flow-c-04": "REVIEW", "flow-c-05": "QUEUED", "flow-c-06": "QUEUED",
     };
     const assignmentSpecs = {
-      "flow-a-01": ["deep", "Reasoning model", "科学假设 Agent"],
-      "flow-a-02": ["deep", "Reasoning model", "Protocol 设计 Agent"],
-      "flow-a-03": ["deep", "Reasoning model", "Protocol 设计 Agent"],
-      "flow-a-04": ["standard", "General model", "自主实验执行 Agent"],
-      "flow-b-01": ["standard", "Long-context model", "材料摄取 Agent"],
-      "flow-b-02": ["standard", "General model", "信息抽取 Agent"],
-      "flow-b-03": ["standard", "Writing model", "Draft Agent"],
-      "flow-c-01": ["deep", "Research model", "广域检索 Agent"],
-      "flow-c-02": ["deep", "Research model", "Data pool Agent"],
-      "flow-c-03": ["deep", "Reasoning model", "报告规划 Agent"],
-      "flow-c-04": ["standard", "General model", "视觉规划 Agent"],
+      "flow-a-01": ["deep", "推理模型", "科学假设角色"],
+      "flow-a-02": ["deep", "推理模型", "实验方案设计角色"],
+      "flow-a-03": ["deep", "推理模型", "实验方案设计角色"],
+      "flow-a-04": ["standard", "通用模型", "自主实验执行角色"],
+      "flow-b-01": ["standard", "长上下文模型", "材料摄取角色"],
+      "flow-b-02": ["standard", "通用模型", "信息抽取角色"],
+      "flow-b-03": ["standard", "写作模型", "初稿生成角色"],
+      "flow-c-01": ["deep", "研究模型", "广域检索角色"],
+      "flow-c-02": ["deep", "研究模型", "证据池整理角色"],
+      "flow-c-03": ["deep", "推理模型", "报告规划角色"],
+      "flow-c-04": ["standard", "通用模型", "视觉规划角色"],
     };
     const assignments = Object.fromEntries(Object.entries(assignmentSpecs).map(([taskId, values]) => [taskId, { route: values[0], model: values[1], executor: values[2] }]));
     const tasks = clone(SHOWCASE_TASKS).map((task) => ({
@@ -390,6 +393,7 @@
     if (!workflow) return null;
     const tasks = state.tasks.filter((task) => task.line_id === workflowId).map((task) => ({
       ...task,
+      flow_kind: inferFlowKind(task, workflow),
       status: state.taskStates[task.task_id] || "QUEUED",
       assignment: state.assignments[task.task_id] || null,
       events: clone(task.events || []),
@@ -405,6 +409,15 @@
         nodes: tasks.filter((task) => (task.iteration || 1) === iteration),
       })),
     };
+  }
+
+  function inferFlowKind(task, workflow = {}) {
+    if (["sequence", "branch", "join", "condition", "loop"].includes(task.flow_kind)) return task.flow_kind;
+    if (task.human_gate) return "condition";
+    if ((task.depends_on || []).length > 1) return "join";
+    if (task.parallel_group && !["main", "gate"].includes(task.parallel_group)) return "branch";
+    if (workflow.layout === "loop" && /反馈|下一轮|复核/.test(`${task.agent_role || ""}${task.stage || task.title || ""}`)) return "loop";
+    return "sequence";
   }
 
   function buildModuleGraph(modules) {
@@ -446,15 +459,26 @@
   }
 
   const MODULE_LANES = ["输入", "理解", "编排", "执行", "记忆与观测"];
+  const SYSTEM_LANES = ["入口", "认知", "理解", "编排", "结构", "领域", "执行", "验收", "裁决", "交付", "记忆", "学习", "输出"];
 
   function moduleLaneLabel(layer) {
     const value = String(layer || "").toLowerCase();
+    const systemLabel = SYSTEM_LANES.find((label) => label.toLowerCase() === value);
+    if (systemLabel) return systemLabel;
     if (value === "输入" || value === "input") return "输入";
     if (value === "理解" || value === "understanding") return "理解";
     if (value === "编排" || value === "orchestration") return "编排";
     if (value === "执行" || value === "execution") return "执行";
     if (["记忆", "观测", "memory", "observation", "observability"].includes(value)) return "记忆与观测";
     return "记忆与观测";
+  }
+
+  function moduleLaneOrder(modules) {
+    const requested = new Set(modules.map((module) => String(module.layer || "")));
+    const systemOnly = ["入口", "认知", "结构", "领域", "验收", "裁决", "交付", "学习", "输出"];
+    if (!systemOnly.some((label) => requested.has(label))) return MODULE_LANES;
+    const system = SYSTEM_LANES.filter((label) => requested.has(label));
+    return system;
   }
 
   function topologicalModuleOrder(modules, edges) {
@@ -493,13 +517,18 @@
     const headerHeight = 72;
     const order = topologicalModuleOrder(modules, edges);
     const orderIndex = Object.fromEntries(order.map((moduleId, index) => [moduleId, index]));
-    const grouped = Object.fromEntries(MODULE_LANES.map((label) => [label, []]));
-    modules.forEach((module) => grouped[moduleLaneLabel(module.layer)].push(module));
-    MODULE_LANES.forEach((label) => grouped[label].sort((left, right) => orderIndex[left.module_id] - orderIndex[right.module_id]));
-    const maxLaneSize = Math.max(1, ...MODULE_LANES.map((label) => grouped[label].length));
-    const width = padding * 2 + MODULE_LANES.length * laneWidth + (MODULE_LANES.length - 1) * laneGap;
+    const laneOrder = moduleLaneOrder(modules);
+    const grouped = Object.fromEntries(laneOrder.map((label) => [label, []]));
+    modules.forEach((module) => {
+      const requestedLane = moduleLaneLabel(module.layer);
+      const lane = grouped[requestedLane] ? requestedLane : "记忆与观测";
+      grouped[lane].push(module);
+    });
+    laneOrder.forEach((label) => grouped[label].sort((left, right) => orderIndex[left.module_id] - orderIndex[right.module_id]));
+    const maxLaneSize = Math.max(1, ...laneOrder.map((label) => grouped[label].length));
+    const width = padding * 2 + laneOrder.length * laneWidth + (laneOrder.length - 1) * laneGap;
     const height = Math.max(520, headerHeight + padding * 2 + maxLaneSize * nodeHeight + Math.max(0, maxLaneSize - 1) * nodeGap);
-    const lanes = MODULE_LANES.map((label, index) => ({
+    const lanes = laneOrder.map((label, index) => ({
       lane_id: label,
       label,
       x: padding + index * (laneWidth + laneGap),
@@ -576,23 +605,24 @@
     const downstream = new Set(neighborhood.downstream);
     const relation = (moduleId) => moduleId === selectedModuleId ? "selected" : upstream.has(moduleId) ? "upstream" : downstream.has(moduleId) ? "downstream" : "unrelated";
     const lanes = topology.lanes.map((lane) => `<div class="module-lane" style="left:${lane.x}px;width:${lane.width}px;height:${topology.height}px"><span>${escapeHtml(lane.label)}</span><em>${lane.count}</em></div>`).join("");
-    const edges = topology.edges.map(([sourceId, targetId]) => {
+    const edges = topology.edges.map(([sourceId, targetId, edgeKind = "dependency"]) => {
       const source = byId[sourceId];
       const target = byId[targetId];
       if (!source || !target) return "";
       const active = relation(sourceId) !== "unrelated" && relation(targetId) !== "unrelated";
-      return `<path class="module-edge${active ? " active" : ""}" data-edge-from="${escapeHtml(sourceId)}" data-edge-to="${escapeHtml(targetId)}" d="${moduleEdgePath(source, target)}" marker-end="url(#module-arrow)"></path>`;
+      return `<path class="module-edge edge-${escapeHtml(edgeKind)}${active ? " active" : ""}" data-edge-from="${escapeHtml(sourceId)}" data-edge-to="${escapeHtml(targetId)}" d="${moduleEdgePath(source, target)}" marker-end="url(#module-arrow)"></path>`;
     }).join("");
     const nodes = topology.nodes.map((node) => {
       const nodeRelation = relation(node.module_id);
-      const status = node.availability === "READY" ? "可用" : "规划中";
-      return `<button class="module-node" type="button" data-module-id="${escapeHtml(node.module_id)}" data-relation="${nodeRelation}" aria-pressed="${nodeRelation === "selected" ? "true" : "false"}" aria-controls="module-detail" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"><span class="module-node-meta"><span>${escapeHtml(node.lane)}</span><em>${escapeHtml(status)}</em></span><b>${escapeHtml(node.name)}</b><small>${node.optional ? "可选模块" : "核心模块"}</small><i aria-hidden="true"></i></button>`;
+      const status = node.availability === "READY" ? "可用" : node.availability === "PROTOTYPE" ? "试运行" : "规划中";
+      const drill = node.child_graph ? " · 可下钻" : "";
+      return `<button class="module-node" type="button" data-module-id="${escapeHtml(node.module_id)}" data-relation="${nodeRelation}" aria-pressed="${nodeRelation === "selected" ? "true" : "false"}" aria-controls="module-detail" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"><span class="module-node-meta"><span>${escapeHtml(node.lane)}</span><em>${escapeHtml(status)}</em></span><b>${escapeHtml(node.name)}</b><small>${node.optional ? "可选模块" : "核心模块"}${drill}</small><i aria-hidden="true"></i></button>`;
     }).join("");
     return `<div class="module-scene-content" style="width:${topology.width}px;height:${topology.height}px"><div class="module-lane-layer" aria-hidden="true">${lanes}</div><svg class="module-edge-layer" viewBox="0 0 ${topology.width} ${topology.height}" aria-hidden="true"><defs><marker id="module-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z"></path></marker></defs>${edges}</svg><div class="module-node-layer">${nodes}</div></div>`;
   }
 
   function zoomModuleView(view, requestedScale, anchor) {
-    const scale = Math.min(1.8, Math.max(.55, requestedScale));
+    const scale = Math.min(1.8, Math.max(.16, requestedScale));
     const origin = anchor || { x: 0, y: 0 };
     const worldX = (origin.x - view.x) / view.scale;
     const worldY = (origin.y - view.y) / view.scale;
@@ -601,6 +631,10 @@
       y: origin.y - worldY * scale,
       scale,
     };
+  }
+
+  function captureMapPointerOnDown(kind) {
+    return kind === "pan";
   }
 
   function createDragClickGuard(schedule) {
@@ -762,7 +796,7 @@
     const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action);
     return `<article class="task-row status-${escapeHtml(task.status.toLowerCase())}" data-task-id="${escapeHtml(task.task_id)}">
       <div class="task-state"><span class="status-dot"></span><b>${escapeHtml(STATUS_LABELS[task.status] || task.status)}</b></div>
-      <div class="task-main"><div class="card-meta"><span>${escapeHtml(task.complexity)}</span>${task.human_gate ? '<span class="signal-pill">Human Gate</span>' : ""}</div><h3>${escapeHtml(task.title || task.public_label)}</h3><p>${escapeHtml(task.acceptance || task.stage)}</p></div>
+      <div class="task-main"><div class="card-meta"><span>${escapeHtml(task.complexity)}</span>${task.human_gate ? '<span class="signal-pill">人工确认</span>' : ""}</div><h3>${escapeHtml(task.title || task.public_label)}</h3><p>${escapeHtml(task.acceptance || task.stage)}</p></div>
       <div class="task-route">${assignment || '<span class="task-chip">等待路由</span>'}</div>
       <button class="task-action" data-action="task" ${disabled ? "disabled" : ""}>${escapeHtml(ACTION_LABELS[task.action] || task.action)}</button>
     </article>`;
@@ -776,7 +810,7 @@
     }
     if (item.kind === "blocked") return `<article class="decision-card blocked-decision" data-decision-task="${escapeHtml(item.task_id)}"><div><span class="status-pill status-blocked">已阻塞</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p></div><div class="card-actions"><button class="card-action" type="button" data-decision="APPROVED">调整后重开</button></div></article>`;
     if (item.kind === "paused") return `<article class="decision-card paused-decision"><div><span class="status-pill status-paused">已暂停</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary)}</p></div></article>`;
-    return `<article class="decision-card" data-decision-task="${escapeHtml(item.task_id)}"><div><span class="signal-pill">Human Gate</span><h3>${escapeHtml(item.title)}</h3><p>验收条件：${escapeHtml(item.acceptance)}</p></div><div class="card-actions"><button class="card-action reject" type="button" data-decision="REJECTED">退回</button><button class="card-action approve" type="button" data-decision="APPROVED">批准并继续</button></div></article>`;
+    return `<article class="decision-card" data-decision-task="${escapeHtml(item.task_id)}"><div><span class="signal-pill">人工确认</span><h3>${escapeHtml(item.title)}</h3><p>验收条件：${escapeHtml(item.acceptance)}</p></div><div class="card-actions"><button class="card-action reject" type="button" data-decision="REJECTED">退回</button><button class="card-action approve" type="button" data-decision="APPROVED">批准并继续</button></div></article>`;
   }
 
   function renderDependencyEdge(edge, moduleNames) {
@@ -803,9 +837,9 @@
         label: `${model || "当前模型"} 的蓝鲸女仆正在工作`,
       };
     }
-    if (/Reasoning|Research/i.test(model)) return { pet_id: "reasoning-owl", glyph: "🦉", label: `${model} 工作宠物` };
-    if (/Writing|Long-context/i.test(model)) return { pet_id: "writing-whale", glyph: "🐋", label: `${model} 工作宠物` };
-    if (/Fast/i.test(model)) return { pet_id: "fast-rabbit", glyph: "🐇", label: `${model} 工作宠物` };
+    if (/Reasoning|Research|推理|研究/i.test(model)) return { pet_id: "reasoning-owl", glyph: "🦉", label: `${model} 工作宠物` };
+    if (/Writing|Long-context|写作|长上下文/i.test(model)) return { pet_id: "writing-whale", glyph: "🐋", label: `${model} 工作宠物` };
+    if (/Fast|快速/i.test(model)) return { pet_id: "fast-rabbit", glyph: "🐇", label: `${model} 工作宠物` };
     return { pet_id: "general-fox", glyph: "🦊", label: `${model || "当前模型"} 工作宠物` };
   }
 
@@ -818,12 +852,15 @@
     const pet = petForTask(task, petPreference);
     const route = assignment ? `${escapeHtml(assignment.model)}<span>${escapeHtml(assignment.executor)}</span>` : "等待分配<span>尚未选择执行器</span>";
     const agent = task.agent_role ? `<span class="workflow-node-agent">${escapeHtml(task.agent_role)}</span>` : "";
+    const flowLabels = { sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" };
+    const flowKind = inferFlowKind(task);
     const petMedia = pet && pet.kind === "image"
       ? `<img src="${escapeHtml(pet.src)}" alt="" loading="lazy" decoding="async"><span class="pet-static" aria-hidden="true">🐋</span>`
       : pet ? `<span aria-hidden="true">${pet.glyph}</span>` : "";
     const petSlot = pet ? `<span class="workflow-pet${pet.kind === "image" ? " image-pet" : ""}" data-pet-id="${escapeHtml(pet.pet_id)}" aria-label="${escapeHtml(pet.label)}" title="${escapeHtml(pet.label)}">${petMedia}</span>` : "";
     return `<button class="workflow-node status-${escapeHtml(task.status.toLowerCase())}${selected ? " selected" : ""}${pet ? " has-pet" : ""}" type="button" data-workflow-task="${escapeHtml(task.task_id)}" aria-pressed="${selected ? "true" : "false"}">
       <span class="workflow-node-head"><span class="workflow-node-id">${escapeHtml(task.public_label || task.title || task.task_id)}</span><span class="workflow-node-status"><i class="run-pulse" aria-hidden="true"></i>${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span></span>
+      <span class="workflow-node-logic kind-${escapeHtml(flowKind)}">${escapeHtml(flowLabels[flowKind])}</span>
       ${agent}<span class="workflow-node-stage">${escapeHtml(task.stage || task.title || "自定义任务")}</span>
       <span class="workflow-node-route">${route}<span>${task.attempts ? `第 ${task.attempts} 次运行` : "尚未运行"}</span></span>
       ${petSlot}</button>`;
@@ -846,15 +883,23 @@
     const events = task.events && task.events.length
       ? `<ol class="event-trace">${task.events.map((event) => `<li><time>${escapeHtml(event.at)}</time><span>${escapeHtml(event.label)}</span></li>`).join("")}</ol>`
       : '<p class="empty-trace">任务尚未分配。分配后会记录适配器启动、心跳、产物与复核事件。</p>';
-    const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action);
+    const availableAdapters = runtimeState && runtimeState.runtime
+      ? (runtimeState.adapters || []).filter((adapter) => adapter.available)
+      : [];
+    const needsAdapter = ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(task.action);
+    const adapterUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && !availableAdapters.length);
+    const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action) || adapterUnavailable;
     const runtimeControls = runtimeState && runtimeState.runtime && ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(task.action)
-      ? `<div class="runtime-controls"><label><span>模型</span><input data-runtime-model value="${escapeHtml(runtimeState.defaultModel || "")}" autocomplete="off"></label><label><span>执行适配器</span><select data-runtime-adapter>${(runtimeState.adapters || []).map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}" ${adapter.available ? "" : "disabled"}>${escapeHtml(adapter.adapter_id)}${adapter.available ? "" : " · 未配置"}</option>`).join("")}</select></label></div>`
+      ? `<div class="runtime-controls"><label><span>模型</span><input data-runtime-model value="${escapeHtml(runtimeState.defaultModel || "")}" autocomplete="off"></label><label><span>执行适配器</span><select data-runtime-adapter ${adapterUnavailable ? "disabled" : ""}>${availableAdapters.length ? availableAdapters.map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}">${escapeHtml(adapter.adapter_id)}</option>`).join("") : '<option value="">暂无可用执行适配器</option>'}</select></label></div>`
       : "";
+    const actionLabel = adapterUnavailable
+      ? "配置执行适配器后开始"
+      : (ACTION_LABELS[task.action] || task.action);
     return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || task.title || "自定义任务")}</h3></div>
-      <dl class="run-detail-meta"><div><dt>模型</dt><dd>${escapeHtml(assignment ? assignment.model : "等待选择")}</dd></div><div><dt>执行适配器</dt><dd>${escapeHtml(assignment ? assignment.executor : "尚未分配")}</dd></div><div><dt>运行轮次</dt><dd>${task.attempts ? `Attempt ${String(task.attempts).padStart(2, "0")}` : "尚未运行"}</dd></div><div><dt>并行分支</dt><dd>${escapeHtml(task.parallel_group || "main")}</dd></div></dl>
+      <dl class="run-detail-meta"><div><dt>模型</dt><dd>${escapeHtml(assignment ? assignment.model : "等待选择")}</dd></div><div><dt>执行适配器</dt><dd>${escapeHtml(assignment ? assignment.executor : "尚未分配")}</dd></div><div><dt>运行轮次</dt><dd>${task.attempts ? `第 ${String(task.attempts).padStart(2, "0")} 次` : "尚未运行"}</dd></div><div><dt>节点类型</dt><dd>${escapeHtml(({ sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" })[inferFlowKind(task)] || "顺序")}</dd></div></dl>
       ${events}
       ${runtimeControls}
-      <div data-task-id="${escapeHtml(task.task_id)}"><button class="task-action" type="button" data-action="task" ${disabled ? "disabled" : ""}>${escapeHtml(ACTION_LABELS[task.action] || task.action)}</button></div>`;
+      <div data-task-id="${escapeHtml(task.task_id)}"><button class="task-action" type="button" data-action="task" ${disabled ? "disabled" : ""}>${escapeHtml(actionLabel)}</button></div>`;
   }
 
   function renderProposal(proposal, lines) {
@@ -879,17 +924,44 @@
     let state = selectBoard(createShowcaseState(), initialBoard);
     const runtimeFetch = doc.defaultView && typeof doc.defaultView.fetch === "function" ? doc.defaultView.fetch.bind(doc.defaultView) : null;
     const runtimeClient = createRuntimeClient(runtimeFetch);
-    let selectedModule = "workflow-core";
+    let moduleMapMode = "system";
+    let modulePath = [];
+    let selectedModule = "secretary-entry";
     let moduleTopology = null;
     let moduleTopologySignature = "";
     let moduleView = { x: 20, y: 20, scale: 1 };
     let moduleViewFitted = false;
     let moduleFocusEnabled = true;
     let mapGesture = null;
+    let moduleClickTimer = null;
     const dragClickGuard = createDragClickGuard();
     let proposal = null;
     let lineComposerOpen = false;
     const byId = (id) => doc.getElementById(id);
+
+    function activeModuleGraph(view) {
+      if (moduleMapMode === "modules" || !architecture) return view.global;
+      const graph = architecture.systemGraph(modulePath);
+      return {
+        graph_id: graph.graph_id,
+        name: graph.name,
+        summary: graph.summary,
+        modules: graph.nodes,
+        edges: graph.edges,
+        unresolved: [],
+      };
+    }
+
+    function enterModuleGraph(module) {
+      if (!module || !module.child_graph || moduleMapMode !== "system") return false;
+      modulePath = [...modulePath, module.child_graph];
+      const graph = architecture.systemGraph(modulePath);
+      selectedModule = graph.nodes[0] ? graph.nodes[0].module_id : null;
+      moduleTopology = null;
+      moduleTopologySignature = "";
+      moduleViewFitted = false;
+      return true;
+    }
 
     function applyModuleView() {
       const scene = byId("module-scene");
@@ -904,7 +976,7 @@
       const inset = 28;
       const availableWidth = Math.max(1, viewport.clientWidth - inset * 2);
       const availableHeight = Math.max(1, viewport.clientHeight - inset * 2);
-      const scale = Math.min(1.2, Math.max(.55, Math.min(availableWidth / moduleTopology.width, availableHeight / moduleTopology.height)));
+      const scale = Math.min(1.2, Math.max(.16, Math.min(availableWidth / moduleTopology.width, availableHeight / moduleTopology.height)));
       moduleView = {
         x: (viewport.clientWidth - moduleTopology.width * scale) / 2,
         y: (viewport.clientHeight - moduleTopology.height * scale) / 2,
@@ -969,7 +1041,7 @@
       byId("source-note-copy").textContent = state.runtime ? "任务、运行、产物与裁决保存在当前 SQLite 运行库。模型密钥只从服务端环境变量读取。" : "只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。";
       byId("work-source-label").textContent = state.runtime ? "真实运行状态" : "任务内容已匿名";
       byId("reset-demo").textContent = state.runtime ? "刷新状态" : "重置演示";
-      byId("footer-mode").textContent = state.runtime ? "Local persistent runtime" : "Synthetic workflow showcase";
+      byId("footer-mode").textContent = state.runtime ? "本地持久化运行库" : "匿名结构演示";
       doc.querySelectorAll('[role="tab"][data-board]').forEach((button) => {
         const active = button.dataset.board === view.activeBoard;
         button.classList.toggle("active", active);
@@ -981,28 +1053,43 @@
       });
       doc.querySelectorAll("[data-panel]").forEach((panel) => { panel.hidden = panel.dataset.panel !== view.activeBoard; });
 
-      const moduleNames = Object.fromEntries(view.global.modules.map((item) => [item.module_id, item.name]));
-      const signature = view.global.modules.map((module) => module.module_id).join("|") + "::" + view.global.edges.map((edge) => edge.join(">"));
+      const mapGraph = activeModuleGraph(view);
+      const moduleNames = Object.fromEntries(mapGraph.modules.map((item) => [item.module_id, item.name]));
+      const signature = `${moduleMapMode}:${modulePath.join("/")}:` + mapGraph.modules.map((module) => module.module_id).join("|") + "::" + mapGraph.edges.map((edge) => edge.join(">"));
       if (!moduleTopology || moduleTopologySignature !== signature) {
-        moduleTopology = buildModuleTopology(view.global.modules, view.global.edges);
+        moduleTopology = buildModuleTopology(mapGraph.modules, mapGraph.edges);
         moduleTopologySignature = signature;
         moduleViewFitted = false;
       }
-      if (!view.global.modules.some((item) => item.module_id === selectedModule)) selectedModule = view.global.modules[0] ? view.global.modules[0].module_id : null;
+      if (!mapGraph.modules.some((item) => item.module_id === selectedModule)) selectedModule = mapGraph.modules[0] ? mapGraph.modules[0].module_id : null;
       byId("module-scene").innerHTML = renderModuleTopology(moduleTopology, selectedModule);
       byId("module-map-viewport").dataset.focused = moduleFocusEnabled ? "true" : "false";
-      byId("module-count").textContent = String(view.global.modules.length);
-      byId("module-edge-count").textContent = String(view.global.edges.length);
-      byId("module-unresolved-count").textContent = String(view.global.unresolved.length);
-      byId("dependency-edge-list").innerHTML = view.global.edges.map((edge) => renderDependencyEdge(edge, moduleNames)).join("");
-      const module = view.global.modules.find((item) => item.module_id === selectedModule) || view.global.modules[0];
-      const neighborhood = module ? moduleNeighborhood(view.global.edges, module.module_id) : { directUpstream: [], directDownstream: [] };
+      byId("module-map-title").textContent = mapGraph.name || "运行模块";
+      byId("module-count").textContent = String(mapGraph.modules.length);
+      byId("module-edge-count").textContent = String(mapGraph.edges.length);
+      byId("module-unresolved-count").textContent = String(mapGraph.unresolved.length);
+      byId("dependency-edge-list").innerHTML = mapGraph.edges.map((edge) => renderDependencyEdge(edge, moduleNames)).join("");
+      const module = mapGraph.modules.find((item) => item.module_id === selectedModule) || mapGraph.modules[0];
+      const neighborhood = module ? moduleNeighborhood(mapGraph.edges, module.module_id) : { directUpstream: [], directDownstream: [] };
       byId("module-detail-name").textContent = module ? module.name : "没有已安装模块";
       byId("module-detail-summary").textContent = module ? module.summary : "把 module.json 放入模块目录后即可参与解析。";
       byId("module-provides").textContent = module ? module.provides.join(" · ") : "—";
       byId("module-requires").textContent = module && module.requires.length ? module.requires.join(" · ") : "无前置 capability";
       byId("module-upstream-list").textContent = neighborhood.directUpstream.length ? neighborhood.directUpstream.map((moduleId) => moduleNames[moduleId] || moduleId).join(" · ") : "系统入口";
       byId("module-downstream-list").textContent = neighborhood.directDownstream.length ? neighborhood.directDownstream.map((moduleId) => moduleNames[moduleId] || moduleId).join(" · ") : "没有下游模块";
+      byId("module-inputs").textContent = module && module.inputs && module.inputs.length ? module.inputs.join(" · ") : "由 capability 合同定义";
+      byId("module-outputs").textContent = module && module.outputs && module.outputs.length ? module.outputs.join(" · ") : "由 capability 合同定义";
+      byId("module-control").textContent = module && module.control ? module.control : "按模块合同运行";
+      const drillButton = doc.querySelector("[data-map-drill]");
+      drillButton.hidden = !(moduleMapMode === "system" && module && module.child_graph);
+      drillButton.textContent = module && module.child_graph ? `进入${module.name}` : "进入内部结构";
+      doc.querySelectorAll("[data-map-mode]").forEach((button) => {
+        const active = button.dataset.mapMode === moduleMapMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      const crumbs = moduleMapMode === "system" && architecture ? architecture.systemBreadcrumbs(modulePath) : [{ label: "运行模块", depth: 0 }];
+      byId("module-breadcrumbs").innerHTML = crumbs.map((crumb, index) => `<button type="button" data-map-depth="${index}" ${index === crumbs.length - 1 ? 'aria-current="page"' : ""}>${escapeHtml(crumb.label)}</button>`).join('<span aria-hidden="true">›</span>');
       const focusButton = doc.querySelector("[data-map-focus-toggle]");
       focusButton.classList.toggle("active", moduleFocusEnabled);
       focusButton.textContent = moduleFocusEnabled ? "显示全部模块" : "只看上下游";
@@ -1032,13 +1119,17 @@
       if (state.runtime) {
         byId("auto-advance-model").value = state.defaultModel || "";
         const availableAdapters = (state.adapters || []).filter((adapter) => adapter.available);
-        byId("auto-advance-adapter").innerHTML = (state.adapters || []).map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}" ${adapter.available ? "" : "disabled"}>${escapeHtml(adapter.adapter_id)}${adapter.available ? "" : " · 未配置"}</option>`).join("");
+        const adapterSelect = byId("auto-advance-adapter");
+        adapterSelect.innerHTML = availableAdapters.length
+          ? (state.adapters || []).map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}" ${adapter.available ? "" : "disabled"}>${escapeHtml(adapter.adapter_id)}${adapter.available ? "" : " · 未配置"}</option>`).join("")
+          : '<option value="">暂无可用执行适配器</option>';
+        adapterSelect.disabled = !availableAdapters.length;
         const advanceButton = doc.querySelector("[data-auto-advance]");
         advanceButton.disabled = !state.defaultModel || !availableAdapters.length;
         advanceButton.textContent = !state.defaultModel
           ? "配置模型后推进"
           : !availableAdapters.length
-            ? "配置 Adapter 后推进"
+            ? "配置执行适配器后推进"
             : "推进当前工作线";
       }
       const projection = workflowProjection(state, view.work.activeLine.line_id);
@@ -1052,7 +1143,7 @@
       byId("run-detail").innerHTML = renderRunDetail(selectedTaskView, state);
       byId("proposal-zone").innerHTML = renderProposal(proposal, view.work.lines);
 
-      byId("decision-list").innerHTML = view.decision.pending.length ? view.decision.pending.map(renderDecisionCard).join("") : '<div class="empty-state"><span>✓</span><h3>当前没有待裁决事项</h3><p>新的计划确认、阻塞和 Human Gate 会集中出现在这里。</p></div>';
+      byId("decision-list").innerHTML = view.decision.pending.length ? view.decision.pending.map(renderDecisionCard).join("") : '<div class="empty-state"><span>✓</span><h3>当前没有待裁决事项</h3><p>新的计划确认、条件判断和阻塞会集中出现在这里。</p></div>';
       byId("decision-visible-count").textContent = `${view.decision.pending.length} 项待处理`;
       if (doc.defaultView && doc.defaultView.history) doc.defaultView.history.replaceState(null, "", `#${view.activeBoard}`);
       if (focusToken) {
@@ -1082,6 +1173,31 @@
         scrollActiveBoardIntoView(doc, state.activeBoard);
         return;
       }
+      const mapModeButton = event.target.closest && event.target.closest("[data-map-mode]");
+      if (mapModeButton) {
+        moduleMapMode = mapModeButton.dataset.mapMode;
+        modulePath = [];
+        const graph = activeModuleGraph(workspaceView(state));
+        selectedModule = graph.modules[0] ? graph.modules[0].module_id : null;
+        moduleTopology = null;
+        moduleTopologySignature = "";
+        moduleViewFitted = false;
+        render();
+        announce(moduleMapMode === "system" ? "已切换到系统全景" : "已切换到运行模块");
+        return;
+      }
+      const breadcrumb = event.target.closest && event.target.closest("[data-map-depth]");
+      if (breadcrumb) {
+        modulePath = modulePath.slice(0, Number(breadcrumb.dataset.mapDepth));
+        const graph = activeModuleGraph(workspaceView(state));
+        selectedModule = graph.modules[0] ? graph.modules[0].module_id : null;
+        moduleTopology = null;
+        moduleTopologySignature = "";
+        moduleViewFitted = false;
+        render();
+        announce(`已返回${graph.name}`);
+        return;
+      }
       const zoomButton = event.target.closest && event.target.closest("[data-map-zoom]");
       if (zoomButton) {
         const viewport = byId("module-map-viewport");
@@ -1098,12 +1214,21 @@
         return;
       }
       if (event.target.closest && event.target.closest("[data-map-reset]")) {
-        const graph = workspaceView(state).global;
+        const graph = activeModuleGraph(workspaceView(state));
         moduleTopology = buildModuleTopology(graph.modules, graph.edges);
         moduleViewFitted = true;
         render();
         fitModuleMap();
         announce("模块布局已恢复为系统拓扑");
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-map-drill]")) {
+        const graph = activeModuleGraph(workspaceView(state));
+        const module = graph.modules.find((item) => item.module_id === selectedModule);
+        if (enterModuleGraph(module)) {
+          render();
+          announce(`已进入${module.name}`);
+        }
         return;
       }
       if (event.target.closest && event.target.closest("[data-map-focus-toggle]")) {
@@ -1115,10 +1240,16 @@
       const moduleButton = event.target.closest && event.target.closest("[data-module-id]");
       if (moduleButton) {
         if (dragClickGuard.consumeClick()) return;
-        selectedModule = moduleButton.dataset.moduleId;
-        moduleFocusEnabled = true;
-        render();
-        announce(`已选择${moduleButton.textContent.trim()}`);
+        if (moduleClickTimer) doc.defaultView.clearTimeout(moduleClickTimer);
+        const moduleId = moduleButton.dataset.moduleId;
+        const moduleLabel = moduleButton.textContent.trim();
+        moduleClickTimer = doc.defaultView.setTimeout(() => {
+          selectedModule = moduleId;
+          moduleFocusEnabled = true;
+          moduleClickTimer = null;
+          render();
+          announce(`已选择${moduleLabel}`);
+        }, 180);
         return;
       }
       const lineButton = event.target.closest && event.target.closest("[data-line-id]");
@@ -1259,13 +1390,20 @@
         mapGesture = { kind: "pan", pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, viewX: moduleView.x, viewY: moduleView.y, moved: false };
         mapViewport.classList.add("is-panning");
       }
-      if (mapViewport.setPointerCapture) mapViewport.setPointerCapture(event.pointerId);
+      if (captureMapPointerOnDown(mapGesture.kind) && mapViewport.setPointerCapture) {
+        mapViewport.setPointerCapture(event.pointerId);
+      }
     });
     mapViewport.addEventListener("pointermove", (event) => {
       if (!mapGesture || mapGesture.pointerId !== event.pointerId) return;
       const deltaX = event.clientX - mapGesture.startX;
       const deltaY = event.clientY - mapGesture.startY;
-      if (Math.hypot(deltaX, deltaY) > 4) mapGesture.moved = true;
+      if (Math.hypot(deltaX, deltaY) > 4 && !mapGesture.moved) {
+        mapGesture.moved = true;
+        if (mapGesture.kind === "node" && mapViewport.setPointerCapture) {
+          mapViewport.setPointerCapture(event.pointerId);
+        }
+      }
       if (!mapGesture.moved) return;
       event.preventDefault();
       if (mapGesture.kind === "node") {
@@ -1311,6 +1449,19 @@
       render();
       byId("module-annotation").focus();
       announce("已打开当前模块的批注入口");
+    });
+    mapViewport.addEventListener("dblclick", (event) => {
+      const moduleButton = event.target.closest && event.target.closest("[data-module-id]");
+      if (!moduleButton || dragClickGuard.consumeClick()) return;
+      if (moduleClickTimer) {
+        doc.defaultView.clearTimeout(moduleClickTimer);
+        moduleClickTimer = null;
+      }
+      const graph = activeModuleGraph(workspaceView(state));
+      const module = graph.modules.find((item) => item.module_id === moduleButton.dataset.moduleId);
+      if (!enterModuleGraph(module)) return;
+      render();
+      announce(`已进入${module.name}`);
     });
     mapViewport.addEventListener("keydown", (event) => {
       const arrows = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -12], ArrowDown: [0, 12] };
@@ -1417,7 +1568,9 @@
         return;
       }
       state = createShowcaseState();
-      selectedModule = "workflow-core";
+      moduleMapMode = "system";
+      modulePath = [];
+      selectedModule = "secretary-entry";
       moduleTopology = null;
       moduleTopologySignature = "";
       moduleViewFitted = false;
@@ -1439,6 +1592,7 @@
     approvePlan,
     buildModuleGraph,
     buildModuleTopology,
+    captureMapPointerOnDown,
     createDragClickGuard,
     createDemoState,
     createRuntimeClient,
@@ -1453,6 +1607,7 @@
     proposeTaskFromModuleAnnotation,
     recordDecision,
     renderDecisionCard,
+    renderRunDetail,
     renderWorkflowNode,
     renderModuleTopology,
     renderTaskCard,
