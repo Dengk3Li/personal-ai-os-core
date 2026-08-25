@@ -18,6 +18,7 @@ from .automation import AutoAdvanceEngine
 from .runtime import ExecutionBroker, RuntimeStore, install_workflow_preset
 from .runtime_plan import load_runtime_plan, sync_runtime_plan
 from .route_config import load_runtime_routes
+from .codex_adapter import CodexAppServerAdapter
 from .secretary import build_context_pack, build_secretary_brief
 from .task_links import module_work_projection, validate_task_module_link
 from .truth import compile_truth
@@ -25,7 +26,7 @@ from .workflow import transition_task
 from .workflow_structure import compile_workflow_structure, evaluate_workflow_structure
 from .work_protocols import load_work_protocols, work_protocol_catalog
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 __all__ = [
     "build_capsule",
@@ -40,6 +41,7 @@ __all__ = [
     "compile_domain_context",
     "compile_operating_practices",
     "compile_workflow_structure",
+    "CodexAppServerAdapter",
     "evaluate_git_closure",
     "evaluate_workflow_structure",
     "ExecutionBroker",

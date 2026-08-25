@@ -167,6 +167,7 @@
       createTask: (task) => post("/api/tasks", task),
       createWorkflow: (workflow) => post("/api/workflows", workflow),
       resolveDecision: (decisionId, selectedOption) => post(`/api/decisions/${encodeURIComponent(decisionId)}/resolve`, { selected_option: selectedOption, by: "owner" }),
+      configureExecution: (settings) => post("/api/settings/execution", settings),
     };
   }
 
@@ -1087,9 +1088,12 @@
     const readiness = executionReadiness(runtimeState || {});
     const needsAdapter = ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(task.action);
     const adapterUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && !availableAdapters.length);
-    const modelUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && !readiness.modelReady);
-    const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action) || (needsAdapter && !readiness.taskReady);
-    const actionLabel = modelUnavailable
+    const modelUnavailable = Boolean(runtimeState && runtimeState.runtime && needsAdapter && readiness.advanceRouteMode === "fixed" && !readiness.modelReady);
+    const running = task.status === "IN_PROGRESS";
+    const disabled = running || ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action) || (needsAdapter && !readiness.taskReady);
+    const actionLabel = running
+      ? "正在执行"
+      : modelUnavailable
       ? "配置模型后开始"
       : adapterUnavailable
       ? "配置执行适配器后开始"
@@ -1124,9 +1128,36 @@
     const adapterRows = adapters.length
       ? adapters.map((adapter) => `<li><div><strong>${escapeHtml(adapter.adapter_id)}</strong><span>${escapeHtml(adapter.protocol || "执行协议")}</span></div><b class="settings-status">${adapter.available ? "可用" : "未连接"}</b></li>`).join("")
       : '<li><div><strong>尚未连接执行适配器</strong><span>执行端点与凭据由本地服务加载。</span></div><b class="settings-status">未连接</b></li>';
+    const writable = settings.writable === true;
+    const adapterOptions = adapters.length
+      ? adapters.map((adapter) => `<option value="${escapeHtml(adapter.adapter_id)}">${escapeHtml(adapter.adapter_id)}</option>`).join("")
+      : '<option value="">先绑定执行适配器</option>';
+    const routeEditorRows = (routes.length ? routes : [{
+      route: "", tier: "standard", model: runtimeState.defaultModel || "",
+      adapter_id: settings.default_adapter_id || (adapters[0] || {}).adapter_id || "",
+      capabilities: [], max_context_tokens: 100000, enabled: true,
+    }]).map((route) => `<div class="route-editor-row" data-route-row>
+      <label><span>路由名称</span><input data-route-id value="${escapeHtml(route.route || "")}" placeholder="research-deep"></label>
+      <label><span>层级</span><select data-route-tier><option value="quick"${route.tier === "quick" ? " selected" : ""}>快速</option><option value="standard"${route.tier === "standard" || !route.tier ? " selected" : ""}>标准</option><option value="deep"${route.tier === "deep" ? " selected" : ""}>深度</option></select></label>
+      <label><span>模型</span><input data-route-model value="${escapeHtml(route.model || "")}" placeholder="模型名称"></label>
+      <label><span>适配器</span><select data-route-adapter>${adapterOptions.replace(`value="${escapeHtml(route.adapter_id || "")}"`, `value="${escapeHtml(route.adapter_id || "")}" selected`)}</select></label>
+      <label><span>任务能力</span><input data-route-capabilities value="${escapeHtml((route.capabilities || []).join(", "))}" placeholder="research, writing"></label>
+      <label><span>上下文上限</span><input data-route-context type="number" min="1" step="1000" value="${Number(route.max_context_tokens || 100000)}"></label>
+      <label class="route-enabled"><input data-route-enabled type="checkbox"${route.enabled === false ? "" : " checked"}><span>启用</span></label>
+    </div>`).join("");
+    const writableConnections = writable ? `<div class="settings-bindings">
+      <details class="settings-disclosure"><summary>自动绑定 Codex</summary><div class="settings-form"><p>读取本机 Codex 登录状态与默认模型，执行时通过 app-server 创建有界任务。</p><label class="settings-field"><span>模型（留空读取 Codex 默认值）</span><input id="codex-model" autocomplete="off" placeholder="自动读取"></label><button class="settings-secondary" type="button" data-bind-codex>检测并绑定 Codex</button></div></details>
+      <details class="settings-disclosure"><summary>绑定兼容 API</summary><div class="settings-form"><p>密钥只保存在当前本地服务进程的内存中；提交后不会回显。</p><label class="settings-field"><span>API 地址</span><input id="api-base" inputmode="url" autocomplete="url" placeholder="https://api.example.com/v1"></label><label class="settings-field"><span>API 密钥</span><input id="api-key" type="password" autocomplete="new-password" placeholder="仅本次本地运行"></label><label class="settings-field"><span>模型</span><input id="api-model" autocomplete="off" placeholder="模型名称"></label><button class="settings-secondary" type="button" data-bind-openai>绑定兼容 API</button></div></details>
+    </div>` : "";
+    const writableRoutes = writable ? `<details class="settings-disclosure"><summary>编辑任务路由</summary><div class="settings-form"><label class="settings-field"><span>推进方式</span><select id="execution-mode"><option value="fixed"${execution.advance_route_mode !== "automatic" ? " selected" : ""}>固定执行策略</option><option value="automatic"${execution.advance_route_mode === "automatic" ? " selected" : ""}>按能力自动路由</option></select></label><div class="route-editor">${routeEditorRows}</div><button class="settings-secondary" type="button" data-save-routes>保存任务路由</button></div></details>` : "";
+    const credentialLabel = ({
+      "server-environment": "服务端环境变量",
+      "browser-session": "浏览器本地会话",
+      "codex-session": "本机 Codex 登录",
+    })[settings.credential_source] || "本地运行服务";
     return `<div class="settings-layout">${interfaceSettings}
-      <section class="settings-group"><span>任务路由</span><h3>${mode}</h3><p>工作区按已保存的任务能力与模型策略运行，台前只保留“开始”和“继续”。</p><ul class="settings-list">${routeRows}</ul></section>
-      <section class="settings-group"><span>执行连接</span><h3>适配器与 API</h3><p>API 凭据只从服务端环境变量读取，不进入浏览器、任务卡或运行事件。</p><ul class="settings-list">${adapterRows}</ul><p>凭据来源：${settings.credential_source === "server-environment" ? "服务端环境变量" : "本地运行服务"}</p></section>
+      <section class="settings-group"><span>任务路由</span><h3>${mode}</h3><p>工作区按已保存的任务能力与模型策略运行，台前只保留“开始”和“继续”。</p><ul class="settings-list">${routeRows}</ul>${writableRoutes}</section>
+      <section class="settings-group"><span>执行连接</span><h3>适配器与 API</h3><p>连接信息只用于本机执行服务，不进入任务卡或运行事件。</p><ul class="settings-list">${adapterRows}</ul><p>凭据来源：${credentialLabel}</p>${writableConnections}</section>
       <section class="settings-group"><span>个人认知</span><h3>经验候选与已确认习惯</h3><p>${Number(learning.proposed || 0)} 项等待确认 · ${Number(learning.approved || 0)} 项已进入任务上下文。工作结果只发起经验复核；候选经证据整理后创建，明确确认后才进入后续任务。</p></section>
     </div>`;
   }
@@ -1272,7 +1303,7 @@
       byId("current-phase").textContent = summary.running ? "并行执行中" : state.planApproved ? "运行与验收" : "工作地图待确认";
       byId("data-source-mode").textContent = state.runtime ? "本地运行库 · 状态已持久化" : "结构演示 · 任务内容已匿名";
       byId("source-note-title").textContent = state.runtime ? "本地运行状态" : "公开演示数据";
-      byId("source-note-copy").textContent = state.runtime ? "任务、运行、产物与裁决保存在当前 SQLite 运行库。模型密钥只从服务端环境变量读取。" : "只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。";
+      byId("source-note-copy").textContent = state.runtime ? "任务、运行、产物与裁决保存在当前 SQLite 运行库。模型密钥只保存在本地服务环境或当前会话。" : "只保留结构、数量、分配与运行事件。具体任务内容不会进入页面数据。";
       byId("work-source-label").textContent = state.runtime ? "真实运行状态" : "任务内容已匿名";
       byId("footer-mode").textContent = state.runtime ? "本地持久化运行库" : "匿名结构演示";
       const durableGoalStrip = byId("durable-goal-strip");
@@ -1463,6 +1494,56 @@
         lineComposerOpen = false;
         render();
         announce("演示数据已重置");
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-bind-codex]") && runtimeClient) {
+        const model = (byId("codex-model") && byId("codex-model").value || "").trim();
+        try {
+          await runtimeClient.configureExecution({
+            mode: "fixed",
+            adapter: { kind: "codex-app-server", model },
+          });
+          await refreshRuntime();
+          announce("Codex 已绑定，可以开始推进任务");
+        } catch (error) {
+          announce(`Codex 未绑定：${error.message}`);
+        }
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-bind-openai]") && runtimeClient) {
+        const apiBase = (byId("api-base") && byId("api-base").value || "").trim();
+        const apiKey = (byId("api-key") && byId("api-key").value || "").trim();
+        const model = (byId("api-model") && byId("api-model").value || "").trim();
+        try {
+          await runtimeClient.configureExecution({
+            mode: "fixed",
+            adapter: { kind: "openai-compatible", api_base: apiBase, api_key: apiKey, model },
+          });
+          await refreshRuntime();
+          announce("兼容 API 已绑定，可以开始推进任务");
+        } catch (error) {
+          announce(`兼容 API 未绑定：${error.message}`);
+        }
+        return;
+      }
+      if (event.target.closest && event.target.closest("[data-save-routes]") && runtimeClient) {
+        const mode = byId("execution-mode") ? byId("execution-mode").value : "fixed";
+        const routes = Array.from(doc.querySelectorAll("[data-route-row]")).map((row) => ({
+          route: row.querySelector("[data-route-id]").value.trim(),
+          tier: row.querySelector("[data-route-tier]").value,
+          model: row.querySelector("[data-route-model]").value.trim(),
+          adapter_id: row.querySelector("[data-route-adapter]").value,
+          capabilities: row.querySelector("[data-route-capabilities]").value.split(",").map((item) => item.trim()).filter(Boolean),
+          max_context_tokens: Number(row.querySelector("[data-route-context]").value),
+          enabled: row.querySelector("[data-route-enabled]").checked,
+        }));
+        try {
+          await runtimeClient.configureExecution(mode === "automatic" ? { mode, routes } : { mode });
+          await refreshRuntime();
+          announce(mode === "automatic" ? "自动任务路由已保存" : "固定执行策略已保存");
+        } catch (error) {
+          announce(`任务路由未保存：${error.message}`);
+        }
         return;
       }
       const boardButton = event.target.closest && event.target.closest("[data-board]");

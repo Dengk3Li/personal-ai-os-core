@@ -22,6 +22,10 @@ ROUTE_FIELDS = {
 
 def load_runtime_routes(path: str | Path) -> list[dict[str, Any]]:
     value = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    return validate_runtime_routes(value)
+
+
+def validate_runtime_routes(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, dict):
         raise ValueError("runtime route catalog must be a JSON object")
     unknown = set(value) - CATALOG_FIELDS

@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.14 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.14.md)
+[中文说明](README.zh-CN.md) · [v0.15 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.15.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -195,9 +195,17 @@ personal-ai-os runtime serve \
   --protocols .personal-ai-os/work-protocols.private.json
 ```
 
-Model, route, Adapter, and API configuration now lives in a backstage **Settings** panel. Work Progress only exposes start, continue, review, and decision actions. Fixed mode uses one server-side default Adapter, while automatic mode selects from the route catalog; browser ordering cannot override that choice. Credentials remain server environment variables and are never returned to the browser. A route-only server can dispatch a selected task through its saved automatic route without asking the user to choose a model on the task card.
+Model, route, Adapter, and API configuration now lives in a backstage **Settings** panel. Work Progress only exposes start, continue, review, and decision actions. Fixed mode uses one server-side default Adapter, while automatic mode selects from the route catalog; browser ordering cannot override that choice. A route-only server can dispatch a selected task through its saved automatic route without asking the user to choose a model on the task card.
 
 The Module Map now distinguishes **System Overview** from **Component Dependencies**. System Overview describes the operating architecture and recursive internal graphs. Component Dependencies describes installed manifests and capability supply/requirement edges. Every drilled graph retains its parent module and its external input, output, and feedback handoffs, so an internal module never appears as an isolated island.
+
+## v0.15 browser execution bindings and Codex auto-configuration
+
+A private-local runtime can now bind its execution layer from the top-right **Settings** panel. The browser can auto-detect the locally installed Codex CLI and its configured default model, or bind an OpenAI-compatible endpoint for the current local service session. API keys are accepted only by the loopback JSON endpoint, kept in the running process, and never returned by `/api/runtime`, written to SQLite, or copied into task events.
+
+Task routes are edited in the same panel. The server validates the complete versioned route catalog before replacing the active binding; an invalid route leaves the previous settings unchanged. Codex execution follows the supported app-server sequence `initialize → initialized → thread/start → turn/start`, rejects interactive approval requests, and records a result only after `turn/completed`. See the official [Codex app-server protocol](https://developers.openai.com/codex/app-server) and [Codex configuration reference](https://developers.openai.com/codex/config-reference).
+
+This browser binding is intentionally local and process-scoped. Codex reuses the machine's existing login without copying its credentials. OpenAI-compatible secrets must be entered again after the local runtime restarts. A live Broker run is shown as active work; a persisted `RUNNING` task seen by a different or restarted process remains behind the recovery gate.
 
 ## Operating model
 

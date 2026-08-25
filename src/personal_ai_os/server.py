@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from .adapters import OpenAICompatibleAdapter
+from .codex_adapter import CodexAppServerAdapter
+from .route_config import RUNTIME_ROUTES_SCHEMA, validate_runtime_routes
 from .runtime import ExecutionBroker, RuntimeStore
 from .automation import AutoAdvanceEngine
 from .goals import GoalController
@@ -23,9 +26,12 @@ from .presentation import (
 
 
 def runtime_workbench_state(
-    store: RuntimeStore, presentation: dict[str, Any] | None = None
+    store: RuntimeStore,
+    presentation: dict[str, Any] | None = None,
+    live_task_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     snapshot = apply_presentation(store.snapshot(), presentation)
+    live_task_ids = set(live_task_ids or ())
     events_by_task: dict[str, list[dict[str, Any]]] = {}
     labels = {
         "RUN_ASSIGNED": "已分配执行器",
@@ -153,12 +159,12 @@ def runtime_workbench_state(
     recovering_workflows = {
         task["workflow_id"]
         for task in snapshot.get("tasks", [])
-        if task["status"] == "IN_PROGRESS"
+        if task["status"] == "IN_PROGRESS" and task["task_id"] not in live_task_ids
     }
     recovering_task_ids = {
         run["task_id"]
         for run in snapshot.get("runs", [])
-        if run["status"] == "RUNNING"
+        if run["status"] == "RUNNING" and run["task_id"] not in live_task_ids
     }
     recovering_workflows.update(
         task["workflow_id"]
@@ -167,7 +173,14 @@ def runtime_workbench_state(
     )
 
     def goal_recovery_required(item: dict[str, Any]) -> bool:
-        return bool(item["active_continuation_id"]) or item["status"] == "RECOVERY_REQUIRED" or (
+        live_workflow = bool(set(item["workflow_ids"]) & {
+            task["workflow_id"]
+            for task in snapshot.get("tasks", [])
+            if task["task_id"] in live_task_ids
+        })
+        return (
+            bool(item["active_continuation_id"]) and not live_workflow
+        ) or item["status"] == "RECOVERY_REQUIRED" or (
             item["usage"].get("last_stop_reason") == "RECOVERY_REQUIRED"
         ) or bool(set(item["workflow_ids"]) & recovering_workflows)
 
@@ -238,6 +251,8 @@ class RuntimeApplication:
         work_protocols: list[dict[str, Any]] | None = None,
         presentation: dict[str, Any] | None = None,
         projection_mode: str | None = None,
+        execution_adapter_factories: dict[str, Any] | None = None,
+        execution_root: str | Path | None = None,
     ):
         self.store = store
         self.broker = ExecutionBroker(
@@ -256,6 +271,16 @@ class RuntimeApplication:
         else:
             self.default_adapter_id = ""
         self.runtime_routes = [dict(route) for route in runtime_routes or []]
+        self.execution_root = Path(execution_root or Path.cwd()).expanduser().resolve()
+        self.execution_adapter_factories = dict(execution_adapter_factories or {})
+        self.execution_adapter_factories.setdefault(
+            "codex-app-server",
+            lambda config: CodexAppServerAdapter.auto_configured(
+                workspace_root=self.execution_root,
+                model=str(config.get("model") or ""),
+            ),
+        )
+        self.credential_source = "server-environment"
         self.projection_mode = projection_mode or (
             "public-safe" if presentation is not None else "private-local"
         )
@@ -289,7 +314,11 @@ class RuntimeApplication:
             if self.presentation is not None
             else snapshot
         )
-        state = runtime_workbench_state(self.store, self.presentation)
+        state = runtime_workbench_state(
+            self.store,
+            self.presentation,
+            live_task_ids=self.broker.active_task_ids(),
+        )
         if self.projection_mode == "public-safe":
             self._anonymize_execution_state(state, snapshot)
         return {
@@ -302,6 +331,93 @@ class RuntimeApplication:
             "execution": self.execution_readiness(adapter_catalog),
             "execution_settings": self.public_execution_settings(),
         }
+
+    def configure_execution(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.projection_mode != "private-local":
+            raise ValueError("execution settings require private-local projection")
+        if not isinstance(payload, dict):
+            raise ValueError("execution settings must be an object")
+        mode = str(payload.get("mode") or "fixed")
+        if mode not in {"fixed", "automatic"}:
+            raise ValueError("execution mode must be fixed or automatic")
+
+        adapters = dict(self.broker.adapters)
+        default_adapter_id = self.default_adapter_id
+        default_model = self.default_model
+        credential_source = self.credential_source
+        adapter_config = payload.get("adapter")
+        if adapter_config is not None:
+            if not isinstance(adapter_config, dict):
+                raise ValueError("adapter settings must be an object")
+            kind = str(adapter_config.get("kind") or "")
+            if kind == "openai-compatible":
+                api_base = str(adapter_config.get("api_base") or "").strip()
+                api_key = str(adapter_config.get("api_key") or "").strip()
+                model = str(adapter_config.get("model") or "").strip()
+                parsed = urlsplit(api_base)
+                if (
+                    parsed.scheme not in {"http", "https"}
+                    or not parsed.hostname
+                    or parsed.username is not None
+                    or parsed.password is not None
+                ):
+                    raise ValueError("OpenAI-compatible endpoint is invalid")
+                if not api_key or not model:
+                    raise ValueError("OpenAI-compatible key and model are required")
+                adapter = OpenAICompatibleAdapter(api_base=api_base, api_key=api_key)
+                adapter_id = adapter.adapter_id
+                adapters[adapter_id] = adapter
+                default_adapter_id = adapter_id
+                default_model = model
+                credential_source = "browser-session"
+            elif kind in self.execution_adapter_factories:
+                adapter, model = self.execution_adapter_factories[kind](adapter_config)
+                adapter_id = str(getattr(adapter, "adapter_id", kind))
+                if not adapter.probe().get("available"):
+                    raise ValueError("execution adapter is unavailable")
+                adapters[adapter_id] = adapter
+                default_adapter_id = adapter_id
+                default_model = str(model or "").strip()
+                if not default_model:
+                    raise ValueError("execution model is required")
+                credential_source = "codex-session"
+            else:
+                raise ValueError("unsupported execution adapter")
+
+        routes = self.runtime_routes
+        if "routes" in payload:
+            routes = validate_runtime_routes(
+                {
+                    "schema_version": RUNTIME_ROUTES_SCHEMA,
+                    "routes": payload.get("routes"),
+                }
+            )
+            missing = next(
+                (
+                    route["adapter_id"]
+                    for route in routes
+                    if route["adapter_id"] not in adapters
+                ),
+                None,
+            )
+            if missing:
+                raise ValueError("runtime route adapter is not registered")
+
+        if mode == "fixed":
+            if not default_adapter_id or default_adapter_id not in adapters or not default_model:
+                raise ValueError("fixed execution settings are incomplete")
+        else:
+            if not routes:
+                raise ValueError("automatic execution requires runtime routes")
+            default_adapter_id = ""
+            default_model = ""
+
+        self.broker.adapters = adapters
+        self.default_adapter_id = default_adapter_id
+        self.default_model = default_model
+        self.runtime_routes = [dict(route) for route in routes]
+        self.credential_source = credential_source
+        return self.projection()
 
     def public_execution_settings(self) -> dict[str, Any]:
         aliases = self._execution_aliases()
@@ -326,6 +442,8 @@ class RuntimeApplication:
                     "adapter_id": adapter_id,
                     "model": model,
                     "capabilities": capabilities,
+                    "tier": str(route.get("tier") or ""),
+                    "max_context_tokens": route.get("max_context_tokens"),
                     "enabled": bool(route.get("enabled", True)),
                 }
             )
@@ -336,7 +454,9 @@ class RuntimeApplication:
                 if self.projection_mode == "public-safe" and self.default_adapter_id
                 else self.default_adapter_id
             ),
-            "credential_source": "server-environment",
+            "credential_source": self.credential_source,
+            "mode": self.execution_readiness()["advance_route_mode"],
+            "writable": self.projection_mode == "private-local",
         }
 
     @staticmethod
@@ -698,6 +818,8 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                 if not result.get("ok"):
                     self._json(422, self.server.app.public_result(result))
                     return
+            elif path == "/api/settings/execution":
+                result = self.server.app.configure_execution(payload)
             elif path.startswith("/api/goals/") and path.endswith("/continue"):
                 if self.server.app.presentation is not None:
                     raise ValueError("goal control requires private-local projection")
@@ -809,6 +931,8 @@ def create_runtime_server(
     work_protocols: list[dict[str, Any]] | None = None,
     presentation: dict[str, Any] | None = None,
     projection_mode: str | None = None,
+    execution_adapter_factories: dict[str, Any] | None = None,
+    execution_root: str | Path | None = None,
 ) -> RuntimeHTTPServer:
     resolved_mode = projection_mode or (
         "public-safe" if presentation is not None else "private-local"
@@ -830,6 +954,8 @@ def create_runtime_server(
         work_protocols=work_protocols,
         presentation=presentation,
         projection_mode=resolved_mode,
+        execution_adapter_factories=execution_adapter_factories,
+        execution_root=execution_root,
     )
     server = RuntimeHTTPServer(address, RuntimeRequestHandler)
     server.app = application

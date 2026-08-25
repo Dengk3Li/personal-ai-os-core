@@ -57,6 +57,19 @@ class CountingAdapter(SuccessfulAdapter):
         return super().start(task, model=model, context_pack=context_pack)
 
 
+class BlockingAdapter(SuccessfulAdapter):
+    adapter_id = "blocking-adapter"
+
+    def __init__(self):
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def start(self, task, *, model, context_pack):
+        self.started.set()
+        self.release.wait(timeout=3)
+        return super().start(task, model=model, context_pack=context_pack)
+
+
 class RuntimeServerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -433,6 +446,190 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual(1, configured.calls)
         self.assertEqual("z-configured", projection["execution_settings"]["default_adapter_id"])
         self.assertTrue(projection["execution"]["task_dispatch_ready"])
+
+    def test_private_browser_binds_api_credentials_without_projecting_them(self):
+        secret = "sk-browser-session-private-sentinel"
+        status, configured = self.request(
+            "/api/settings/execution",
+            {
+                "mode": "fixed",
+                "adapter": {
+                    "kind": "openai-compatible",
+                    "api_base": "https://example.invalid/v1",
+                    "api_key": secret,
+                    "model": "model-browser",
+                },
+            },
+        )
+        _, projection = self.request("/api/runtime")
+        serialized = json.dumps(projection, ensure_ascii=False)
+
+        self.assertEqual(200, status)
+        self.assertTrue(configured["execution"]["task_dispatch_ready"])
+        self.assertEqual("model-browser", projection["default_model"])
+        self.assertEqual("browser-session", projection["execution_settings"]["credential_source"])
+        self.assertNotIn(secret, serialized)
+        self.assertNotIn("example.invalid", serialized)
+        self.assertNotIn("api_key", serialized)
+
+    def test_live_broker_run_is_not_misreported_as_restart_recovery(self):
+        self.store.create_goal(
+            {
+                "goal_id": "goal:live",
+                "title": "实时推进",
+                "objective": "区分当前运行与重启遗留运行",
+                "workflow_ids": ["science"],
+                "completion_criteria": "任务完成",
+                "continuation_policy": {
+                    "max_steps_per_continuation": 1,
+                    "max_total_steps": 10,
+                    "max_total_tokens": 10000,
+                    "failure_budget_per_continuation": 1,
+                },
+            }
+        )
+        adapter = BlockingAdapter()
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={adapter.adapter_id: adapter},
+            default_model="model-a",
+            default_adapter_id=adapter.adapter_id,
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+        )
+        worker = threading.Thread(
+            target=lambda: app.broker.dispatch(
+                "science:hypothesis",
+                adapter_id=adapter.adapter_id,
+                model="model-a",
+            ),
+            daemon=True,
+        )
+        worker.start()
+        self.assertTrue(adapter.started.wait(timeout=1))
+
+        live_goal = app.projection()["state"]["durableGoals"][0]
+        reopened = RuntimeApplication(
+            store=RuntimeStore(self.store.database),
+            adapters={adapter.adapter_id: adapter},
+            default_model="model-a",
+            default_adapter_id=adapter.adapter_id,
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+        )
+        reopened_goal = reopened.projection()["state"]["durableGoals"][0]
+        adapter.release.set()
+        worker.join(timeout=3)
+
+        self.assertFalse(live_goal["recovery_required"])
+        self.assertTrue(reopened_goal["recovery_required"])
+
+    def test_private_browser_auto_configures_codex_and_saves_automatic_routes(self):
+        codex = CountingAdapter("codex-app-server")
+
+        def codex_factory(config):
+            self.assertEqual("", config.get("model", ""))
+            return codex, "gpt-codex-detected"
+
+        server = create_runtime_server(
+            ("127.0.0.1", 0),
+            store=self.store,
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="model-a",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            execution_adapter_factories={"codex-app-server": codex_factory},
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        def post(payload):
+            request = urllib.request.Request(
+                base + "/api/settings/execution",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                request, timeout=3
+            ) as response:
+                return json.loads(response.read())
+
+        try:
+            fixed = post(
+                {
+                    "mode": "fixed",
+                    "adapter": {"kind": "codex-app-server", "model": ""},
+                }
+            )
+            automatic = post(
+                {
+                    "mode": "automatic",
+                    "routes": [
+                        {
+                            "route": "research-deep",
+                            "tier": "deep",
+                            "capabilities": ["research", "writing"],
+                            "max_context_tokens": 120000,
+                            "adapter_id": "codex-app-server",
+                            "model": "gpt-codex-detected",
+                            "enabled": True,
+                        }
+                    ],
+                }
+            )
+            projection = server.app.projection()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        self.assertEqual("gpt-codex-detected", fixed["default_model"])
+        self.assertTrue(fixed["execution"]["task_dispatch_ready"])
+        self.assertEqual("automatic", automatic["execution"]["advance_route_mode"])
+        self.assertTrue(automatic["execution"]["advance_ready"])
+        self.assertEqual("research-deep", projection["execution_settings"]["routes"][0]["route"])
+
+    def test_execution_settings_reject_invalid_routes_without_partial_mutation(self):
+        _, before = self.request("/api/runtime")
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.request(
+                "/api/settings/execution",
+                {
+                    "mode": "automatic",
+                    "routes": [
+                        {
+                            "route": "broken",
+                            "tier": "deep",
+                            "capabilities": ["research"],
+                            "max_context_tokens": 120000,
+                            "adapter_id": "missing-adapter",
+                            "model": "model-b",
+                            "enabled": True,
+                        }
+                    ],
+                },
+            )
+        _, after = self.request("/api/runtime")
+
+        self.assertEqual(422, caught.exception.code)
+        self.assertEqual(before["default_model"], after["default_model"])
+        self.assertEqual(before["execution_settings"], after["execution_settings"])
+
+    def test_public_safe_runtime_rejects_browser_execution_configuration(self):
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={"test-adapter": SuccessfulAdapter()},
+            default_model="model-a",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            presentation={
+                "schema_version": "personal-ai-os.presentation/v1",
+                "workflows": {},
+                "tasks": {},
+            },
+            projection_mode="public-safe",
+        )
+
+        with self.assertRaisesRegex(ValueError, "private-local"):
+            app.configure_execution({"mode": "fixed"})
 
     def test_private_runtime_projects_and_continues_a_durable_goal(self):
         self.store.create_goal(

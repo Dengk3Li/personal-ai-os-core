@@ -204,6 +204,54 @@ test("automatic advance readiness is independent from the fixed task model", () 
   });
 });
 
+test("automatic task dispatch uses the saved route without asking for a fixed model", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "task-routed",
+      public_label: "任务 01",
+      status: "QUEUED",
+      action: "DISPATCH",
+      attempts: 0,
+      events: [],
+    },
+    {
+      runtime: true,
+      defaultModel: "",
+      adapters: [{ adapter_id: "codex-app-server", available: true }],
+      execution: {
+        advance_route_mode: "automatic",
+        task_dispatch_ready: true,
+        advance_ready: true,
+      },
+    },
+  );
+
+  assert.match(html, />分派并开始<\/button>/);
+  assert.doesNotMatch(html, /配置模型后开始/);
+});
+
+test("an in-progress model run cannot be manually submitted before its receipt arrives", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "task-running",
+      public_label: "任务 01",
+      status: "IN_PROGRESS",
+      action: "SUBMIT_REVIEW",
+      attempts: 1,
+      events: [],
+    },
+    {
+      runtime: true,
+      defaultModel: "model-a",
+      adapters: [{ adapter_id: "codex-app-server", available: true }],
+      execution: { task_dispatch_ready: true },
+    },
+  );
+
+  assert.match(html, /<button[^>]+disabled[^>]*>正在执行<\/button>/);
+  assert.doesNotMatch(html, />提交验收<\/button>/);
+});
+
 test("task detail uses saved execution settings without exposing configuration controls", () => {
   const html = workbench.renderRunDetail(
     {
@@ -249,6 +297,29 @@ test("settings explain saved routing and keep credentials on the server", () => 
   assert.doesNotMatch(html, /api_key|Bearer|password/i);
 });
 
+test("private runtime settings bind Codex API and routes only inside settings", () => {
+  const html = workbench.renderSettings({
+    runtime: true,
+    execution: { advance_route_mode: "automatic", task_dispatch_ready: true },
+    adapters: [{ adapter_id: "codex-app-server", available: true, protocol: "codex-app-server" }],
+    executionSettings: {
+      writable: true,
+      mode: "automatic",
+      routes: [{ route: "research-deep", tier: "deep", model: "gpt-codex", adapter_id: "codex-app-server", capabilities: ["research"], max_context_tokens: 120000, enabled: true }],
+      default_adapter_id: "",
+      credential_source: "browser-session",
+    },
+    cognitiveLearning: { proposed: 0, approved: 0 },
+  });
+
+  assert.match(html, /data-bind-codex/);
+  assert.match(html, /data-bind-openai/);
+  assert.match(html, /type="password"/);
+  assert.match(html, /autocomplete="new-password"/);
+  assert.match(html, /data-save-routes/);
+  assert.match(html, /research-deep/);
+});
+
 test("low-frequency controls are reachable only from the top-right settings surface", () => {
   const page = require("node:fs").readFileSync(
     require("node:path").join(__dirname, "../workbench/index.html"),
@@ -291,6 +362,7 @@ test("runtime client calls finite task run transition and decision endpoints", a
   await client.resolveDecision("decision:1", "B");
   await client.advance("openai-compatible", "model-a", 4, "science");
   await client.continueGoal("goal:1", "openai-compatible", "model-a");
+  await client.configureExecution({ mode: "fixed" });
 
   assert.deepEqual(calls.map((call) => call.url), [
     "/api/runtime",
@@ -300,6 +372,7 @@ test("runtime client calls finite task run transition and decision endpoints", a
     "/api/decisions/decision%3A1/resolve",
     "/api/advance",
     "/api/goals/goal%3A1/continue",
+    "/api/settings/execution",
   ]);
   assert.equal(JSON.parse(calls[1].options.body).adapter_id, "openai-compatible");
   assert.equal(JSON.parse(calls[2].options.body).to, "DONE");
@@ -307,6 +380,7 @@ test("runtime client calls finite task run transition and decision endpoints", a
   assert.equal(JSON.parse(calls[5].options.body).max_steps, 4);
   assert.equal(JSON.parse(calls[5].options.body).workflow_id, "science");
   assert.equal(JSON.parse(calls[6].options.body).model, "model-a");
+  assert.equal(JSON.parse(calls[7].options.body).mode, "fixed");
 });
 
 

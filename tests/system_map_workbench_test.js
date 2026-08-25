@@ -108,5 +108,5 @@ test("the report-facing workbench surface uses Chinese action language", () => {
   });
   assert.doesNotMatch(visibleSurface, /配置 Adapter 后推进/);
   assert.match(visibleSurface, /尚未连接执行适配器/);
-  assert.match(html, /v0\.14\.0/);
+  assert.match(html, /v0\.15\.0/);
 });

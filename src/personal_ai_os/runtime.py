@@ -1513,6 +1513,8 @@ class ExecutionBroker:
     ):
         self.store = store
         self.adapters = dict(adapters)
+        self._active_task_ids: set[str] = set()
+        self._active_tasks_guard = threading.Lock()
         self.domain_profiles = domain_profiles or {}
         protocols = work_protocol_catalog() if work_protocols is None else work_protocols
         protocols = validate_work_protocols(
@@ -1525,13 +1527,26 @@ class ExecutionBroker:
     def adapter_catalog(self) -> list[dict[str, Any]]:
         return [self.adapters[key].probe() for key in sorted(self.adapters)]
 
+    def active_task_ids(self) -> set[str]:
+        with self._active_tasks_guard:
+            return set(self._active_task_ids)
+
+    def _mark_active(self, task_id: str, active: bool) -> None:
+        with self._active_tasks_guard:
+            if active:
+                self._active_task_ids.add(task_id)
+            else:
+                self._active_task_ids.discard(task_id)
+
     def dispatch(self, task_id: str, *, adapter_id: str, model: str) -> dict[str, Any]:
         lock = self.store.task_lock(task_id)
         if not lock.acquire(blocking=False):
             return {"ok": False, "reason": "TASK_ALREADY_DISPATCHING"}
+        self._mark_active(task_id, True)
         try:
             return self._dispatch(task_id, adapter_id=adapter_id, model=model)
         finally:
+            self._mark_active(task_id, False)
             lock.release()
 
     def dispatch_routed(
@@ -1545,6 +1560,7 @@ class ExecutionBroker:
         if not lock.acquire(blocking=False):
             return {"ok": False, "reason": "TASK_ALREADY_DISPATCHING"}
         binding: dict[str, Any] = {}
+        self._mark_active(task_id, True)
         try:
             result = self._dispatch(
                 task_id,
@@ -1555,6 +1571,7 @@ class ExecutionBroker:
                 selected_binding=binding,
             )
         finally:
+            self._mark_active(task_id, False)
             lock.release()
         return {**result, **binding}
 
