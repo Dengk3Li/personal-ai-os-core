@@ -159,6 +159,7 @@
     }
     return {
       load: () => request("/api/runtime"),
+      loadExecutionSettings: () => request("/api/settings/execution"),
       runTask: (taskId, adapterId, model) => post("/api/runs", { task_id: taskId, adapter_id: adapterId, model }),
       advance: (adapterId, model, maxSteps = 25, workflowId = null) => post("/api/advance", { adapter_id: adapterId, model, max_steps: maxSteps, failure_budget: 1, workflow_id: workflowId }),
       continueGoal: (goalId, adapterId, model) => post(`/api/goals/${encodeURIComponent(goalId)}/continue`, { adapter_id: adapterId, model }),
@@ -1049,12 +1050,12 @@
   const STATUS_LABELS = { QUEUED: "待分配", IN_PROGRESS: "进行中", REVIEW: "待验收", BLOCKED: "已阻塞", PAUSED: "已暂停", DONE: "已收口", ARCHIVED: "已归档" };
 
   function renderTaskCard(task) {
-    const assignment = task.assignment ? `<span class="task-chip route">${escapeHtml(task.assignment.route)}</span><span class="task-chip">${escapeHtml(task.assignment.executor)}</span>` : "";
+    const assignment = task.assignment ? "已分配" : "等待分配";
     const disabled = ["PLAN_APPROVAL_REQUIRED", "WAITING_DEPENDENCY", "BLOCKED", "NONE"].includes(task.action);
     return `<article class="task-row status-${escapeHtml(task.status.toLowerCase())}" data-task-id="${escapeHtml(task.task_id)}">
       <div class="task-state"><span class="status-dot"></span><b>${escapeHtml(STATUS_LABELS[task.status] || task.status)}</b></div>
       <div class="task-main"><div class="card-meta"><span>${escapeHtml(task.complexity)}</span>${task.human_gate ? '<span class="signal-pill">人工确认</span>' : ""}</div><h3>${escapeHtml(task.title || task.public_label)}</h3><p>${escapeHtml(task.acceptance || task.stage)}</p></div>
-      <div class="task-route">${assignment || '<span class="task-chip">等待路由</span>'}</div>
+      <div class="task-route"><span class="task-chip">${assignment}</span></div>
       <button class="task-action" data-action="task" ${disabled ? "disabled" : ""}>${escapeHtml(ACTION_LABELS[task.action] || task.action)}</button>
     </article>`;
   }
@@ -1277,7 +1278,6 @@
 
   function renderRunDetail(task, runtimeState) {
     if (!task) return '<p class="empty-trace">选择一个节点查看运行轨迹。</p>';
-    const assignment = task.assignment;
     const events = task.events && task.events.length
       ? `<ol class="event-trace">${task.events.map((event) => `<li><time datetime="${escapeHtml(event.occurred_at || event.at)}">${escapeHtml(formatTimelineTime(event.occurred_at || event.at))}</time><span>${escapeHtml(event.label)}</span></li>`).join("")}</ol>`
       : '<p class="empty-trace">任务尚未分配。分配后会记录适配器启动、心跳、产物与复核事件。</p>';
@@ -1298,7 +1298,7 @@
       ? "配置执行适配器后开始"
       : (ACTION_LABELS[task.action] || task.action);
     return `<div class="run-detail-head"><span>${escapeHtml(task.public_label || task.title || task.task_id)} · ${escapeHtml(STATUS_LABELS[task.status] || task.status)}</span><h3>${escapeHtml(task.stage || task.title || "自定义任务")}</h3></div>
-      <dl class="run-detail-meta"><div><dt>模型</dt><dd>${escapeHtml(assignment ? assignment.model : "等待选择")}</dd></div><div><dt>执行适配器</dt><dd>${escapeHtml(assignment ? assignment.executor : "尚未分配")}</dd></div><div><dt>运行轮次</dt><dd>${task.attempts ? `第 ${String(task.attempts).padStart(2, "0")} 次` : "尚未运行"}</dd></div><div><dt>节点类型</dt><dd>${escapeHtml(({ sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" })[inferFlowKind(task)] || "顺序")}</dd></div></dl>
+      <dl class="run-detail-meta"><div><dt>运行轮次</dt><dd>${task.attempts ? `第 ${String(task.attempts).padStart(2, "0")} 次` : "尚未运行"}</dd></div><div><dt>节点类型</dt><dd>${escapeHtml(({ sequence: "顺序", branch: "分支", join: "汇合", condition: "条件", loop: "循环" })[inferFlowKind(task)] || "顺序")}</dd></div></dl>
       ${renderCodexDispatch(task.codex_dispatch)}
       ${renderTaskStory(task, runtimeState)}
       ${events}

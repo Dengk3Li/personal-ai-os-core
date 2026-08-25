@@ -749,6 +749,24 @@ class RuntimeApplication:
             "codex_projects": codex_projects,
         }
 
+    def execution_settings_projection(self) -> dict[str, Any]:
+        """Return the read-only settings surface used by the Workbench.
+
+        The endpoint exposes readiness and already-sanitized settings metadata;
+        mutations remain on ``POST /api/settings/execution`` and are still
+        restricted to the private-local projection.
+        """
+        catalog = self.broker.adapter_catalog()
+        return {
+            "schema_version": "personal-ai-os.execution-settings/v1",
+            "status": self.store.integrity()["status"],
+            "data_source": "runtime",
+            "execution": self.execution_readiness(catalog),
+            "execution_settings": self.public_execution_settings(),
+            "adapters": self.public_adapter_catalog(catalog),
+            "default_model": self._public_model(self.default_model),
+        }
+
     def codex_project_adapter(self) -> CodexProjectAdapter:
         if self.projection_mode != "private-local":
             raise ValueError("Codex project dispatch requires private-local projection")
@@ -1068,6 +1086,21 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = unquote(urlsplit(self.path).path)
+        if path == "/api/settings/execution":
+            try:
+                settings = self.server.app.execution_settings_projection()
+            except ValueError as exc:
+                self._json(
+                    422,
+                    self.server.app.error_payload(
+                        status="BLOCKED",
+                        safe_reason="SETTINGS_UNAVAILABLE",
+                        detail=exc,
+                    ),
+                )
+                return
+            self._json(200, settings)
+            return
         if path == "/api/runtime":
             try:
                 projection = self.server.app.projection()

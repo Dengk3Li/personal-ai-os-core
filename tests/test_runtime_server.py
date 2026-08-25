@@ -126,6 +126,57 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("REVIEW", after["state"]["taskStates"][task["task_id"]])
         self.assertEqual(1, task["attempts"])
 
+    def test_get_execution_settings_is_read_only_and_reports_readiness(self):
+        before = self.store.load_execution_settings()
+        status, settings = self.request("/api/settings/execution")
+        after = self.store.load_execution_settings()
+
+        self.assertEqual(200, status)
+        self.assertEqual("personal-ai-os.execution-settings/v1", settings["schema_version"])
+        self.assertEqual("READY", settings["status"])
+        self.assertEqual("runtime", settings["data_source"])
+        self.assertEqual(
+            {"task_dispatch_ready": True, "advance_route_mode": "fixed", "advance_ready": True},
+            settings["execution"],
+        )
+        self.assertIn("execution_settings", settings)
+        self.assertIn("adapters", settings)
+        self.assertIsNone(before)
+        self.assertIsNone(after)
+        self.assertNotIn("api_key", json.dumps(settings, ensure_ascii=False))
+
+    def test_public_safe_execution_settings_get_preserves_alias_boundary(self):
+        app = RuntimeApplication(
+            store=self.store,
+            adapters={"client-alpha-adapter": ClientNamedAdapter()},
+            default_model="client-alpha-model",
+            web_root=Path(__file__).resolve().parents[1] / "workbench",
+            runtime_routes=[
+                {
+                    "route": "client-alpha-route",
+                    "adapter_id": "client-alpha-adapter",
+                    "model": "client-alpha-model",
+                    "capabilities": ["client-alpha-writing"],
+                    "enabled": True,
+                }
+            ],
+            presentation={
+                "schema_version": "personal-ai-os.presentation/v1",
+                "workflows": {},
+                "tasks": {},
+            },
+            projection_mode="public-safe",
+        )
+
+        settings = app.execution_settings_projection()
+        serialized = json.dumps(settings, ensure_ascii=False)
+
+        self.assertEqual("READY", settings["status"])
+        self.assertEqual("model-01", settings["default_model"])
+        self.assertEqual("adapter-01", settings["adapters"][0]["adapter_id"])
+        self.assertNotIn("client-alpha", serialized)
+        self.assertNotIn("protocol", settings["adapters"][0])
+
     def test_runtime_projection_returns_result_feedback_and_real_timeline(self):
         run_status, dispatched = self.request(
             "/api/runs",

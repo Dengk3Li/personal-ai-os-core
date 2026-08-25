@@ -315,6 +315,47 @@ test("task detail uses saved execution settings without exposing configuration c
   assert.match(html, /使用已保存的执行策略/);
 });
 
+test("task detail keeps model and adapter details inside settings", () => {
+  const html = workbench.renderRunDetail(
+    {
+      task_id: "task-001",
+      public_label: "任务 01",
+      title: "匿名任务",
+      status: "QUEUED",
+      action: "DISPATCH",
+      attempts: 0,
+      assignment: { model: "private-model", executor: "private-adapter" },
+      events: [],
+    },
+    {
+      runtime: true,
+      defaultModel: "private-model",
+      adapters: [{ adapter_id: "private-adapter", available: true }],
+    },
+  );
+
+  assert.doesNotMatch(html, /private-model/);
+  assert.doesNotMatch(html, /private-adapter/);
+  assert.doesNotMatch(html, /<dt>模型<\/dt>/);
+  assert.doesNotMatch(html, /<dt>执行适配器<\/dt>/);
+  assert.match(html, /使用已保存的执行策略/);
+});
+
+test("task cards show assignment state without exposing route or adapter identifiers", () => {
+  const html = workbench.renderTaskCard({
+    task_id: "task-001",
+    title: "匿名任务",
+    status: "IN_PROGRESS",
+    action: "REQUEST_REVIEW",
+    complexity: "standard",
+    assignment: { route: "private-route", executor: "private-adapter" },
+  });
+
+  assert.doesNotMatch(html, /private-route/);
+  assert.doesNotMatch(html, /private-adapter/);
+  assert.match(html, /已分配/);
+});
+
 test("task detail explains why it ran, what it produced, and what follows", () => {
   const task = {
     task_id: "task-result",
@@ -629,6 +670,28 @@ test("runtime client calls finite task run transition and decision endpoints", a
   assert.equal(JSON.parse(calls[5].options.body).workflow_id, "science");
   assert.equal(JSON.parse(calls[6].options.body).model, "model-a");
   assert.equal(JSON.parse(calls[7].options.body).mode, "fixed");
+});
+
+test("runtime client reads execution settings without mutating them", async () => {
+  const calls = [];
+  const client = workbench.createRuntimeClient(async (url, options = {}) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      async json() { return { status: "READY" }; },
+    };
+  });
+
+  await client.loadExecutionSettings();
+
+  assert.deepEqual(calls, [{ url: "/api/settings/execution", options: {} }]);
+});
+
+test("workbench assets use the current v0.17 cache version", () => {
+  const page = fs.readFileSync(require.resolve("../workbench/index.html"), "utf8");
+  assert.match(page, /v=0\.17\.0/);
+  assert.match(page, /· v0\.17\.0<\/footer>/);
+  assert.doesNotMatch(page, /v=0\.15\.0|v0\.15\.0/);
 });
 
 
