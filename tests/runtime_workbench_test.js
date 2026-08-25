@@ -485,3 +485,76 @@ test("a pending model request keeps refreshing the real runtime projection", asy
   assert.equal(cancelled, true);
   assert.equal(refreshes, 2);
 });
+
+test("runtime refresh preserves the reader's viewport position", () => {
+  const viewport = {
+    scrollX: 24,
+    scrollY: 860,
+    scrollTo({ left, top }) {
+      this.scrollX = left;
+      this.scrollY = top;
+    },
+  };
+
+  workbench.preserveViewportPosition(viewport, () => {
+    viewport.scrollX = 0;
+    viewport.scrollY = 0;
+  });
+
+  assert.equal(viewport.scrollX, 24);
+  assert.equal(viewport.scrollY, 860);
+});
+
+test("a workline waiting for review does not pretend it can open another Codex task", () => {
+  const state = workbench.runtimeStateFromPayload({
+    status: "READY",
+    data_source: "runtime",
+    default_model: "",
+    adapters: [{ adapter_id: "codex-app-server", available: true }],
+    execution: {
+      advance_route_mode: "automatic",
+      advance_ready: true,
+      task_dispatch_ready: true,
+    },
+    state: {
+      goal: "Persistent goal",
+      activeBoard: "work",
+      activeLineId: "private-authority",
+      activeTaskId: "PLT-001",
+      planApproved: true,
+      tasks: [
+        { task_id: "PLT-001", line_id: "private-authority", title: "First", acceptance: "Review", depends_on: [], status: "REVIEW" },
+        { task_id: "PLT-002", line_id: "private-authority", title: "Second", acceptance: "Run", depends_on: ["PLT-001"], status: "QUEUED" },
+      ],
+      businessLines: [{ line_id: "private-authority", domain_id: "governance", name: "Private", caption: "", layout: "milestones", stages: [] }],
+      taskStates: { "PLT-001": "REVIEW", "PLT-002": "QUEUED" },
+      decisions: {},
+      assignments: {},
+      onboarding: { status: "RUNTIME_READY", readOnly: false, detectedLines: [] },
+    },
+  });
+
+  assert.deepEqual(workbench.worklineAdvanceState(state, ["PLT-001", "PLT-002"]), {
+    canAdvance: false,
+    reason: "WAITING_REVIEW",
+    message: "1 项结果等待验收",
+    actionLabel: "先验收当前结果",
+  });
+});
+
+test("an independent ready task keeps a workline runnable while another result waits for review", () => {
+  const state = workbench.createDemoState();
+  state.planApproved = true;
+  state.tasks = [
+    { task_id: "review", line_id: "line", depends_on: [], status: "REVIEW" },
+    { task_id: "ready", line_id: "line", depends_on: [], status: "QUEUED" },
+  ];
+  state.taskStates = { review: "REVIEW", ready: "QUEUED" };
+
+  assert.deepEqual(workbench.worklineAdvanceState(state, ["review", "ready"]), {
+    canAdvance: true,
+    reason: "READY",
+    message: "1 项任务可以启动",
+    actionLabel: "推进当前工作线",
+  });
+});

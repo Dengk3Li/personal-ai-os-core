@@ -191,6 +191,18 @@
     }
   }
 
+  function preserveViewportPosition(viewport, action) {
+    const left = Number(viewport && viewport.scrollX) || 0;
+    const top = Number(viewport && viewport.scrollY) || 0;
+    try {
+      return action();
+    } finally {
+      if (viewport && typeof viewport.scrollTo === "function") {
+        viewport.scrollTo({ left, top, behavior: "auto" });
+      }
+    }
+  }
+
   function createDemoState() {
     return {
       goal: "把一个复杂工作区变成可理解、可裁决、可持续推进的长期工作系统",
@@ -452,6 +464,65 @@
       completed: tasks.filter((task) => completedStates.includes(state.taskStates[task.task_id])).length,
       repeatedRuns: tasks.reduce((total, task) => total + Math.max(0, (task.attempts || 0) - 1), 0),
       allocation: Object.entries(allocationCounts).map(([label, tasks]) => ({ label, tasks })).sort((left, right) => right.tasks - left.tasks || left.label.localeCompare(right.label)),
+    };
+  }
+
+  function worklineAdvanceState(state, taskIds) {
+    const allowed = new Set(taskIds || state.tasks.map((task) => task.task_id));
+    const tasks = state.tasks.filter((task) => allowed.has(task.task_id));
+    const pendingDecisionTasks = new Set((state.pendingDecisions || [])
+      .filter((decision) => decision.status === "PENDING" && allowed.has(decision.task_id))
+      .map((decision) => decision.task_id));
+    const runnable = tasks.filter((task) => {
+      if (pendingDecisionTasks.has(task.task_id)) return false;
+      return ["DISPATCH", "HUMAN_DECISION_REQUIRED"].includes(actionForTask(state, task.task_id));
+    });
+    if (runnable.length) {
+      return {
+        canAdvance: true,
+        reason: "READY",
+        message: `${runnable.length} 项任务可以启动`,
+        actionLabel: "推进当前工作线",
+      };
+    }
+    if (pendingDecisionTasks.size) {
+      return {
+        canAdvance: false,
+        reason: "WAITING_DECISION",
+        message: `${pendingDecisionTasks.size} 项任务等待裁决`,
+        actionLabel: "先处理待我决定",
+      };
+    }
+    const review = tasks.filter((task) => state.taskStates[task.task_id] === "REVIEW").length;
+    if (review) {
+      return {
+        canAdvance: false,
+        reason: "WAITING_REVIEW",
+        message: `${review} 项结果等待验收`,
+        actionLabel: "先验收当前结果",
+      };
+    }
+    if (tasks.some((task) => state.taskStates[task.task_id] === "IN_PROGRESS")) {
+      return {
+        canAdvance: false,
+        reason: "RECOVERY_REQUIRED",
+        message: "当前任务仍在运行或等待恢复",
+        actionLabel: "查看当前运行",
+      };
+    }
+    if (tasks.some((task) => state.taskStates[task.task_id] === "QUEUED")) {
+      return {
+        canAdvance: false,
+        reason: "WAITING_DEPENDENCY",
+        message: "后续任务正在等待前置结果",
+        actionLabel: "等待前置任务收口",
+      };
+    }
+    return {
+      canAdvance: false,
+      reason: tasks.length ? "COMPLETE" : "IDLE",
+      message: tasks.length ? "当前工作线已收口" : "当前工作线还没有任务",
+      actionLabel: tasks.length ? "当前工作线已收口" : "暂无可推进任务",
     };
   }
 
@@ -1277,7 +1348,7 @@
       state = selectBoard(runtimeStateFromPayload(payload), activeBoard);
       if (state.businessLines.some((line) => line.line_id === activeLineId)) state = selectBusinessLine(state, activeLineId);
       state.petPreference = petPreference || state.petPreference;
-      render();
+      preserveViewportPosition(doc.defaultView, render);
       announce("已读取本地运行库");
       return true;
     }
@@ -1411,17 +1482,16 @@
         const availableAdapters = (state.adapters || []).filter((adapter) => adapter.available);
         const advanceButton = doc.querySelector("[data-auto-advance]");
         const readiness = executionReadiness(state);
-        advanceButton.disabled = !readiness.advanceReady;
-        byId("advance-readiness").textContent = readiness.advanceRouteMode === "automatic" && readiness.advanceReady
-          ? "自动路由已就绪"
-          : !state.defaultModel && readiness.advanceRouteMode === "fixed"
+        const lineAdvance = worklineAdvanceState(state, activeTaskIds);
+        advanceButton.disabled = !readiness.advanceReady || !lineAdvance.canAdvance;
+        byId("advance-readiness").textContent = !state.defaultModel && readiness.advanceRouteMode === "fixed"
           ? "尚未配置自动推进模型"
           : !availableAdapters.length
             ? "尚未连接执行适配器"
-            : "执行设置已就绪";
+            : lineAdvance.message;
         advanceButton.textContent = !readiness.advanceReady
           ? "前往设置完成执行配置"
-            : "推进当前工作线";
+          : lineAdvance.actionLabel;
       }
       byId("settings-content").innerHTML = renderSettings(state);
       byId("settings-panel").hidden = !settingsOpen;
@@ -1443,7 +1513,7 @@
       if (focusToken) {
         const attribute = `data-${focusToken[0].replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
         const target = Array.from(doc.querySelectorAll(`[${attribute}]`)).find((item) => item.dataset[focusToken[0]] === focusToken[1]);
-        if (target) target.focus();
+        if (target) target.focus({ preventScroll: true });
       }
     }
 
@@ -1469,7 +1539,7 @@
       if (event.target.closest && event.target.closest("[data-close-settings]")) {
         settingsOpen = false;
         render();
-        byId("settings-toggle").focus();
+        byId("settings-toggle").focus({ preventScroll: true });
         return;
       }
       if (event.target.closest && event.target.closest("[data-reset-demo]")) {
@@ -2041,8 +2111,10 @@
     viewModel,
     workflowProjection,
     workflowSummary,
+    worklineAdvanceState,
     workspaceView,
     zoomModuleView,
+    preserveViewportPosition,
     mount,
   };
 });
