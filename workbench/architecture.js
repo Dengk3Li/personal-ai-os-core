@@ -226,7 +226,7 @@
       };
       graph = validateGraph(GRAPHS[graphId]);
     });
-    return clone({ ...graph, boundary });
+    return clone({ ...graph, boundary, view_kind: "system-topology" });
   }
 
   function systemBreadcrumbs(path = []) {

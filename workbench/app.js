@@ -874,7 +874,7 @@
   }
 
   function moduleGraph() {
-    return { readOnly: true, ...buildModuleGraph(MODULES) };
+    return { view_kind: "runtime-components", readOnly: true, ...buildModuleGraph(MODULES) };
   }
 
   function workspaceView(state) {
@@ -1620,7 +1620,7 @@
       byId("module-map-title").textContent = mapGraph.name || "组件依赖";
       byId("module-map-description").textContent = moduleMapMode === "system"
         ? "系统全景呈现从目标输入到经验回流的顶层操作架构；下钻后保留与上层的输入、输出和反馈关系。"
-        : "组件依赖呈现实际安装模块的 capability 供需、运行连接与可替换插槽。";
+        : "运行模块视图（组件依赖）呈现可插拔执行组件的 capability 供需、可用状态与可替换插槽。";
       byId("module-count").textContent = String(mapGraph.modules.length);
       byId("module-edge-count").textContent = String(mapGraph.edges.length);
       byId("module-unresolved-count").textContent = String(mapGraph.unresolved.length);

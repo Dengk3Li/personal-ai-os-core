@@ -25,6 +25,18 @@ test("the system map covers the whole operating loop and exposes recursive drill
   );
 });
 
+test("system topology and runtime components keep distinct view contracts", () => {
+  const system = architecture.systemGraph([]);
+  const runtime = workbench.moduleGraph();
+
+  assert.equal(system.view_kind, "system-topology");
+  assert.equal(runtime.view_kind, "runtime-components");
+  assert.ok(system.edges.some((edge) => edge[0] === "secretary-entry" && edge[1] === "personal-context"));
+  assert.ok(runtime.modules.every((module) => Array.isArray(module.provides)));
+  assert.ok(runtime.modules.every((module) => ["READY", "PROTOTYPE", "PLANNED"].includes(module.availability)));
+  assert.ok(runtime.modules.some((module) => module.optional === true));
+});
+
 test("a drilled graph keeps its parent and external handoff boundary", () => {
   const graph = architecture.systemGraph(["longtask-kernel"]);
 
@@ -108,5 +120,7 @@ test("the report-facing workbench surface uses Chinese action language", () => {
   });
   assert.doesNotMatch(visibleSurface, /配置 Adapter 后推进/);
   assert.match(visibleSurface, /尚未连接执行适配器/);
+  assert.match(visibleSurface, /系统全景呈现从目标输入到经验回流的顶层操作架构/);
+  assert.match(visibleSurface, /运行模块视图（组件依赖）呈现可插拔执行组件的 capability 供需、可用状态与可替换插槽/);
   assert.match(html, /v0\.17\.0/);
 });
