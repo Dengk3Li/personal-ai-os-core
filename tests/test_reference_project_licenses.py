@@ -37,13 +37,18 @@ class ReferenceProjectLicenseDocsTest(unittest.TestCase):
         self.assertIn("personal-ai-os.practice-candidate/v1", english)
         self.assertIn("does not write long-term memory", english)
         self.assertIn("PolyForm Noncommercial license", english)
-        self.assertIn("299 Python tests and 89 Workbench tests", english)
+        self.assertIn("304 Python tests and 89 Workbench tests", english)
         self.assertIn("personal-ai-os.practice-candidate/v1", chinese)
         self.assertIn("不会写入长期记忆", chinese)
-        self.assertIn("299 个 Python 测试和 89 个 Workbench 测试", chinese)
+        self.assertIn("304 个 Python 测试和 89 个 Workbench 测试", chinese)
         self.assertIn("personal-ai-os.practice-candidate/v1", product)
         self.assertIn("PolyForm Noncommercial 1.0.0", product)
-        self.assertIn("299 个 Python 用例和 89 个 Workbench 用例", product)
+        self.assertIn("304 个 Python 用例和 89 个 Workbench 用例", product)
+        self.assertIn("personal-ai-os.execution-receipt/v1", english)
+        self.assertIn("does not write runtime state", english)
+        self.assertIn("personal-ai-os.execution-receipt/v1", chinese)
+        self.assertIn("不会写入运行状态", chinese)
+        self.assertIn("personal-ai-os.execution-receipt/v1", product)
 
 
 if __name__ == "__main__":

@@ -242,7 +242,9 @@ print(validate_practice_candidate(payload))
 PY
 ```
 
-The current public suite covers this boundary with 299 Python tests and 89 Workbench tests (`make test`).
+The current public suite covers this boundary with 304 Python tests and 89 Workbench tests (`make test`).
+
+The public `personal-ai-os.execution-receipt/v1` contract is the generic read-only handoff for project-owned execution. Its binding records only opaque `project_id`, `thread_id`, and `host_id` references with an explicit verification flag. Its receipt records terminal status, outcome, bounded artifact references, and a final output reference without carrying output text. A completed receipt must be verified, must not await user input or a Human Gate, and must identify a final output reference; paths, business labels, and credentials are rejected. `validate_execution_receipt` is pure and does not write runtime state.
 
 Task routing is a replaceable contract at the execution boundary. A task
 declares only its tier (`complexity`), required capabilities, and an optional

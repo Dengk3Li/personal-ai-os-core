@@ -64,6 +64,12 @@
 
 新候选必须从 `review.status: PROPOSED` 开始；`APPROVED` 或 `REJECTED` 必须同时提供匿名 `reviewer_ref`，从合同层面保留人工审核边界。`validate_practice_candidate` 是纯函数，只返回规范化候选，不写 RuntimeStore、不批准长期记忆，也不把候选正文带入模型上下文。
 
+## ExecutionReceipt/v1
+
+公开核心提供 `personal-ai-os.execution-receipt/v1` 通用只读交接合同，用于在项目执行完成后传递最小可核对事实。`binding` 只允许已验证的 `project_id`、`thread_id`、`host_id` 不透明引用；`receipt` 只允许终态、结果、有界产物引用、最终输出引用、观测时间和用户输入/人工裁决标记。已完成回执必须验证通过、带最终输出引用，并且不能仍在等待用户输入或人工裁决。
+
+`validate_execution_receipt` 是无存储纯校验器，不读取或写入本地路径、任务正文、模型输出、业务标签或凭据。它表达“哪个项目中的哪个线程产生了什么可核对结果”，不替代 RuntimeStore 状态转换、人工验收或长期记忆审核。
+
 ## 验证
 
 - `tests/test_memory_context.py`：源无关读取、批准状态、主体/领域边界、上下文上限与复核候选合同。
@@ -73,6 +79,7 @@
 - `tests/test_task_envelope.py`：批量预检的去重、冲突、缺少目标/下一动作和敏感值不回显。
 - `tests/test_template_selection.py`：TemplateSelection/v1 的字段边界、哈希规范化、路径/正文/凭据与业务文案拒绝。
 - `tests/test_practice_candidate.py`：PracticeCandidate/v1 的引用/范围边界、人工审核状态和正文/路径/业务标签拒绝。
+- `tests/test_execution_receipt.py`：ExecutionReceipt/v1 的项目—线程—主机归属、终态回执、人工输入边界以及路径/业务字段/凭据拒绝。
 
 ## 未交付边界
 
