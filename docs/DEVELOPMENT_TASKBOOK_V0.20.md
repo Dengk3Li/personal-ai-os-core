@@ -58,6 +58,12 @@
 
 该选择记录只证明某个任务类型绑定了某个版本的模板摘要，不读取或携带模板正文，也不宣称模板已经执行。私仓适配器可在本地完成权限判断和正文读取，再将脱敏后的选择元数据交给公开核心。
 
+## PracticeCandidate/v1
+
+公开核心提供独立的 `PracticeCandidate/v1` 候选合同，用于在记忆或工作方式进入长期记忆前传递最小安全元数据。合同只接受候选引用、来源引用、有界范围引用（`subject_ref`、`domain_ref`）和人工审核状态；不接收工作方式正文、分类、业务名称、路径或凭据。
+
+新候选必须从 `review.status: PROPOSED` 开始；`APPROVED` 或 `REJECTED` 必须同时提供匿名 `reviewer_ref`，从合同层面保留人工审核边界。`validate_practice_candidate` 是纯函数，只返回规范化候选，不写 RuntimeStore、不批准长期记忆，也不把候选正文带入模型上下文。
+
 ## 验证
 
 - `tests/test_memory_context.py`：源无关读取、批准状态、主体/领域边界、上下文上限与复核候选合同。
@@ -66,6 +72,7 @@
 - `tests/test_task_envelope.py`：TaskEnvelope/v1 规范化、类型化模块引用、未知字段、路径/业务文案与重复引用拒绝。
 - `tests/test_task_envelope.py`：批量预检的去重、冲突、缺少目标/下一动作和敏感值不回显。
 - `tests/test_template_selection.py`：TemplateSelection/v1 的字段边界、哈希规范化、路径/正文/凭据与业务文案拒绝。
+- `tests/test_practice_candidate.py`：PracticeCandidate/v1 的引用/范围边界、人工审核状态和正文/路径/业务标签拒绝。
 
 ## 未交付边界
 
