@@ -1,0 +1,19 @@
+{
+  "schema_version": "personal-ai-os.task-causality/v1",
+  "task_ref": "task-001",
+  "inputs": [
+    {"ref": "artifact-input", "status": "AVAILABLE"}
+  ],
+  "current_action": {
+    "ref": "action-001",
+    "status": "IN_PROGRESS",
+    "run_ref": "run-001"
+  },
+  "artifacts": [
+    {"ref": "artifact-output", "status": "CREATED"}
+  ],
+  "downstream": [
+    {"ref": "task-002", "relation": "ENABLES", "status": "PENDING"}
+  ],
+  "next_action": {"ref": "action-002", "status": "READY"}
+}

@@ -68,6 +68,7 @@ from .task_envelope import (
 from .template_selection import TEMPLATE_SELECTION_VERSION, validate_template_selection
 from .practice_candidate import PRACTICE_CANDIDATE_VERSION, validate_practice_candidate
 from .execution_receipt import EXECUTION_RECEIPT_VERSION, validate_execution_receipt
+from .task_causality import TASK_CAUSALITY_VERSION, validate_task_causality
 from .truth import compile_truth
 from .workflow import transition_task
 from .workflow_structure import compile_workflow_structure, evaluate_workflow_structure
@@ -142,6 +143,7 @@ __all__ = [
     "TEMPLATE_SELECTION_VERSION",
     "PRACTICE_CANDIDATE_VERSION",
     "EXECUTION_RECEIPT_VERSION",
+    "TASK_CAUSALITY_VERSION",
     "submit_for_review",
     "sync_runtime_plan",
     "synthetic_research_report_fixture",
@@ -157,6 +159,7 @@ __all__ = [
     "validate_template_selection",
     "validate_practice_candidate",
     "validate_execution_receipt",
+    "validate_task_causality",
     "verify_freeze",
     "expire_lease",
     "get_workflow_preset",

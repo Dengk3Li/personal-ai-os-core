@@ -70,6 +70,16 @@
 
 `validate_execution_receipt` 是无存储纯校验器，不读取或写入本地路径、任务正文、模型输出、业务标签或凭据。它表达“哪个项目中的哪个线程产生了什么可核对结果”，不替代 RuntimeStore 状态转换、人工验收或长期记忆审核。
 
+## TaskCausality/v1
+
+公开核心提供 `personal-ai-os.task-causality/v1` 最小因果交接合同，供任务在跨对话、跨模型或跨机器转交时传递可核对的上下文链。固定结构为：
+
+`inputs -> current_action -> artifacts -> downstream -> next_action`
+
+每项只保存不透明引用和有界状态；`current_action` 可带一个不透明的 `run_ref`，下游项带固定的关系枚举（`BLOCKS`、`ENABLES`、`INFORMS`、`TRIGGERS`、`FOLLOWS`）。输入、产物和下游引用均有数量上限并要求唯一。缺省的集合规范化为空列表，但当前动作和下一步动作必须存在。
+
+`validate_task_causality` 是纯函数。它拒绝正文、自由文本、本地路径、业务标签、凭据、未知字段、非法状态、非法关系、重复引用和超限列表，不读取文件、不调用模型、不写 RuntimeStore。它只表达交接结构，不能替代任务状态转换、产物验收或人工决定。
+
 ## 验证
 
 - `tests/test_memory_context.py`：源无关读取、批准状态、主体/领域边界、上下文上限与复核候选合同。
@@ -80,6 +90,7 @@
 - `tests/test_template_selection.py`：TemplateSelection/v1 的字段边界、哈希规范化、路径/正文/凭据与业务文案拒绝。
 - `tests/test_practice_candidate.py`：PracticeCandidate/v1 的引用/范围边界、人工审核状态和正文/路径/业务标签拒绝。
 - `tests/test_execution_receipt.py`：ExecutionReceipt/v1 的项目—线程—主机归属、终态回执、人工输入边界以及路径/业务字段/凭据拒绝。
+- `tests/test_task_causality.py`：TaskCausality/v1 的因果链规范化、引用边界、状态与关系校验、重复/超限数据及敏感字段拒绝。
 
 ## 未交付边界
 

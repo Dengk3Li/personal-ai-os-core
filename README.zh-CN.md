@@ -220,9 +220,39 @@ print(validate_practice_candidate(payload))
 PY
 ```
 
-当前公开测试覆盖为 304 个 Python 测试和 89 个 Workbench 测试（`make test`）。
+当前公开测试覆盖为 310 个 Python 测试和 89 个 Workbench 测试（`make test`）。
 
 公开核心另提供 `personal-ai-os.execution-receipt/v1` 通用只读交接合同，用于表达项目归属的执行结果。绑定部分只保存不透明的 `project_id`、`thread_id`、`host_id` 引用和明确的验证标记；回执部分保存终态、结果、有界产物引用和最终输出引用，不携带输出正文。已完成回执必须经过验证、不能仍在等待用户输入或人工裁决，并且必须带最终输出引用；路径、业务标签和凭据会被拒绝。`validate_execution_receipt` 是纯函数，不会写入运行状态。
+
+公开核心同时提供 `personal-ai-os.task-causality/v1` 最小因果交接合同。它按
+`inputs -> current_action -> artifacts -> downstream -> next_action` 表达任务的
+前置输入、当前动作、已产生产物、受影响的下游工作和下一步动作，让新的执行者
+能够恢复现场。每项只携带不透明引用和有界状态；下游关系使用固定枚举。校验器会
+拒绝正文、自由文本、本地路径、业务标签、凭据、未知字段、超限列表和重复引用。
+`validate_task_causality` 是纯函数，不读取或修改任务、运行库或文件。仓库中的合成示例位于
+[`examples/task_causality.synthetic.json`](examples/task_causality.synthetic.json)。
+
+```python
+from personal_ai_os import validate_task_causality
+
+handoff = validate_task_causality({
+    "schema_version": "personal-ai-os.task-causality/v1",
+    "task_ref": "task-001",
+    "inputs": [{"ref": "artifact-input", "status": "AVAILABLE"}],
+    "current_action": {
+        "ref": "action-001",
+        "status": "IN_PROGRESS",
+        "run_ref": "run-001",
+    },
+    "artifacts": [{"ref": "artifact-output", "status": "CREATED"}],
+    "downstream": [{
+        "ref": "task-002",
+        "relation": "ENABLES",
+        "status": "PENDING",
+    }],
+    "next_action": {"ref": "action-002", "status": "READY"},
+})
+```
 
 任务路由保持为可替换的执行边界合同。任务只声明复杂度层级
 （`complexity`）、所需能力，以及可选的

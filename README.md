@@ -242,9 +242,43 @@ print(validate_practice_candidate(payload))
 PY
 ```
 
-The current public suite covers this boundary with 304 Python tests and 89 Workbench tests (`make test`).
+The current public suite covers this boundary with 310 Python tests and 89 Workbench tests (`make test`).
 
 The public `personal-ai-os.execution-receipt/v1` contract is the generic read-only handoff for project-owned execution. Its binding records only opaque `project_id`, `thread_id`, and `host_id` references with an explicit verification flag. Its receipt records terminal status, outcome, bounded artifact references, and a final output reference without carrying output text. A completed receipt must be verified, must not await user input or a Human Gate, and must identify a final output reference; paths, business labels, and credentials are rejected. `validate_execution_receipt` is pure and does not write runtime state.
+
+The public core also exposes `personal-ai-os.task-causality/v1` as a small,
+references-only handoff for task context. It records the causal chain as
+`inputs -> current_action -> artifacts -> downstream -> next_action`, so a
+new executor can recover what must be available, what is being done, what was
+produced, which work is affected next, and the next action reference. Each
+entry contains only an opaque reference and a bounded state; downstream edges
+use a fixed relation set. The validator rejects free text, local paths,
+business labels, credentials, unknown fields and unbounded or duplicate
+references. `validate_task_causality` is pure and does not mutate task or
+runtime state. A synthetic fixture is available at
+[`examples/task_causality.synthetic.json`](examples/task_causality.synthetic.json).
+
+```python
+from personal_ai_os import validate_task_causality
+
+handoff = validate_task_causality({
+    "schema_version": "personal-ai-os.task-causality/v1",
+    "task_ref": "task-001",
+    "inputs": [{"ref": "artifact-input", "status": "AVAILABLE"}],
+    "current_action": {
+        "ref": "action-001",
+        "status": "IN_PROGRESS",
+        "run_ref": "run-001",
+    },
+    "artifacts": [{"ref": "artifact-output", "status": "CREATED"}],
+    "downstream": [{
+        "ref": "task-002",
+        "relation": "ENABLES",
+        "status": "PENDING",
+    }],
+    "next_action": {"ref": "action-002", "status": "READY"},
+})
+```
 
 Task routing is a replaceable contract at the execution boundary. A task
 declares only its tier (`complexity`), required capabilities, and an optional
