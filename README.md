@@ -229,6 +229,8 @@ Before claim, the Broker applies the source-agnostic `read_memory_context` contr
 
 The public `personal-ai-os.practice-candidate/v1` contract is a separate, reference-only boundary for adapter previews. It carries only a candidate reference, bounded source references, anonymous subject/domain scope references, and human review state. It has no practice statement, body, local path, business label, or credential. `PROPOSED` is unreviewed; `APPROVED` and `REJECTED` require a reviewer reference. The pure validator does not write long-term memory or approve a candidate, and it remains subject to the repository's [PolyForm Noncommercial license](LICENSE).
 
+The public `personal-ai-os.memory-read-receipt/v1` and `personal-ai-os.memory-update-candidate/v1` contracts make the read-before-run boundary explicit. A read receipt contains only opaque memory/task references, subject and domain scope, approved authority, freshness timestamps, and a `read_before_run` proof. An update candidate must point to that receipt and remains `PROPOSED` until a human review records anonymous reviewer and decision references. These pure validators carry no memory body, local path, credential, model output, or activation flag; they do not persist or promote memory. They compose with `ExecutionReceipt/v1` and `TaskCausality/v1` by sharing opaque references, while the private adapter resolves the referenced records.
+
 A minimal, synthetic reference-only payload is available at [`examples/practice_candidate.synthetic.json`](examples/practice_candidate.synthetic.json). Validate it without persistence with:
 
 ```bash
@@ -242,7 +244,7 @@ print(validate_practice_candidate(payload))
 PY
 ```
 
-The current public suite covers this boundary with 310 Python tests and 89 Workbench tests (`make test`).
+The current public suite covers this boundary with 315 Python tests and 89 Workbench tests (`make test`).
 
 The public `personal-ai-os.execution-receipt/v1` contract is the generic read-only handoff for project-owned execution. Its binding records only opaque `project_id`, `thread_id`, and `host_id` references with an explicit verification flag. Its receipt records terminal status, outcome, bounded artifact references, and a final output reference without carrying output text. A completed receipt must be verified, must not await user input or a Human Gate, and must identify a final output reference; paths, business labels, and credentials are rejected. `validate_execution_receipt` is pure and does not write runtime state.
 

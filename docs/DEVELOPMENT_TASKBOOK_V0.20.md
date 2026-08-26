@@ -13,6 +13,8 @@
 - 任务声明 `require_read` 且读取成功时，候选事件额外带入有界的批准引用；没有该策略时不会伪造 `memory_read_status` 或批准记忆。
 - 事件不会创建、修改或批准 `memory_candidates`。候选只有在显式人工复核后才能进入 `APPROVED` 或 `REJECTED`。
 
+公开核心另提供两个纯数据合同：`personal-ai-os.memory-read-receipt/v1` 证明某组已批准、范围匹配且仍在有效时间内的记忆引用已在运行前读取；`personal-ai-os.memory-update-candidate/v1` 把任务后的变化绑定到该读取回执，并保持为候选。两个合同只接受不透明引用、范围、权威、时效和审核状态，禁止正文、本机路径、凭据、模型输出与激活操作。候选即使获得人工审核记录，也不等于写入或启用长期记忆；私有适配器负责解析引用并决定是否进入本地审批流程。
+
 ## 固定不变量
 
 1. 任何必需记忆读取失败，任务保持 `QUEUED`，没有 run、Adapter 调用或运行事件。
@@ -91,6 +93,7 @@
 - `tests/test_practice_candidate.py`：PracticeCandidate/v1 的引用/范围边界、人工审核状态和正文/路径/业务标签拒绝。
 - `tests/test_execution_receipt.py`：ExecutionReceipt/v1 的项目—线程—主机归属、终态回执、人工输入边界以及路径/业务字段/凭据拒绝。
 - `tests/test_task_causality.py`：TaskCausality/v1 的因果链规范化、引用边界、状态与关系校验、重复/超限数据及敏感字段拒绝。
+- `tests/test_memory_governance.py`：MemoryReadReceipt/v1 的运行前读取证明、批准权威、时效边界，以及 MemoryUpdateCandidate/v1 的回执关联、候选状态和敏感字段拒绝。
 
 ## 未交付边界
 

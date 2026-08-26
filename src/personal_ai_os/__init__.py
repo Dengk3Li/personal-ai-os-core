@@ -8,6 +8,12 @@ from .continuity import (
 )
 from .cognition import compile_operating_practices, validate_memory_candidate
 from .memory_context import read_memory_context, request_memory_review
+from .memory_governance import (
+    MEMORY_READ_RECEIPT_VERSION,
+    MEMORY_UPDATE_CANDIDATE_VERSION,
+    validate_memory_read_receipt,
+    validate_memory_update_candidate,
+)
 from .dispatching import assign_task, select_execution_route, task_route_requirements
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
@@ -113,6 +119,8 @@ __all__ = [
     "load_runtime_routes",
     "load_work_protocols",
     "read_memory_context",
+    "MEMORY_READ_RECEIPT_VERSION",
+    "MEMORY_UPDATE_CANDIDATE_VERSION",
     "request_memory_review",
     "load_goal_definition",
     "load_presentation",
@@ -150,6 +158,8 @@ __all__ = [
     "transition_task",
     "validate_plan",
     "validate_memory_candidate",
+    "validate_memory_read_receipt",
+    "validate_memory_update_candidate",
     "validate_research_report_acceptance",
     "validate_research_task_inputs",
     "validate_task_module_link",
