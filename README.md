@@ -221,6 +221,14 @@ A task may declare `context.memory_policy: "require_read"` when its execution mu
 
 Before claim, the Broker applies the source-agnostic `read_memory_context` contract to an explicitly supplied `registered_memory_refs` index (or the local candidate table through the same bounded projection). The model-bound context carries only selected, bounded references and their facts/decisions summaries. A successful run records a `CANDIDATE` `MEMORY_REVIEW_REQUESTED` event with the applied scope and approved references; it never writes, approves, or promotes a memory candidate automatically. Tasks without this policy retain the existing compatibility path.
 
+Task routing is a replaceable contract at the execution boundary. A task
+declares only its tier (`complexity`), required capabilities, and an optional
+`context.routing.estimated_context_tokens` budget. `task_route_requirements()`
+normalizes that declaration and rejects runtime binding fields such as a model,
+Adapter, or route. The server-owned, versioned catalog remains the only source
+of those bindings. Invalid requirements and unavailable routes stop before the
+runtime claims a run; they do not create a partial execution record.
+
 ## Operating model
 
 ```mermaid

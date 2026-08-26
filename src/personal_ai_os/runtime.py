@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .cognition import compile_operating_practices, validate_memory_candidate
-from .dispatching import select_execution_route
+from .dispatching import select_execution_route, task_route_requirements
 from .memory_context import BLOCKED as MEMORY_BLOCKED
 from .memory_context import READY as MEMORY_READY
 from .memory_context import read_memory_context
@@ -1721,12 +1721,9 @@ class ExecutionBroker:
         routes: list[dict[str, Any]],
         requested_route: str | None,
     ) -> dict[str, Any]:
-        routing = (task.get("context") or {}).get("routing") or {}
-        if not isinstance(routing, dict):
-            return {"status": "BLOCKED", "reason": "ROUTING_CONTEXT_INVALID"}
-        estimated_tokens = routing.get("estimated_context_tokens", 0)
-        if type(estimated_tokens) is not int or estimated_tokens < 0:
-            return {"status": "BLOCKED", "reason": "ROUTING_CONTEXT_INVALID"}
+        requirements = task_route_requirements(task)
+        if requirements["status"] != "RESOLVED":
+            return requirements
         available_routes = []
         adapter_availability: dict[str, bool] = {}
         for route in routes:
@@ -1744,7 +1741,7 @@ class ExecutionBroker:
                 available = adapter_availability[route_adapter_id]
             available_routes.append({**route, "available": available})
         return select_execution_route(
-            {**task, "estimated_context_tokens": estimated_tokens},
+            {**task, **requirements},
             available_routes,
             requested_route=requested_route,
         )

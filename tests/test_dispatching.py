@@ -29,6 +29,42 @@ ROUTES = [
 
 
 class DynamicDispatchTests(unittest.TestCase):
+    def test_route_selection_uses_the_task_context_budget(self):
+        select_execution_route = getattr(personal_ai_os, "select_execution_route", None)
+        self.assertTrue(callable(select_execution_route), "select_execution_route must be public")
+
+        result = select_execution_route(
+            {
+                "task_id": "long-draft",
+                "complexity": "quick",
+                "required_capabilities": ["writing"],
+                "context": {"routing": {"estimated_context_tokens": 80000}},
+            },
+            ROUTES,
+        )
+
+        self.assertEqual("RESOLVED", result["status"])
+        self.assertEqual("standard", result["route"])
+
+    def test_task_cannot_supply_runtime_binding_fields_to_the_route_contract(self):
+        select_execution_route = getattr(personal_ai_os, "select_execution_route", None)
+        self.assertTrue(callable(select_execution_route), "select_execution_route must be public")
+
+        result = select_execution_route(
+            {
+                "task_id": "spoofed-task",
+                "complexity": "quick",
+                "required_capabilities": ["writing"],
+                "model": "client-model",
+                "adapter_id": "client-adapter",
+                "context": {"routing": {"estimated_context_tokens": 1000}},
+            },
+            ROUTES,
+        )
+
+        self.assertEqual("BLOCKED", result["status"])
+        self.assertEqual("ROUTING_BINDING_NOT_ALLOWED", result["reason"])
+
     def test_auto_route_selects_the_smallest_capable_context_window(self):
         select_execution_route = getattr(personal_ai_os, "select_execution_route", None)
         self.assertTrue(callable(select_execution_route), "select_execution_route must be public")

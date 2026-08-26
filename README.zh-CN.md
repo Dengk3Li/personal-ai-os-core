@@ -205,6 +205,14 @@ personal-ai-os runtime serve \
 
 Broker 在领取运行权之前调用 source-agnostic 的 `read_memory_context` 合同，读取显式提供的 `registered_memory_refs` 索引；本地候选表也只能通过同一套有界投影接入。发送给模型的执行上下文只带入选中的、有界引用及其事实/决定摘要。成功运行只登记 `CANDIDATE` 状态的 `MEMORY_REVIEW_REQUESTED`，不会写入、批准或提升记忆候选。未声明该策略的历史任务继续沿用兼容路径。
 
+任务路由保持为可替换的执行边界合同。任务只声明复杂度层级
+（`complexity`）、所需能力，以及可选的
+`context.routing.estimated_context_tokens` 上下文预算。
+`task_route_requirements()` 负责规范化这些声明；任务中出现模型、Adapter
+或路线等运行时绑定字段时会直接阻断。模型和 Adapter 只来自服务端持有的
+版本化路线目录。声明无效或没有可用路线时，系统在领取运行权前停止，不会
+留下半成品执行记录。
+
 ## 操作闭环
 
 ```mermaid

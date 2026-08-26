@@ -14,6 +14,18 @@
 - 成功运行只登记带 `CANDIDATE` 状态的 `MEMORY_REVIEW_REQUESTED` 事件，记录本轮策略、范围和已读取的批准引用；不会自动创建、批准或提升记忆候选。
 - 未声明 `memory_policy` 的旧任务继续沿用既有工作协议和主体匹配逻辑。
 
+## 路由合同补充
+
+任务路由只读取任务声明的 `complexity`、`required_capabilities` 和
+`context.routing.estimated_context_tokens`。`task_route_requirements()` 是不依赖
+具体执行器的纯函数：它拒绝任务携带的 `model`、`adapter_id`、`route` 或
+`executor` 绑定字段，并保留旧版顶层上下文预算的兼容读取。模型与 Adapter
+绑定只能由服务端的版本化路线目录提供。
+
+Broker 在探测执行器、选择路线并领取 run 之前完成路线求值；无效声明、能力不匹配、
+上下文预算不足和不可用路线都会保持任务 `QUEUED`。自动推进复用这条边界，
+不会通过客户端请求替换路线目录，也不会为失败的路线创建部分执行记录。
+
 ## 验收边界
 
 - `require_read` 不会把记忆正文或私人路径写入公开投影。

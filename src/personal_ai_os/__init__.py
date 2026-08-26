@@ -4,7 +4,7 @@ from .acceptance_projection import build_acceptance_snapshot
 from .continuity import build_capsule
 from .cognition import compile_operating_practices, validate_memory_candidate
 from .memory_context import read_memory_context, request_memory_review
-from .dispatching import assign_task, select_execution_route
+from .dispatching import assign_task, select_execution_route, task_route_requirements
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
 from .goals import GoalController, load_goal_definition
@@ -116,6 +116,7 @@ __all__ = [
     "preview_research_task_inputs",
     "select_ready_task",
     "select_execution_route",
+    "task_route_requirements",
     "submit_for_review",
     "sync_runtime_plan",
     "synthetic_research_report_fixture",
