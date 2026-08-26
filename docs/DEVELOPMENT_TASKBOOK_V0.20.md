@@ -50,12 +50,19 @@
 
 私仓适配器可以把本地任务映射为该合同，但必须在边界前完成脱敏与权限判断。该校验器不读取文件、不访问私有任务卡、不调用模型，也不宣称任务或研究报告已经完成。
 
+## TemplateSelection/v1
+
+公开核心提供 `TemplateSelection/v1` 作为模板绑定的只读元数据合同。它只接受 `template_id`、`version`、`source_ref`、`content_sha256` 和 `task_kind`（以及版本字段），所有标识必须是不带路径的匿名标识，正文、凭据和适配器私有字段均被拒绝。
+
+该选择记录只证明某个任务类型绑定了某个版本的模板摘要，不读取或携带模板正文，也不宣称模板已经执行。私仓适配器可在本地完成权限判断和正文读取，再将脱敏后的选择元数据交给公开核心。
+
 ## 验证
 
 - `tests/test_memory_context.py`：源无关读取、批准状态、主体/领域边界、上下文上限与复核候选合同。
 - `tests/test_runtime_memory_context.py`：Broker 在 run claim 前 fail closed，成功读取只产生候选事件且不写入记忆表。
 - `tests/test_work_protocols.py`：协议学习路径的复核事件显式携带 `CANDIDATE` 元数据，并保留未授权提升状态。
 - `tests/test_task_envelope.py`：TaskEnvelope/v1 规范化、类型化模块引用、未知字段、路径/业务文案与重复引用拒绝。
+- `tests/test_template_selection.py`：TemplateSelection/v1 的字段边界、哈希规范化、路径/正文/凭据与业务文案拒绝。
 
 ## 未交付边界
 
