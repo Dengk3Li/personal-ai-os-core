@@ -229,7 +229,20 @@ Before claim, the Broker applies the source-agnostic `read_memory_context` contr
 
 The public `personal-ai-os.practice-candidate/v1` contract is a separate, reference-only boundary for adapter previews. It carries only a candidate reference, bounded source references, anonymous subject/domain scope references, and human review state. It has no practice statement, body, local path, business label, or credential. `PROPOSED` is unreviewed; `APPROVED` and `REJECTED` require a reviewer reference. The pure validator does not write long-term memory or approve a candidate, and it remains subject to the repository's [PolyForm Noncommercial license](LICENSE).
 
-The current public suite covers this boundary with 298 Python tests and 89 Workbench tests (`make test`).
+A minimal, synthetic reference-only payload is available at [`examples/practice_candidate.synthetic.json`](examples/practice_candidate.synthetic.json). Validate it without persistence with:
+
+```bash
+PYTHONPATH=src python3 - <<'PY'
+import json
+from pathlib import Path
+from personal_ai_os import validate_practice_candidate
+
+payload = json.loads(Path("examples/practice_candidate.synthetic.json").read_text())
+print(validate_practice_candidate(payload))
+PY
+```
+
+The current public suite covers this boundary with 299 Python tests and 89 Workbench tests (`make test`).
 
 Task routing is a replaceable contract at the execution boundary. A task
 declares only its tier (`complexity`), required capabilities, and an optional

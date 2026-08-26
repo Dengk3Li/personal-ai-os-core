@@ -1,0 +1,14 @@
+{
+  "schema_version": "personal-ai-os.practice-candidate/v1",
+  "candidate_id": "candidate:synthetic:001",
+  "source_refs": [
+    "artifact:synthetic-source-001"
+  ],
+  "scope": {
+    "subject_ref": "subject:synthetic",
+    "domain_ref": "domain:synthetic"
+  },
+  "review": {
+    "status": "PROPOSED"
+  }
+}

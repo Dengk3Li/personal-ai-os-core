@@ -83,7 +83,7 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 
 公开代码以 [PolyForm Noncommercial 1.0.0](LICENSE) 提供。许可证范围内的个人与非商业使用须保留版权声明；商业使用需要另行取得 Dengk3Li 的书面付费许可并署名。`PracticeCandidate/v1` 只定义安全元数据边界，不改变仓库许可证条件，也不授予任何商业权利。
 
-当前全量测试通过 298 个 Python 用例和 89 个 Workbench 用例（`make test`）。
+当前全量测试通过 299 个 Python 用例和 89 个 Workbench 用例（`make test`）。
 
 ## Product Principles
 

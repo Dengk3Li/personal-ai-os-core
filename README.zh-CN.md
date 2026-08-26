@@ -207,7 +207,20 @@ Broker 在领取运行权之前调用 source-agnostic 的 `read_memory_context` 
 
 公开核心另提供独立的 `personal-ai-os.practice-candidate/v1` 引用式合同，供适配器预览工作方式候选。它只携带候选引用、有限来源引用、匿名的主体/领域范围引用和人工审核状态，不包含工作方式正文、路径、业务标签或凭据。`PROPOSED` 表示尚未审核；`APPROVED` 和 `REJECTED` 必须带审核者引用。纯校验器不会写入长期记忆，也不会自动批准候选；该合同同样受仓库 [PolyForm Noncommercial 许可证](LICENSE) 约束。
 
-当前公开测试覆盖为 298 个 Python 测试和 89 个 Workbench 测试（`make test`）。
+最小的合成引用式示例位于 [`examples/practice_candidate.synthetic.json`](examples/practice_candidate.synthetic.json)。下面的命令只做校验，不会写入运行库：
+
+```bash
+PYTHONPATH=src python3 - <<'PY'
+import json
+from pathlib import Path
+from personal_ai_os import validate_practice_candidate
+
+payload = json.loads(Path("examples/practice_candidate.synthetic.json").read_text())
+print(validate_practice_candidate(payload))
+PY
+```
+
+当前公开测试覆盖为 299 个 Python 测试和 89 个 Workbench 测试（`make test`）。
 
 任务路由保持为可替换的执行边界合同。任务只声明复杂度层级
 （`complexity`）、所需能力，以及可选的

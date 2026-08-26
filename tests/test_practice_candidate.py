@@ -1,10 +1,14 @@
 import json
 import unittest
+from pathlib import Path
 
 from personal_ai_os.practice_candidate import (
     PRACTICE_CANDIDATE_VERSION,
     validate_practice_candidate,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class PracticeCandidateTests(unittest.TestCase):
@@ -76,6 +80,36 @@ class PracticeCandidateTests(unittest.TestCase):
 
         self.assertNotIn("/private/subject", str(raised.exception))
         self.assertEqual(before, json.dumps(candidate, sort_keys=True))
+
+    def test_repository_fixture_is_synthetic_and_validates_as_reference_only(self):
+        fixture = json.loads(
+            (ROOT / "examples" / "practice_candidate.synthetic.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        self.assertEqual(fixture, validate_practice_candidate(fixture))
+        self.assertEqual({"status": "PROPOSED"}, fixture["review"])
+        self.assertEqual(1, len(fixture["source_refs"]))
+        self.assertEqual(
+            {"subject_ref", "domain_ref"},
+            set(fixture["scope"]),
+        )
+        self.assertNotIn(
+            "statement",
+            fixture,
+        )
+        self.assertNotIn(
+            "business_label",
+            json.dumps(fixture, ensure_ascii=False),
+        )
+        self.assertNotIn("credential", json.dumps(fixture, ensure_ascii=False))
+        for reference in [
+            fixture["candidate_id"],
+            *fixture["source_refs"],
+            *fixture["scope"].values(),
+        ]:
+            self.assertNotIn("/", reference)
 
 
 if __name__ == "__main__":
