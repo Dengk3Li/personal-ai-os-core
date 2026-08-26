@@ -134,6 +134,19 @@ class WorkProtocolTests(unittest.TestCase):
                 for event in store.snapshot()["events"]
             ),
         )
+        review_event = next(
+            event
+            for event in store.snapshot()["events"]
+            if event["event_type"] == "MEMORY_REVIEW_REQUESTED"
+        )
+        self.assertEqual("CANDIDATE", review_event["payload"]["candidate"]["status"])
+        self.assertEqual("notes:intake", review_event["payload"]["candidate"]["source_task_id"])
+        self.assertEqual(
+            store.snapshot()["runs"][0]["run_id"],
+            review_event["payload"]["candidate"]["source_run_id"],
+        )
+        self.assertFalse(review_event["payload"]["candidate"]["promotion"]["authorized"])
+        self.assertNotIn("memory_read_status", review_event["payload"])
 
     def test_missing_required_protocol_blocks_before_run_claim(self):
         store = RuntimeStore(self.database)

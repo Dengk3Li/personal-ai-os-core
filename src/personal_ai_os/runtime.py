@@ -2017,6 +2017,15 @@ class ExecutionBroker:
                 if work_protocol and work_protocol.get("learning_review") == "candidate":
                     memory_review_payload = {
                         "protocol_id": work_protocol["protocol_id"],
+                        "candidate": {
+                            "status": "CANDIDATE",
+                            "source_task_id": task_id,
+                            "source_run_id": run["run_id"],
+                            "promotion": {
+                                "status": "NOT_REQUESTED",
+                                "authorized": False,
+                            },
+                        },
                     }
                 if memory_context and memory_context.get("status") == MEMORY_READY:
                     memory_review_payload = {
