@@ -20,7 +20,10 @@ BLOCKED = "BLOCKED"
 SKIPPED = "SKIPPED"
 MEMORY_REVIEW_REQUESTED = "MEMORY_REVIEW_REQUESTED"
 REQUIRE_READ = "require_read"
-READABLE_STATUSES = frozenset({"ACTIVE", "APPROVED"})
+# Only an explicit human approval may enter an execution context. Provider
+# lifecycle labels such as ACTIVE do not carry the approval decision required
+# by the public memory contract.
+READABLE_STATUSES = frozenset({"APPROVED"})
 _SUBJECT_KINDS = frozenset({"person", "team"})
 _MAX_CONTEXT_CHARS = 8_000
 _MAX_OBSERVATION_CHARS = 2_000

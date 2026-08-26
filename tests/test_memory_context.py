@@ -78,6 +78,14 @@ class MemoryContextTests(unittest.TestCase):
         self.assertEqual(BLOCKED, result["status"])
         self.assertEqual("MEMORY_REF_NOT_APPROVED", result["reason"])
 
+    def test_active_reference_is_not_approved_for_execution(self):
+        refs = registered_refs()
+        refs["practice-1"]["status"] = "ACTIVE"
+        result = read_memory_context(task(), registered_refs=refs)
+
+        self.assertEqual(BLOCKED, result["status"])
+        self.assertEqual("MEMORY_REF_NOT_APPROVED", result["reason"])
+
     def test_context_budget_fails_closed(self):
         refs = registered_refs()
         refs["practice-1"]["facts"] = ["证" * 8_001]
