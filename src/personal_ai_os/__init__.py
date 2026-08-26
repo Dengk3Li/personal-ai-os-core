@@ -3,6 +3,7 @@
 from .acceptance_projection import build_acceptance_snapshot
 from .continuity import build_capsule
 from .cognition import compile_operating_practices, validate_memory_candidate
+from .memory_context import read_memory_context, request_memory_review
 from .dispatching import assign_task, select_execution_route
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
@@ -92,6 +93,8 @@ __all__ = [
     "load_runtime_plan",
     "load_runtime_routes",
     "load_work_protocols",
+    "read_memory_context",
+    "request_memory_review",
     "load_goal_definition",
     "load_presentation",
     "module_catalog",
