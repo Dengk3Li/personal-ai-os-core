@@ -71,7 +71,11 @@ from .task_envelope import (
     validate_task_envelope,
     validate_task_module_link_v1,
 )
-from .template_selection import TEMPLATE_SELECTION_VERSION, validate_template_selection
+from .template_selection import (
+    TEMPLATE_SELECTION_VERSION,
+    resolve_task_template_selection,
+    validate_template_selection,
+)
 from .practice_candidate import PRACTICE_CANDIDATE_VERSION, validate_practice_candidate
 from .execution_receipt import EXECUTION_RECEIPT_VERSION, validate_execution_receipt
 from .task_causality import TASK_CAUSALITY_VERSION, validate_task_causality
@@ -167,6 +171,7 @@ __all__ = [
     "validate_task_module_link_v1",
     "preview_task_envelopes",
     "validate_template_selection",
+    "resolve_task_template_selection",
     "validate_practice_candidate",
     "validate_execution_receipt",
     "validate_task_causality",

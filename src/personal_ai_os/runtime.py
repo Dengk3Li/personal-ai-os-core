@@ -17,6 +17,7 @@ from .presets import get_workflow_preset
 from .secretary import build_context_pack, model_context_for_task
 from .states import TASK_STATES
 from .task_links import validate_task_module_link
+from .template_selection import resolve_task_template_selection
 from .workflow import transition_task
 from .work_protocols import SCHEMA_VERSION as WORK_PROTOCOL_SCHEMA_VERSION
 from .work_protocols import validate_work_protocols, work_protocol_catalog
@@ -1759,6 +1760,14 @@ class ExecutionBroker:
         task = self.store.get_task(task_id)
         if task["status"] != "QUEUED":
             return {"ok": False, "reason": "TASK_NOT_QUEUED", "status": task["status"]}
+        template_result = resolve_task_template_selection(task)
+        if template_result["status"] == "BLOCKED":
+            return {
+                "ok": False,
+                "status": "QUEUED",
+                "reason": template_result["reason"],
+            }
+        template_selection = template_result.get("template_selection")
         memory_context = None
         task_context = task.get("context") or {}
         if isinstance(task_context, dict) and task_context.get("memory_policy") is not None:
@@ -1924,6 +1933,7 @@ class ExecutionBroker:
                 upstream_artifacts=upstream_artifacts,
                 work_protocol=work_protocol,
                 memory_context=memory_context,
+                template_selection=template_selection,
             )
         except ValueError as exc:
             message = str(exc).lower()

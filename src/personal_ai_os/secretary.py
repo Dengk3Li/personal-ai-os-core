@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .template_selection import validate_template_selection
+
 
 UPSTREAM_CONTEXT_CHARACTER_LIMIT = 24_000
 MODEL_CONTEXT_CHARACTER_LIMIT = 12_000
@@ -30,6 +32,7 @@ def build_context_pack(
     upstream_artifacts: list[dict[str, Any]] | None = None,
     work_protocol: dict[str, Any] | None = None,
     memory_context: dict[str, Any] | None = None,
+    template_selection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the smallest transferable task context without copying memory bodies."""
     profile = domain_profile or {}
@@ -55,6 +58,12 @@ def build_context_pack(
     practice_evidence_refs = list(profile.get("practice_evidence_refs") or [])
     approved_practice_refs = list(profile.get("approved_practice_refs") or [])
     bounded_memory_context = dict(memory_context or {})
+    normalized_template_selection = None
+    if template_selection is not None:
+        try:
+            normalized_template_selection = validate_template_selection(template_selection)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("template selection is invalid") from exc
     bounded_context = json.dumps(
         {
             "model_context": model_context,
@@ -63,6 +72,7 @@ def build_context_pack(
             "approved_practice_refs": approved_practice_refs,
             "work_protocol": work_protocol or {},
             "memory_context": bounded_memory_context,
+            "template_selection": normalized_template_selection,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -90,6 +100,7 @@ def build_context_pack(
         "practice_evidence_refs": practice_evidence_refs,
         "approved_practice_refs": approved_practice_refs,
         "work_protocol": dict(work_protocol or {}),
+        "template_selection": normalized_template_selection,
         "memory_read_status": bounded_memory_context.get("status"),
         "memory_ref_ids": list(bounded_memory_context.get("memory_ref_ids") or []),
         "memory_context": bounded_memory_context,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -56,3 +57,28 @@ def validate_template_selection(payload: dict[str, Any]) -> dict[str, str]:
         "content_sha256": content_sha256.strip().lower(),
         "task_kind": _identifier(payload.get("task_kind"), "task kind"),
     }
+
+
+def resolve_task_template_selection(task: Mapping[str, Any]) -> dict[str, Any]:
+    """Resolve an optional task-declared template binding without side effects.
+
+    ``context.template_selection`` is an opt-in requirement.  A missing key
+    keeps the historical task shape compatible; once the key is present, the
+    selection must be a valid ``TemplateSelection/v1`` record.  The result is
+    deliberately limited to a stable status, reason code, and normalized
+    metadata so rejected values never cross the runtime boundary.
+    """
+
+    if not isinstance(task, Mapping):
+        return {"status": "BLOCKED", "reason": "TEMPLATE_SELECTION_INVALID"}
+    context = task.get("context") or {}
+    if not isinstance(context, Mapping) or "template_selection" not in context:
+        return {"status": "NOT_REQUIRED"}
+    selection = context.get("template_selection")
+    if selection is None:
+        return {"status": "BLOCKED", "reason": "TEMPLATE_SELECTION_REQUIRED"}
+    try:
+        normalized = validate_template_selection(selection)
+    except (TypeError, ValueError):
+        return {"status": "BLOCKED", "reason": "TEMPLATE_SELECTION_INVALID"}
+    return {"status": "RESOLVED", "template_selection": normalized}
