@@ -57,6 +57,41 @@ class CodexProjectAdapterTests(unittest.TestCase):
         self.assertEqual("RUNNING", snapshot["runs"][0]["status"])
         self.assertEqual(pending[0]["dispatch_id"], snapshot["runs"][0]["external_run_id"])
 
+    def test_each_task_attempt_gets_a_unique_project_dispatch_id(self):
+        broker = ExecutionBroker(
+            self.store,
+            {self.adapter.adapter_id: self.adapter},
+        )
+
+        first = broker.dispatch(
+            "science:hypothesis",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+        self.store.create_task({
+            "task_id": "science:protocol",
+            "workflow_id": "science",
+            "title": "设计实验协议",
+            "acceptance": "形成可核对协议",
+            "domain_id": "science",
+            "depends_on": [],
+        })
+        second = broker.dispatch(
+            "science:protocol",
+            adapter_id=self.adapter.adapter_id,
+            model="gpt-5.6-sol",
+        )
+
+        self.assertTrue(first["ok"])
+        self.assertTrue(second["ok"])
+        dispatches = self.adapter.pending_dispatches()
+        self.assertEqual(2, len(dispatches))
+        self.assertEqual(2, len({item["dispatch_id"] for item in dispatches}))
+        self.assertEqual(
+            {item["dispatch_id"] for item in dispatches},
+            {run["external_run_id"] for run in self.store.snapshot()["runs"]},
+        )
+
     def test_claim_bind_and_complete_returns_the_project_thread_result_to_review(self):
         broker = ExecutionBroker(
             self.store,

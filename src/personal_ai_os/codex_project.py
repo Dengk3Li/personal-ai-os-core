@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -149,7 +150,10 @@ class CodexProjectAdapter:
     ) -> dict[str, Any]:
         try:
             project = self._project_for(task)
-            dispatch_id = _identifier("project-dispatch")
+            # A project queue can contain more than one task attempt.  The
+            # dispatch id is the external run identity, so a constant would
+            # collide on the second task and make the adapter appear flaky.
+            dispatch_id = _identifier(f"project-dispatch-{uuid.uuid4().hex}")
             now = _now()
             with self.store._connect() as connection:
                 connection.execute(
