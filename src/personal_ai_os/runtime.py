@@ -10,6 +10,9 @@ from typing import Any
 
 from .cognition import compile_operating_practices, validate_memory_candidate
 from .dispatching import select_execution_route
+from .memory_context import BLOCKED as MEMORY_BLOCKED
+from .memory_context import READY as MEMORY_READY
+from .memory_context import read_memory_context
 from .presets import get_workflow_preset
 from .secretary import build_context_pack, model_context_for_task
 from .states import TASK_STATES
@@ -1616,12 +1619,14 @@ class ExecutionBroker:
         *,
         domain_profiles: dict[str, dict[str, Any]] | None = None,
         work_protocols: list[dict[str, Any]] | None = None,
+        registered_memory_refs: Any = None,
     ):
         self.store = store
         self.adapters = dict(adapters)
         self._active_task_ids: set[str] = set()
         self._active_tasks_guard = threading.Lock()
         self.domain_profiles = domain_profiles or {}
+        self.registered_memory_refs = registered_memory_refs
         protocols = work_protocol_catalog() if work_protocols is None else work_protocols
         protocols = validate_work_protocols(
             {"schema_version": WORK_PROTOCOL_SCHEMA_VERSION, "protocols": protocols}
@@ -1629,6 +1634,35 @@ class ExecutionBroker:
         self.work_protocols = {
             str(item["protocol_id"]): dict(item) for item in protocols
         }
+
+    def _memory_registry(self) -> Any:
+        """Return a source-agnostic reference index for the current dispatch.
+
+        Integrators can provide their own registry. The local candidate table is
+        only an adapter for the same contract; it is never read when an
+        explicit registry is supplied.
+        """
+        if self.registered_memory_refs is not None:
+            return self.registered_memory_refs
+        references = []
+        for candidate in self.store.snapshot().get("memory_candidates", []):
+            evidence_refs = list(candidate.get("evidence_refs") or [])
+            subject = candidate.get("subject") or {}
+            references.append(
+                {
+                    "memory_id": candidate.get("candidate_id"),
+                    "title": candidate.get("category") or candidate.get("candidate_id"),
+                    "status": candidate.get("status"),
+                    "subject": {
+                        "kind": subject.get("kind"),
+                        "id": subject.get("id"),
+                    },
+                    "domain_id": candidate.get("domain_id"),
+                    "source_ref": evidence_refs[0] if evidence_refs else "",
+                    "facts": [candidate.get("statement") or ""],
+                }
+            )
+        return references
 
     def adapter_catalog(self) -> list[dict[str, Any]]:
         return [self.adapters[key].probe() for key in sorted(self.adapters)]
@@ -1728,6 +1762,20 @@ class ExecutionBroker:
         task = self.store.get_task(task_id)
         if task["status"] != "QUEUED":
             return {"ok": False, "reason": "TASK_NOT_QUEUED", "status": task["status"]}
+        memory_context = None
+        task_context = task.get("context") or {}
+        if isinstance(task_context, dict) and task_context.get("memory_policy") is not None:
+            memory_context = read_memory_context(
+                task,
+                registered_refs=self._memory_registry(),
+            )
+            if memory_context.get("status") == MEMORY_BLOCKED:
+                return {
+                    "ok": False,
+                    "status": "QUEUED",
+                    "reason": memory_context.get("reason") or "MEMORY_READ_BLOCKED",
+                    "memory_read": memory_context,
+                }
         required_memory = _required_memory_scope(task)
         if required_memory and required_memory.get("error"):
             return {
@@ -1836,7 +1884,25 @@ class ExecutionBroker:
             if required_memory is not None
             else task["domain_id"]
         )
-        if practice_subject is not None:
+        if memory_context and memory_context.get("status") == MEMORY_READY:
+            memory_entries = list(memory_context.get("entries") or [])
+            profile["memory_context"] = memory_context
+            profile["memory_refs"] = list(memory_context.get("memory_ref_ids") or [])
+            profile["approved_practice_refs"] = list(
+                memory_context.get("memory_ref_ids") or []
+            )
+            profile["practice_evidence_refs"] = [
+                entry["source_ref"]
+                for entry in memory_entries
+                if entry.get("source_ref")
+            ]
+            profile["operating_practices"] = [
+                value
+                for entry in memory_entries
+                for field in ("facts", "decisions")
+                for value in entry.get(field, [])
+            ]
+        elif practice_subject is not None:
             if not isinstance(practice_subject, dict):
                 return {"ok": False, "reason": "PRACTICE_SCOPE_INVALID"}
             try:
@@ -1860,6 +1926,7 @@ class ExecutionBroker:
                 profile,
                 upstream_artifacts=upstream_artifacts,
                 work_protocol=work_protocol,
+                memory_context=memory_context,
             )
         except ValueError as exc:
             message = str(exc).lower()
@@ -1954,15 +2021,29 @@ class ExecutionBroker:
                     memory_review_payload = {
                         "protocol_id": work_protocol["protocol_id"],
                     }
-                if required_memory is not None:
+                if memory_context and memory_context.get("status") == MEMORY_READY:
                     memory_review_payload = {
                         **(memory_review_payload or {}),
                         "memory_policy": required_memory["policy"],
                         "memory_subject": required_memory["subject"],
                         "memory_domain_id": required_memory["domain_id"],
-                        "approved_practice_refs": profile.get(
-                            "approved_practice_refs", []
+                        "memory_read_status": MEMORY_READY,
+                        "memory_ref_ids": list(
+                            memory_context.get("memory_ref_ids") or []
                         ),
+                        "approved_practice_refs": profile.get("approved_practice_refs", []),
+                        "candidate": {
+                            "status": "CANDIDATE",
+                            "source_task_id": task_id,
+                            "source_run_id": run["run_id"],
+                            "memory_ref_ids": list(
+                                memory_context.get("memory_ref_ids") or []
+                            ),
+                            "promotion": {
+                                "status": "NOT_REQUESTED",
+                                "authorized": False,
+                            },
+                        },
                     }
                 if memory_review_payload is not None:
                     self.store._record_event(

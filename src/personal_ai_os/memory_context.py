@@ -103,8 +103,10 @@ def _required_scope(
     domain_id = str(context.get("memory_domain_id") or "").strip()
     task_domain = str(task.get("domain_id") or "").strip()
     refs, refs_error = _requested_refs(context.get("memory_refs"))
-    if subject is None or not domain_id or not task_domain or refs_error:
-        return None, refs_error or "MEMORY_SCOPE_REQUIRED"
+    if subject is None or not domain_id or not task_domain:
+        return None, "MEMORY_SCOPE_REQUIRED"
+    if refs_error:
+        return None, refs_error
     if domain_id != task_domain:
         return None, "MEMORY_SCOPE_MISMATCH"
     return {

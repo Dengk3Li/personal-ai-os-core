@@ -201,9 +201,9 @@ personal-ai-os runtime serve \
 
 ## v0.18 强制读取记忆与仅复核学习
 
-任务可以在 `context.memory_policy` 中声明 `"require_read"`，要求运行前读取已经批准的工作方式。任务必须明确提供 `memory_subject` 和与任务领域一致的 `memory_domain_id`。范围缺失或不匹配时，Broker 在领取运行权之前返回稳定错误，任务保持 `QUEUED`。
+任务可以在 `context.memory_policy` 中声明 `"require_read"`，要求运行前读取已经批准的工作方式。任务必须明确提供 `memory_refs`、`memory_subject` 和与任务领域一致的 `memory_domain_id`。引用缺失、未批准、来源未绑定、上下文超限或范围不匹配时，Broker 在领取运行权之前返回稳定错误，任务保持 `QUEUED`。
 
-发送给模型的执行上下文带有有界的 `approved_practice_refs`、工作规则和证据引用，只加载主体与领域同时匹配且状态为 `APPROVED` 的候选。成功运行只登记带范围与批准引用的 `MEMORY_REVIEW_REQUESTED`，不会自动创建、批准或提升记忆候选。未声明该策略的历史任务继续沿用兼容路径。
+Broker 在领取运行权之前调用 source-agnostic 的 `read_memory_context` 合同，读取显式提供的 `registered_memory_refs` 索引；本地候选表也只能通过同一套有界投影接入。发送给模型的执行上下文只带入选中的、有界引用及其事实/决定摘要。成功运行只登记 `CANDIDATE` 状态的 `MEMORY_REVIEW_REQUESTED`，不会写入、批准或提升记忆候选。未声明该策略的历史任务继续沿用兼容路径。
 
 ## 操作闭环
 

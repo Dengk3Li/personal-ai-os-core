@@ -29,6 +29,7 @@ def build_context_pack(
     *,
     upstream_artifacts: list[dict[str, Any]] | None = None,
     work_protocol: dict[str, Any] | None = None,
+    memory_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the smallest transferable task context without copying memory bodies."""
     profile = domain_profile or {}
@@ -53,6 +54,7 @@ def build_context_pack(
     operating_practices = list(profile.get("operating_practices") or [])
     practice_evidence_refs = list(profile.get("practice_evidence_refs") or [])
     approved_practice_refs = list(profile.get("approved_practice_refs") or [])
+    bounded_memory_context = dict(memory_context or {})
     bounded_context = json.dumps(
         {
             "model_context": model_context,
@@ -60,6 +62,7 @@ def build_context_pack(
             "practice_evidence_refs": practice_evidence_refs,
             "approved_practice_refs": approved_practice_refs,
             "work_protocol": work_protocol or {},
+            "memory_context": bounded_memory_context,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -87,6 +90,9 @@ def build_context_pack(
         "practice_evidence_refs": practice_evidence_refs,
         "approved_practice_refs": approved_practice_refs,
         "work_protocol": dict(work_protocol or {}),
+        "memory_read_status": bounded_memory_context.get("status"),
+        "memory_ref_ids": list(bounded_memory_context.get("memory_ref_ids") or []),
+        "memory_context": bounded_memory_context,
     }
 
 

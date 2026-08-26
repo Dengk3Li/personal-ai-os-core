@@ -217,9 +217,9 @@ App-server `cwd` selects a filesystem location but does not assign a Codex deskt
 
 ## v0.18 required memory read and review-only learning
 
-A task may declare `context.memory_policy: "require_read"` when its execution must use approved working practices. The task must provide an explicit `memory_subject` and `memory_domain_id` matching the task domain. Missing or mismatched scope stops the Broker before it claims a run, leaving the task `QUEUED`.
+A task may declare `context.memory_policy: "require_read"` when its execution must use approved working practices. The task must provide explicit `memory_refs`, a `memory_subject`, and a `memory_domain_id` matching the task domain. Missing, unapproved, source-unbound, oversized, or mismatched memory scope stops the Broker before it claims a run, leaving the task `QUEUED`.
 
-The model-bound context carries bounded `approved_practice_refs`, working-practice rules, and evidence references. Only `APPROVED` candidates matching both subject and domain are loaded. A successful run records `MEMORY_REVIEW_REQUESTED` with the applied scope and approved references; it never creates, approves, or promotes a memory candidate automatically. Tasks without this policy retain the existing compatibility path.
+Before claim, the Broker applies the source-agnostic `read_memory_context` contract to an explicitly supplied `registered_memory_refs` index (or the local candidate table through the same bounded projection). The model-bound context carries only selected, bounded references and their facts/decisions summaries. A successful run records a `CANDIDATE` `MEMORY_REVIEW_REQUESTED` event with the applied scope and approved references; it never writes, approves, or promotes a memory candidate automatically. Tasks without this policy retain the existing compatibility path.
 
 ## Operating model
 

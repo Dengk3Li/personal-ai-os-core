@@ -295,6 +295,7 @@ class CognitiveProfileTests(unittest.TestCase):
             "acceptance": "运行前必须读取已确认工作方式",
             "context": {
                 "memory_policy": "require_read",
+                "memory_refs": ["habit-1"],
                 "memory_subject": {"kind": "person", "id": "writer-a"},
                 "memory_domain_id": "writing",
             },
