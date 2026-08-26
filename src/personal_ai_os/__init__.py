@@ -57,6 +57,12 @@ from .codex_project import CodexProjectAdapter
 from .codex_worker import finish_once as finish_codex_dispatch, run_once as run_codex_dispatch_once
 from .secretary import build_context_pack, build_secretary_brief
 from .task_links import module_work_projection, validate_task_module_link
+from .task_envelope import (
+    TASK_ENVELOPE_VERSION,
+    TASK_MODULE_LINK_VERSION,
+    validate_task_envelope,
+    validate_task_module_link_v1,
+)
 from .truth import compile_truth
 from .workflow import transition_task
 from .workflow_structure import compile_workflow_structure, evaluate_workflow_structure
@@ -125,6 +131,8 @@ __all__ = [
     "select_ready_task",
     "select_execution_route",
     "task_route_requirements",
+    "TASK_ENVELOPE_VERSION",
+    "TASK_MODULE_LINK_VERSION",
     "submit_for_review",
     "sync_runtime_plan",
     "synthetic_research_report_fixture",
@@ -134,6 +142,8 @@ __all__ = [
     "validate_research_report_acceptance",
     "validate_research_task_inputs",
     "validate_task_module_link",
+    "validate_task_envelope",
+    "validate_task_module_link_v1",
     "verify_freeze",
     "expire_lease",
     "get_workflow_preset",
