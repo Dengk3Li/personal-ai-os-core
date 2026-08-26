@@ -29,6 +29,22 @@ class ReferenceProjectLicenseDocsTest(unittest.TestCase):
         self.assertIn("NOTICE", text)
         self.assertIn("逐文件核对", text)
 
+    def test_public_docs_describe_practice_candidate_boundary_and_current_counts(self):
+        english = (ROOT / "README.md").read_text(encoding="utf-8")
+        chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+        product = (ROOT / "PRODUCT.md").read_text(encoding="utf-8")
+
+        self.assertIn("personal-ai-os.practice-candidate/v1", english)
+        self.assertIn("does not write long-term memory", english)
+        self.assertIn("PolyForm Noncommercial license", english)
+        self.assertIn("298 Python tests and 89 Workbench tests", english)
+        self.assertIn("personal-ai-os.practice-candidate/v1", chinese)
+        self.assertIn("不会写入长期记忆", chinese)
+        self.assertIn("298 个 Python 测试和 89 个 Workbench 测试", chinese)
+        self.assertIn("personal-ai-os.practice-candidate/v1", product)
+        self.assertIn("PolyForm Noncommercial 1.0.0", product)
+        self.assertIn("298 个 Python 用例和 89 个 Workbench 用例", product)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -205,6 +205,10 @@ personal-ai-os runtime serve \
 
 Broker 在领取运行权之前调用 source-agnostic 的 `read_memory_context` 合同，读取显式提供的 `registered_memory_refs` 索引；本地候选表也只能通过同一套有界投影接入。发送给模型的执行上下文只带入选中的、有界引用及其事实/决定摘要。成功运行只登记 `CANDIDATE` 状态的 `MEMORY_REVIEW_REQUESTED`，不会写入、批准或提升记忆候选。未声明该策略的历史任务继续沿用兼容路径。
 
+公开核心另提供独立的 `personal-ai-os.practice-candidate/v1` 引用式合同，供适配器预览工作方式候选。它只携带候选引用、有限来源引用、匿名的主体/领域范围引用和人工审核状态，不包含工作方式正文、路径、业务标签或凭据。`PROPOSED` 表示尚未审核；`APPROVED` 和 `REJECTED` 必须带审核者引用。纯校验器不会写入长期记忆，也不会自动批准候选；该合同同样受仓库 [PolyForm Noncommercial 许可证](LICENSE) 约束。
+
+当前公开测试覆盖为 298 个 Python 测试和 89 个 Workbench 测试（`make test`）。
+
 任务路由保持为可替换的执行边界合同。任务只声明复杂度层级
 （`complexity`）、所需能力，以及可选的
 `context.routing.estimated_context_tokens` 上下文预算。

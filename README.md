@@ -227,6 +227,10 @@ A task may declare `context.memory_policy: "require_read"` when its execution mu
 
 Before claim, the Broker applies the source-agnostic `read_memory_context` contract to an explicitly supplied `registered_memory_refs` index (or the local candidate table through the same bounded projection). The model-bound context carries only selected, bounded references and their facts/decisions summaries. A successful run records a `CANDIDATE` `MEMORY_REVIEW_REQUESTED` event with the applied scope and approved references; it never writes, approves, or promotes a memory candidate automatically. Tasks without this policy retain the existing compatibility path.
 
+The public `personal-ai-os.practice-candidate/v1` contract is a separate, reference-only boundary for adapter previews. It carries only a candidate reference, bounded source references, anonymous subject/domain scope references, and human review state. It has no practice statement, body, local path, business label, or credential. `PROPOSED` is unreviewed; `APPROVED` and `REJECTED` require a reviewer reference. The pure validator does not write long-term memory or approve a candidate, and it remains subject to the repository's [PolyForm Noncommercial license](LICENSE).
+
+The current public suite covers this boundary with 298 Python tests and 89 Workbench tests (`make test`).
+
 Task routing is a replaceable contract at the execution boundary. A task
 declares only its tier (`complexity`), required capabilities, and an optional
 `context.routing.estimated_context_tokens` budget. `task_route_requirements()`

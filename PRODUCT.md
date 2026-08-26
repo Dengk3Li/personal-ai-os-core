@@ -52,6 +52,7 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 - `personal-ai-os.goal/v1` 把跨工作线长期目标独立于聊天和工作线说明持久化。目标保存完成条件、单次与累计预算、累计步数、已观测 Token 和追加式事件；预算耗尽进入 `BUDGET_LIMITED`，范围任务收口进入 `AWAITING_ACCEPTANCE`，只有人工验收才进入 `COMPLETE`。
 - GoalController 复用现有依赖、Human Gate、路由、原子任务占用与结果验收。SQLite 目标续推占用阻止两个进程重复续推；未结束占用在重启后进入恢复确认，不自动重放未知外部动作。
 - `personal-ai-os.memory-candidate/v1` 按个人或团队、领域、类别和证据保存工作方式候选。新候选必须为 `PROPOSED`；只有带非空审核主体的显式审核可以写为 `APPROVED / REJECTED`，审核事件追加保存。模型上下文只加载主体与领域同时匹配的已确认规则，并与显式模型上下文共享 12,000 字符预算。
+- `personal-ai-os.practice-candidate/v1` 是不携带正文的公开候选边界，只允许候选引用、来源引用、匿名范围引用和人工审核状态。`PROPOSED` 只能表示待审核；`APPROVED / REJECTED` 必须带审核者引用。该纯合同不写入长期记忆、不携带路径或业务标签，适配器必须在本地保存正文并先完成脱敏。
 - `personal-ai-os.work-protocols/v1` 把强制指令、模板引用、执行规则和个人或团队记忆主体绑定到工作流。Broker 在领取运行权前加载协议和已确认习惯；缺少协议时任务保持待分配。成功运行只发起经验复核，不自动提升长期记忆。
 - 模型、自动路由、执行适配器和 API 状态集中在后台“设置”；工作进度不提供逐任务配置控件。私人本地模式可以在浏览器中自动绑定本机 Codex，或把兼容 API 的地址、模型和密钥绑定到当前服务会话。密钥不进入浏览器投影、SQLite 或运行事件。
 - `personal-ai-os.module-task-link/v1` 用 `BUILDS / CHANGES / USES / VALIDATES / BLOCKED_BY / AFFECTS` 连接任务和系统模块。自动分析关系保持候选，已确认关系才进入模块进度统计；未关联任务保持可见。
@@ -77,6 +78,12 @@ Personal AI OS 把长期目标拆成可执行的短任务，把任务放入可�
 - 当前全量测试通过 272 个 Python 用例和 88 个 Workbench 用例，覆盖 Codex app-server 协议、浏览器执行绑定、密钥不回显、路由原子替换、非敏感执行设置重启恢复、最终消息边界、实时运行与重启恢复区分，以及工作协议、任务后经验复核、自动路由、计划同步、模块边界、持久目标、Human Gate、刷新位置保持、工作线推进门、只读验收投影和研究输入门。
 - SQLite 原子状态转换保证同一任务只有一个模型调用方；完整的多进程调度、租约续期和崩溃恢复仍未交付。
 - 公开仓库不包含真实用户工作区数据、模型密钥、商业指标或研究结论；用户选择的本地 SQLite 文件可能保存模型输出，必须按本地敏感数据管理，不能提交到 Git。
+
+## License boundary
+
+公开代码以 [PolyForm Noncommercial 1.0.0](LICENSE) 提供。许可证范围内的个人与非商业使用须保留版权声明；商业使用需要另行取得 Dengk3Li 的书面付费许可并署名。`PracticeCandidate/v1` 只定义安全元数据边界，不改变仓库许可证条件，也不授予任何商业权利。
+
+当前全量测试通过 298 个 Python 用例和 89 个 Workbench 用例（`make test`）。
 
 ## Product Principles
 
