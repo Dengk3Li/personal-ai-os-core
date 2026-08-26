@@ -50,6 +50,8 @@
 
 私仓适配器可以把本地任务映射为该合同，但必须在边界前完成脱敏与权限判断。该校验器不读取文件、不访问私有任务卡、不调用模型，也不宣称任务或研究报告已经完成。
 
+批量 dry-run 使用 `preview_task_envelopes`。每项以 `{envelope, goal, next_action}` 传入，其中 `goal` 与 `next_action` 也只接受匿名引用；相同 `origin + task_id` 的完全重复项会合并。相同键但内容不同、缺少必要引用或输入不合法时，结果统一为 `BLOCKED`，只返回固定 `reason`、`next_action`、索引级 `issues` 和计数，不回显正文、路径或凭据。该预检是纯函数，明确标记 `read_only: true` 与 `runtime_write: false`。
+
 ## TemplateSelection/v1
 
 公开核心提供 `TemplateSelection/v1` 作为模板绑定的只读元数据合同。它只接受 `template_id`、`version`、`source_ref`、`content_sha256` 和 `task_kind`（以及版本字段），所有标识必须是不带路径的匿名标识，正文、凭据和适配器私有字段均被拒绝。
@@ -62,6 +64,7 @@
 - `tests/test_runtime_memory_context.py`：Broker 在 run claim 前 fail closed，成功读取只产生候选事件且不写入记忆表。
 - `tests/test_work_protocols.py`：协议学习路径的复核事件显式携带 `CANDIDATE` 元数据，并保留未授权提升状态。
 - `tests/test_task_envelope.py`：TaskEnvelope/v1 规范化、类型化模块引用、未知字段、路径/业务文案与重复引用拒绝。
+- `tests/test_task_envelope.py`：批量预检的去重、冲突、缺少目标/下一动作和敏感值不回显。
 - `tests/test_template_selection.py`：TemplateSelection/v1 的字段边界、哈希规范化、路径/正文/凭据与业务文案拒绝。
 
 ## 未交付边界

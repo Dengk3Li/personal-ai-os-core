@@ -59,7 +59,9 @@ from .secretary import build_context_pack, build_secretary_brief
 from .task_links import module_work_projection, validate_task_module_link
 from .task_envelope import (
     TASK_ENVELOPE_VERSION,
+    TASK_ENVELOPE_PREVIEW_VERSION,
     TASK_MODULE_LINK_VERSION,
+    preview_task_envelopes,
     validate_task_envelope,
     validate_task_module_link_v1,
 )
@@ -133,6 +135,7 @@ __all__ = [
     "select_execution_route",
     "task_route_requirements",
     "TASK_ENVELOPE_VERSION",
+    "TASK_ENVELOPE_PREVIEW_VERSION",
     "TASK_MODULE_LINK_VERSION",
     "TEMPLATE_SELECTION_VERSION",
     "submit_for_review",
@@ -146,6 +149,7 @@ __all__ = [
     "validate_task_module_link",
     "validate_task_envelope",
     "validate_task_module_link_v1",
+    "preview_task_envelopes",
     "validate_template_selection",
     "verify_freeze",
     "expire_lease",

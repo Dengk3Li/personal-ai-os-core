@@ -4,6 +4,7 @@ import unittest
 from personal_ai_os.task_envelope import (
     TASK_ENVELOPE_VERSION,
     TASK_MODULE_LINK_VERSION,
+    preview_task_envelopes,
     validate_task_envelope,
     validate_task_module_link_v1,
 )
@@ -100,6 +101,72 @@ class TaskEnvelopeTests(unittest.TestCase):
 
         self.assertNotIn("/private/sensitive-source", str(raised.exception))
         self.assertNotIn("/private/sensitive-source", json.dumps(self.valid_envelope()))
+
+    def test_batch_preview_deduplicates_identical_origin_and_task(self):
+        item = {
+            "envelope": self.valid_envelope(),
+            "goal": "goal-001",
+            "next_action": "action-001",
+        }
+
+        result = preview_task_envelopes([item, dict(item)])
+
+        self.assertEqual("READY", result["status"])
+        self.assertTrue(result["read_only"])
+        self.assertFalse(result["runtime_write"])
+        self.assertEqual(2, result["summary"]["input_count"])
+        self.assertEqual(1, result["summary"]["unique_count"])
+        self.assertEqual(1, result["summary"]["duplicate_count"])
+        self.assertEqual(1, len(result["items"]))
+        self.assertEqual("goal-001", result["items"][0]["goal"])
+
+    def test_batch_preview_blocks_conflicting_origin_and_task(self):
+        first = {
+            "envelope": self.valid_envelope(),
+            "goal": "goal-001",
+            "next_action": "action-001",
+        }
+        second = {
+            "envelope": self.valid_envelope(),
+            "goal": "goal-002",
+            "next_action": "action-001",
+        }
+
+        result = preview_task_envelopes([first, second])
+
+        self.assertEqual("BLOCKED", result["status"])
+        self.assertEqual("DUPLICATE_TASK_CONFLICT", result["reason"]["code"])
+        self.assertEqual("RECONCILE_TASK_DUPLICATES", result["next_action"]["code"])
+        self.assertEqual([{"index": 1, "code": "DUPLICATE_TASK_CONFLICT"}], result["issues"])
+        self.assertNotIn("goal-002", json.dumps(result))
+
+    def test_batch_preview_blocks_missing_goal_or_next_action(self):
+        item = {"envelope": self.valid_envelope(), "goal": "goal-001"}
+
+        result = preview_task_envelopes([item])
+
+        self.assertEqual("BLOCKED", result["status"])
+        self.assertEqual("REQUIRED_METADATA", result["reason"]["code"])
+        self.assertEqual("PROVIDE_TASK_METADATA", result["next_action"]["code"])
+        self.assertEqual(
+            [{"index": 0, "code": "NEXT_ACTION_REQUIRED"}],
+            result["issues"],
+        )
+        self.assertNotIn("goal-001", json.dumps(result))
+
+    def test_batch_preview_rejects_private_input_without_echoing_it(self):
+        item = {
+            "envelope": self.valid_envelope(),
+            "goal": "goal-001",
+            "next_action": "/private/template-body",
+        }
+
+        result = preview_task_envelopes([item])
+
+        self.assertEqual("BLOCKED", result["status"])
+        self.assertEqual("INVALID_TASK_METADATA", result["reason"]["code"])
+        self.assertEqual([{"index": 0, "code": "NEXT_ACTION_INVALID"}], result["issues"])
+        self.assertNotIn("/private/template-body", json.dumps(result))
 
 
 if __name__ == "__main__":
