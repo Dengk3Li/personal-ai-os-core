@@ -19,7 +19,10 @@ from .runtime import ExecutionBroker, RuntimeStore
 from .runtime_events import EventValidationError, from_legacy_event
 from .automation import AutoAdvanceEngine
 from .goals import GoalController
-from .research_input_gate import preview_research_input
+from .research_input_gate import (
+    preview_research_input,
+    project_research_report_input,
+)
 from .secretary import build_secretary_brief
 from .task_links import module_work_projection
 from .presentation import (
@@ -1287,6 +1290,8 @@ class RuntimeRequestHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/research/report-input-preview":
                 result = preview_research_input(payload)
+            elif path == "/api/research/report-input-projection":
+                result = project_research_report_input(payload)
             elif path == "/api/workflows":
                 result = self.server.app.store.create_workflow(payload)
             elif path == "/api/runs":

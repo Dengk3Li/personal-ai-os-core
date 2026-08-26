@@ -30,6 +30,7 @@ from .research_input_gate import (
     ResearchInputGateValidationError,
     preview_research_input,
     preview_research_task_inputs,
+    project_research_report_input,
     validate_research_task_inputs,
 )
 from .automation import AutoAdvanceEngine
@@ -120,6 +121,7 @@ __all__ = [
     "ResearchInputGateValidationError",
     "preview_research_input",
     "preview_research_task_inputs",
+    "project_research_report_input",
     "select_ready_task",
     "select_execution_route",
     "task_route_requirements",

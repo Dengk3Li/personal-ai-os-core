@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 
 SCHEMA_VERSION = "personal-ai-os.research-input-gate/v1"
+REPORT_INPUT_PROJECTION_SCHEMA_VERSION = "personal-ai-os.research-report-input-projection/v1"
 READY_FOR_INPUT_STATUS = "READY_FOR_INPUT"
 REPORT_INPUT_REQUIRED_STATUS = "REPORT_INPUT_REQUIRED"
 REPORT_INPUT_INVALID_STATUS = "REPORT_INPUT_INVALID"
@@ -163,3 +164,63 @@ def preview_research_task_inputs(**inputs: Any) -> dict[str, Any]:
     """Compatibility-shaped keyword wrapper for local callers."""
 
     return preview_research_input(inputs)
+
+
+def project_research_report_input(
+    payload: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Build a read-only, user-actionable report-input projection.
+
+    This projection deliberately uses only fixed Chinese copy and the safe
+    missing-input paths returned by :func:`preview_research_input`.  It never
+    echoes submitted values, creates report state, or treats input readiness
+    as report completion.
+    """
+
+    readiness = preview_research_input(payload)
+    status = readiness.get("status")
+    if status == READY_FOR_INPUT_STATUS:
+        return {
+            "schema_version": REPORT_INPUT_PROJECTION_SCHEMA_VERSION,
+            "status": "READY",
+            "reason": {
+                "code": "REPORT_INPUT_READY",
+                "label": "研究报告输入已就绪",
+            },
+            "next_action": {
+                "code": "START_REPORT_PIPELINE",
+                "label": "开始来源收集与证据核对",
+            },
+            "missing_inputs": [],
+            "can_start": True,
+            "report_status": "NOT_STARTED",
+        }
+
+    if status == REPORT_INPUT_REQUIRED_STATUS:
+        reason = {
+            "code": "REPORT_INPUT_REQUIRED",
+            "label": "研究报告输入未就绪",
+        }
+        next_action = {
+            "code": "PROVIDE_REPORT_INPUTS",
+            "label": "补齐研究问题、范围、受众、格式和来源策略",
+        }
+    else:
+        reason = {
+            "code": "REPORT_INPUT_INVALID",
+            "label": "研究报告输入无法检查",
+        }
+        next_action = {
+            "code": "FIX_REPORT_INPUTS",
+            "label": "修正输入格式后重新检查",
+        }
+
+    return {
+        "schema_version": REPORT_INPUT_PROJECTION_SCHEMA_VERSION,
+        "status": "BLOCKED",
+        "reason": reason,
+        "next_action": next_action,
+        "missing_inputs": list(readiness.get("missing_inputs") or []),
+        "can_start": False,
+        "report_status": "NOT_STARTED",
+    }

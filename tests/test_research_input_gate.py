@@ -10,7 +10,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from personal_ai_os.cli import main
-from personal_ai_os.research_input_gate import preview_research_input
+from personal_ai_os.research_input_gate import (
+    preview_research_input,
+    project_research_report_input,
+)
 from personal_ai_os.runtime import RuntimeStore, install_workflow_preset
 from personal_ai_os.server import create_runtime_server
 
@@ -59,6 +62,41 @@ class ResearchInputGateTests(unittest.TestCase):
             ],
             result["missing_inputs"],
         )
+
+    def test_report_input_projection_blocks_with_chinese_reason_and_next_action(self):
+        result = project_research_report_input(
+            {
+                "research_question": "占位",
+                "scope": {"time_boundary": "2026"},
+                "audience": "内部",
+                "format": None,
+                "source_policy": {},
+            }
+        )
+
+        self.assertEqual("BLOCKED", result["status"])
+        self.assertEqual("REPORT_INPUT_REQUIRED", result["reason"]["code"])
+        self.assertIn("补齐", result["next_action"]["label"])
+        self.assertEqual("NOT_STARTED", result["report_status"])
+        self.assertFalse(result["can_start"])
+        self.assertNotIn("占位", json.dumps(result, ensure_ascii=False))
+
+    def test_report_input_projection_marks_ready_without_claiming_report_completion(self):
+        result = project_research_report_input(
+            {
+                "research_question": "How does the system route work?",
+                "scope": {"time_boundary": "2026"},
+                "audience": "internal",
+                "format": "Markdown",
+                "source_policy": {"allowed_kinds": ["paper"]},
+            }
+        )
+
+        self.assertEqual("READY", result["status"])
+        self.assertEqual("REPORT_INPUT_READY", result["reason"]["code"])
+        self.assertEqual("开始来源收集与证据核对", result["next_action"]["label"])
+        self.assertEqual("NOT_STARTED", result["report_status"])
+        self.assertTrue(result["can_start"])
 
     def test_complete_inputs_only_return_readiness_and_never_echo_values(self):
         result = preview_research_input(
@@ -142,6 +180,57 @@ class ResearchInputGateTests(unittest.TestCase):
                 [{"path": "research_task.research_question", "reason": "PLACEHOLDER"}],
                 result["missing_inputs"],
             )
+            self.assertEqual(before, store.snapshot())
+            self.assertNotIn("/private/secret", json.dumps(result))
+
+    def test_http_report_input_projection_returns_actionable_block(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = RuntimeStore(Path(directory) / "runtime.db")
+            install_workflow_preset(store, "science")
+            before = store.snapshot()
+            server = create_runtime_server(
+                ("127.0.0.1", 0),
+                store=store,
+                adapters={},
+                default_model="model-a",
+                web_root=Path(__file__).resolve().parents[1] / "workbench",
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for _ in range(30):
+                    try:
+                        with socket.create_connection(("127.0.0.1", server.server_port), timeout=0.2):
+                            break
+                    except OSError:
+                        time.sleep(0.05)
+                else:
+                    self.fail("loopback runtime server did not become ready")
+                payload = {
+                    "research_question": "占位",
+                    "scope": {"local_path": "/private/secret"},
+                    "audience": "内部",
+                    "format": None,
+                    "source_policy": {},
+                }
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.server_port}/api/research/report-input-projection",
+                    data=json.dumps(payload).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(request, timeout=3) as response:
+                    result = json.loads(response.read())
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+            self.assertEqual("BLOCKED", result["status"])
+            self.assertEqual("REPORT_INPUT_REQUIRED", result["reason"]["code"])
+            self.assertIn("补齐", result["next_action"]["label"])
+            self.assertEqual("NOT_STARTED", result["report_status"])
             self.assertEqual(before, store.snapshot())
             self.assertNotIn("/private/secret", json.dumps(result))
 
