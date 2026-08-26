@@ -4,7 +4,7 @@ Personal AI OS is a local-first operating layer for long-running AI work. It bre
 
 AI chat works well when one conversation owns one bounded task. Longer work is different: every new conversation must reconstruct earlier context, a generated plan does not know how to keep moving, and parallel attempts quickly become hard to verify. Personal AI OS adds the missing control layer between a long goal and individual AI runs.
 
-[中文说明](README.zh-CN.md) · [v0.18 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.18.md)
+[中文说明](README.zh-CN.md) · [v0.18 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.18.md) · [v0.19 taskbook](docs/DEVELOPMENT_TASKBOOK_V0.19.md)
 
 The project is intentionally narrower than a general-purpose agent platform. Existing tools already provide browsers, terminals, schedules, memory, subagents, and remote runtimes. Personal AI OS focuses on the layer above them: workspace structure, transferable task state, evidence-backed acceptance, decision packets, and continuity across executors.
 
@@ -161,6 +161,12 @@ personal-ai-os runtime goal-continue \
 The private-local Workbench shows the current durable goal, persisted budget usage, and one continuation action above the Domain/workline tabs. A SQLite continuation claim prevents competing processes from advancing the same goal twice. An unfinished claim after a crash fails closed as `GOAL_RECOVERY_REQUIRED`; v0.12 does not pretend to reconcile an unknown external side effect.
 
 This slice independently implements general control-plane mechanisms after reviewing Prime Agent, LangGraph, OpenHands, Letta Code, and LoopX. It does not copy their source code, product UI, trademarks, or brand assets. See [reference project license notes](docs/REFERENCE_PROJECT_LICENSES_V0.12.md).
+
+## v0.19 bounded runtime continuity
+
+The runtime acceptance projection now carries a references-only continuity capsule for each task. It keeps the task and dependency states, the latest run reference, the latest decision reference, bounded artifact references, and one short next action. Rich task text, model output, local paths, and credentials are filtered before the capsule is built. The capsule is pure and hashed, so it can be attached to the existing runtime and approved-memory projections without another database or daemon.
+
+In `public-safe` mode, the same capsule is built after the existing identifier projection and therefore contains only stable public aliases. A capsule describes where a later executor should resume; it never resumes work, accepts a result, or promotes a memory candidate by itself. The design is informed by durable continuation, checkpoint/interrupt, event/execution separation, and persistent-context patterns documented in the v0.12 and v0.13 taskbooks.
 
 ## v0.13 cognitive practice and module-task links
 
@@ -319,7 +325,7 @@ The commands emit machine-readable JSON. `inspect` and `plan` remain read-only; 
 | Module composition | Resolves versioned capability manifests and fails closed on broken graphs. |
 | Module issue handoff | Turns a selected module annotation into a persistent, assignable task without creating a second task system. |
 | Read-only intake | Inspects local structure and proposes a work map without modifying the target. |
-| Continuity | Preserves enough state to resume and verify a later run. |
+| Continuity | Attaches a hashed, references-only recovery capsule to each runtime acceptance snapshot; it preserves enough bounded state to resume and verify a later run without copying bodies, paths, or credentials. |
 | Persistent runtime | Stores task, run, event, artifact, and decision records in SQLite and replays them after restart. |
 | Runtime plan sync | Imports a versioned local work plan idempotently without overwriting live runtime truth. |
 | Secretary brief | Projects active work, pending review, blockers, and next actions without copying private memory bodies. |

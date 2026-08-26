@@ -13,6 +13,7 @@ from .adapters import OpenAICompatibleAdapter
 from .acceptance_projection import build_acceptance_snapshot
 from .codex_adapter import CodexAppServerAdapter
 from .codex_project import CodexProjectAdapter
+from .continuity import build_runtime_continuity_capsule
 from .route_config import RUNTIME_ROUTES_SCHEMA, validate_runtime_routes
 from .runtime import ExecutionBroker, RuntimeStore
 from .runtime_events import EventValidationError, from_legacy_event
@@ -127,6 +128,7 @@ def runtime_workbench_state(
     acceptance_artifacts_by_task: dict[str, list[dict[str, Any]]] = {}
     artifacts_by_task: dict[str, list[dict[str, Any]]] = {}
     latest_runs_by_task: dict[str, dict[str, Any]] = {}
+    latest_decisions_by_task: dict[str, dict[str, Any]] = {}
     downstream_by_task: dict[str, list[dict[str, Any]]] = {}
     attempts_by_run = {
         str(run.get("run_id")): int(run.get("attempt") or 1)
@@ -209,6 +211,10 @@ def runtime_workbench_state(
             str(previous.get("started_at") or ""),
         ):
             latest_runs_by_task[task_id] = run
+    for decision in snapshot.get("decisions", []):
+        task_id = str(decision.get("task_id") or "")
+        if task_id:
+            latest_decisions_by_task[task_id] = decision
     for task in snapshot.get("tasks", []):
         for dependency_id in task.get("depends_on") or []:
             downstream_by_task.setdefault(str(dependency_id), []).append(task)
@@ -273,6 +279,41 @@ def runtime_workbench_state(
                     "conversation_id": dispatch.get("thread_id"),
                 }
         return run
+
+    def continuity_next_action(task: dict[str, Any]) -> str:
+        return {
+            "QUEUED": "等待分配执行器",
+            "IN_PROGRESS": "等待本轮运行回执",
+            "REVIEW": "人工验收阶段产物",
+            "DONE": "复用已验收结果推进下游",
+            "ARCHIVED": "从已归档结果继续编排",
+            "BLOCKED": "处理阻断原因后恢复",
+            "PAUSED": "等待恢复决定",
+        }.get(str(task.get("status") or ""), "查看当前任务状态")
+
+    def continuity_capsule(task: dict[str, Any]) -> dict[str, Any]:
+        task_id = str(task.get("task_id") or "")
+        task_lookup = {str(item.get("task_id")): item for item in snapshot.get("tasks", [])}
+        dependencies = [
+            {
+                "task_id": dependency_id,
+                "status": str(task_lookup.get(str(dependency_id), {}).get("status") or "UNKNOWN"),
+            }
+            for dependency_id in task.get("depends_on") or []
+        ]
+        artifact_refs = list(task.get("artifact_refs") or [])
+        if task.get("result_ref"):
+            artifact_refs.append(task["result_ref"])
+        return build_runtime_continuity_capsule(
+            {
+                "task": task,
+                "dependencies": dependencies,
+                "latest_run": latest_runs_by_task.get(task_id),
+                "decision": latest_decisions_by_task.get(task_id),
+                "artifact_refs": artifact_refs,
+                "next_action": continuity_next_action(task),
+            }
+        )
     browser_task_fields = (
         "task_id",
         "workflow_id",
@@ -300,17 +341,20 @@ def runtime_workbench_state(
         "module_links",
         "result",
     )
-    tasks = [
-        {
+    tasks = []
+    for task in snapshot["tasks"]:
+        acceptance_snapshot = build_acceptance_snapshot(
+            acceptance_card(task),
+            acceptance_run(str(task["task_id"])),
+            events=acceptance_events_by_task.get(task["task_id"], []),
+            artifacts=acceptance_artifacts_by_task.get(task["task_id"], []),
+        )
+        acceptance_snapshot["continuity"] = continuity_capsule(task)
+        projected_task = {
             **{field: task.get(field) for field in browser_task_fields},
             "events": events_by_task.get(task["task_id"], []),
             "result": (artifacts_by_task.get(task["task_id"]) or [None])[-1],
-            "acceptance_snapshot": build_acceptance_snapshot(
-                acceptance_card(task),
-                acceptance_run(str(task["task_id"])),
-                events=acceptance_events_by_task.get(task["task_id"], []),
-                artifacts=acceptance_artifacts_by_task.get(task["task_id"], []),
-            ),
+            "acceptance_snapshot": acceptance_snapshot,
             **(
                 {
                     "codex_dispatch": {
@@ -335,8 +379,7 @@ def runtime_workbench_state(
                 else {}
             ),
         }
-        for task in snapshot["tasks"]
-    ]
+        tasks.append(projected_task)
     states = {task["task_id"]: task["status"] for task in tasks}
     tasks_by_id = {task["task_id"]: task for task in tasks}
     workflows = [

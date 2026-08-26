@@ -124,6 +124,26 @@ class RuntimeServerTests(unittest.TestCase):
         task = next(item for item in projection["tasks"] if item["task_id"] == "science:hypothesis")
         self.assertEqual("LEGACY_MISSING", task["codex_dispatch"]["receipt_state"])
 
+    def test_runtime_projection_includes_references_only_continuity_capsule(self):
+        projection = runtime_workbench_state(self.store)
+        task = next(item for item in projection["tasks"] if item["task_id"] == "science:hypothesis")
+
+        capsule = task["acceptance_snapshot"]["continuity"]
+
+        self.assertEqual("personal-ai-os.continuity/v2", capsule["schema_version"])
+        self.assertEqual(
+            {
+                "task_id": "science:hypothesis",
+                "workflow_id": "science",
+                "status": "QUEUED",
+            },
+            capsule["payload"]["task"],
+        )
+        self.assertEqual([], capsule["payload"]["artifact_refs"])
+        self.assertIsNone(capsule["payload"]["latest_run"])
+        self.assertIsNone(capsule["payload"]["decision"])
+        self.assertNotIn("context", json.dumps(capsule, ensure_ascii=False))
+
     def test_codex_projection_exposes_ownership_and_review_reason_for_unverified_receipt(self):
         projection = runtime_workbench_state(
             self.store,
@@ -309,6 +329,12 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("REGISTERED", task["result"]["status"])
         self.assertEqual("API result", task["result"]["summary"])
         self.assertEqual("API result", task["result"]["preview"])
+        continuity = task["acceptance_snapshot"]["continuity"]["payload"]
+        self.assertEqual(
+            task["acceptance_snapshot"]["execution"]["run_id"],
+            continuity["latest_run"]["run_id"],
+        )
+        self.assertEqual([task["result"]["artifact_id"]], continuity["artifact_refs"])
         self.assertRegex(task["result"]["created_at"], r"^\d{4}-\d{2}-\d{2}T")
         self.assertTrue(task["events"])
         self.assertRegex(task["events"][0]["occurred_at"], r"^\d{4}-\d{2}-\d{2}T")
@@ -345,6 +371,10 @@ class RuntimeServerTests(unittest.TestCase):
         self.assertEqual("REGISTERED", task["result"]["status"])
         self.assertNotIn("preview", task["result"])
         self.assertNotIn("API result", serialized)
+        self.assertEqual(
+            "task-001", task["acceptance_snapshot"]["continuity"]["payload"]["task"]["task_id"]
+        )
+        self.assertNotIn("science:hypothesis", serialized)
 
     def test_empty_workflow_keeps_its_domain_in_the_runtime_projection(self):
         created_status, created = self.request(
