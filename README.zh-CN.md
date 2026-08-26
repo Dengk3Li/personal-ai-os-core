@@ -222,7 +222,7 @@ print(validate_practice_candidate(payload))
 PY
 ```
 
-当前公开测试覆盖为 315 个 Python 测试和 89 个 Workbench 测试（`make test`）。
+当前公开测试覆盖为 319 个 Python 测试和 89 个 Workbench 测试（`make test`）。
 
 公开核心另提供 `personal-ai-os.execution-receipt/v1` 通用只读交接合同，用于表达项目归属的执行结果。绑定部分只保存不透明的 `project_id`、`thread_id`、`host_id` 引用和明确的验证标记；回执部分保存终态、结果、有界产物引用和最终输出引用，不携带输出正文。已完成回执必须经过验证、不能仍在等待用户输入或人工裁决，并且必须带最终输出引用；路径、业务标签和凭据会被拒绝。`validate_execution_receipt` 是纯函数，不会写入运行状态。
 
