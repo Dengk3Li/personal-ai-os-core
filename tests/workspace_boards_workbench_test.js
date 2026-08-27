@@ -11,6 +11,16 @@ test("the workspace has three stable entrances over one shared state", () => {
   assert.equal(view.global.readOnly, true);
 });
 
+test("selecting a workflow task keeps its line and domain in sync", () => {
+  const original = workbench.createShowcaseState();
+  const next = workbench.selectWorkflowTask(original, "flow-b-03");
+
+  assert.equal(next.activeTaskId, "flow-b-03");
+  assert.equal(next.activeLineId, "meeting-notes");
+  assert.equal(next.activeDomainId, "writing");
+  assert.equal(original.activeTaskId, "flow-a-03");
+});
+
 test("the module map is composable and marks planned capabilities honestly", () => {
   const map = workbench.workspaceView(workbench.createDemoState()).global;
   const tokenManager = map.modules.find((module) => module.module_id === "token-manager");

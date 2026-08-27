@@ -316,6 +316,19 @@
     return next;
   }
 
+  function selectWorkflowTask(state, taskId) {
+    const next = clone(state);
+    const task = next.tasks.find((item) => item.task_id === taskId);
+    if (!task) return next;
+    const line = next.businessLines.find((item) => item.line_id === task.line_id);
+    next.activeTaskId = task.task_id;
+    if (line) {
+      next.activeLineId = line.line_id;
+      next.activeDomainId = lineDomainId(next, line);
+    }
+    return next;
+  }
+
   function createWorkline(state, requestedName) {
     const next = clone(state);
     const sequence = next.businessLines.filter((line) => line.user_created).length + 1;
@@ -1667,7 +1680,7 @@
       if (event.target.dataset.planAction === "approve") { state = approvePlan(state); render(); return; }
       const workflowTask = event.target.closest && event.target.closest("[data-workflow-task]");
       if (workflowTask) {
-        state.activeTaskId = workflowTask.dataset.workflowTask;
+        state = selectWorkflowTask(state, workflowTask.dataset.workflowTask);
         render();
         return;
       }
@@ -1956,6 +1969,7 @@
     scrollActiveBoardIntoView,
     selectBoard,
     selectBusinessLine,
+    selectWorkflowTask,
     selectDomain,
     viewModel,
     workflowProjection,

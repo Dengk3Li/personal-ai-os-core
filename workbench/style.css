@@ -17,9 +17,13 @@
   --space-4: 1.5rem;
   --space-5: 2.25rem;
   --radius: .9rem;
+  --font-ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-display: "Noto Serif SC", "Songti SC", Georgia, "STSong", serif;
+  --font-mono: "SF Mono", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
   color: var(--ink);
   background: var(--paper);
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  font-family: var(--font-ui);
 }
 
 * { box-sizing: border-box; }
@@ -39,7 +43,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 }
 .brand-block { color: inherit; text-decoration: none; }
 .brand-block h1, .brand-block p { margin: 0; }
-.brand-block h1 { font-family: Georgia, "Songti SC", serif; font-size: clamp(1.8rem, 3vw, 2.5rem); font-weight: 500; letter-spacing: -.035em; line-height: 1; }
+.brand-block h1 { font-family: var(--font-display); font-size: clamp(1.8rem, 3vw, 2.5rem); font-weight: 500; letter-spacing: -.035em; line-height: 1; }
 .brand-block p { margin-top: .3rem; color: var(--muted); font-size: .72rem; }
 .top-actions, .card-actions { display: flex; align-items: center; gap: var(--space-2); }
 .ghost-button, .primary-button, .card-action, .task-action, .scan-button, .task-composer button {
@@ -55,7 +59,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .settings-panel { position: fixed; top: 5.3rem; right: clamp(1.25rem, 4vw, 4.5rem); z-index: 20; width: min(32rem, calc(100vw - 2.5rem)); max-height: calc(100vh - 6.5rem); padding: var(--space-4); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 1.25rem 4rem rgba(22, 33, 31, .18); }
 .settings-panel > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
 .settings-panel > header span, .settings-group > span { color: var(--accent); font-size: .62rem; font-weight: 850; letter-spacing: .06em; }
-.settings-panel h2, .settings-group h3 { margin: .2rem 0 0; font-family: Georgia, "Songti SC", serif; font-weight: 500; }
+.settings-panel h2, .settings-group h3 { margin: .2rem 0 0; font-family: var(--font-display); font-weight: 500; }
 .settings-layout { display: grid; gap: var(--space-3); padding-top: var(--space-3); }
 .settings-group { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: .75rem; background: var(--paper); }
 .settings-group p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.55; }
@@ -72,7 +76,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 main { padding: 0 clamp(1.25rem, 4vw, 4.5rem) 5rem; }
 .overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(28rem, .9fr); gap: var(--space-5); align-items: end; padding: 2.25rem 0 1.75rem; }
-.overview h2 { max-width: 12ch; margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(2.45rem, 5vw, 4.7rem); font-weight: 500; line-height: .98; letter-spacing: -.035em; }
+.overview h2 { max-width: 12ch; margin: 0; font-family: var(--font-display); font-size: clamp(2.45rem, 5vw, 4.7rem); font-weight: 500; line-height: .98; letter-spacing: -.035em; }
 .overview p { max-width: 65ch; margin: var(--space-3) 0 0; color: var(--muted); line-height: 1.6; }
 .privacy-marker { display: inline-flex; margin-top: var(--space-3); padding: .35rem .65rem; border-radius: 999px; color: var(--accent-dark); background: var(--signal); font-size: .68rem; font-weight: 800; }
 .run-summary { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; border-block: 1px solid var(--line); }
@@ -112,7 +116,7 @@ legend, .rail-label { margin-bottom: var(--space-2); color: var(--muted); font-s
 .item-list { display: grid; gap: var(--space-2); }
 
 .first-run-card { display: flex; align-items: end; justify-content: space-between; gap: var(--space-5); padding: var(--space-4); color: white; background: var(--accent); border-radius: var(--radius); }
-.first-run-card h3 { max-width: 28ch; margin: 0 0 var(--space-2); font-family: Georgia, "Songti SC", serif; font-size: clamp(1.45rem, 3vw, 2.2rem); font-weight: 500; line-height: 1.1; }
+.first-run-card h3 { max-width: 28ch; margin: 0 0 var(--space-2); font-family: var(--font-display); font-size: clamp(1.45rem, 3vw, 2.2rem); font-weight: 500; line-height: 1.1; }
 .first-run-card p { max-width: 65ch; margin: 0; color: rgba(255, 255, 255, .78); font-size: .78rem; line-height: 1.55; }
 .scan-button { flex: 0 0 auto; color: var(--ink); background: var(--signal); border-color: var(--signal); }
 .template-strip { display: flex; align-items: center; gap: var(--space-1); overflow-x: auto; padding: var(--space-3) 0; }
@@ -430,3 +434,31 @@ footer { padding: var(--space-4); color: var(--muted); text-align: center; font-
   .workflow-pet.image-pet img { display: none; }
   .workflow-pet.image-pet .pet-static { display: block; }
 }
+
+/* Typography hierarchy: reserve the display face for decisions and keep
+   operational metadata compact and easy to scan. */
+body, button, input, select, textarea, summary { font-family: var(--font-ui); }
+.overview h2,
+.first-run-card h3,
+.settings-panel h2,
+.settings-group h3,
+.feed-heading h2,
+.map-heading strong,
+.module-detail h3,
+.workflow-heading h3,
+.run-detail-head h3,
+.decision-card h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -.015em;
+  text-wrap: balance;
+}
+.feed-heading h2 { font-size: clamp(1.8rem, 3vw, 2.35rem); }
+.card-title, .workflow-node h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: -.01em; }
+.eyebrow, .count-chip, .status-pill, .signal-pill, .module-node-meta,
+.module-lane > span, .module-lane > em, .run-detail-meta dt,
+.event-trace time, .settings-status, .settings-group > span {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.eyebrow { letter-spacing: .09em; }
