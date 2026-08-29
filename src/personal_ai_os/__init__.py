@@ -2,7 +2,7 @@
 
 from .continuity import build_capsule
 from .cognition import compile_operating_practices, validate_memory_candidate
-from .dispatching import assign_task, select_execution_route
+from .dispatching import assign_task, select_dispatch_batch, select_execution_route
 from .freeze import freeze_assets, verify_freeze
 from .git_closure import evaluate_git_closure
 from .goals import GoalController, load_goal_definition
@@ -60,6 +60,7 @@ __all__ = [
     "ready_tasks",
     "route_task",
     "RuntimeStore",
+    "select_dispatch_batch",
     "select_execution_route",
     "sync_runtime_plan",
     "transition_task",

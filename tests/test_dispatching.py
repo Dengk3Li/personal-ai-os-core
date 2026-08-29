@@ -29,6 +29,39 @@ ROUTES = [
 
 
 class DynamicDispatchTests(unittest.TestCase):
+    def test_batch_dispatch_allows_non_conflicting_tasks_inside_one_domain(self):
+        select_dispatch_batch = getattr(personal_ai_os, "select_dispatch_batch", None)
+        self.assertTrue(callable(select_dispatch_batch), "select_dispatch_batch must be public")
+        result = select_dispatch_batch([
+            {"task_id": "R-1", "domain_id": "research", "status": "QUEUED",
+             "dispatch_ready": True, "resource_locks": ["path:research/data"]},
+            {"task_id": "R-2", "domain_id": "research", "status": "QUEUED",
+             "dispatch_ready": True, "resource_locks": ["path:research/report"]},
+        ])
+
+        self.assertEqual("READY", result["status"])
+        self.assertEqual(["R-1", "R-2"], [item["task_id"] for item in result["selected"]])
+        self.assertEqual(5, result["global_limit"])
+        self.assertTrue(all(item["acquisition"] == "ATOMIC_SORTED"
+                            for item in result["selected"]))
+
+    def test_batch_dispatch_blocks_path_overlap_and_unknown_active_resources(self):
+        select_dispatch_batch = getattr(personal_ai_os, "select_dispatch_batch", None)
+        active = [{"task_id": "ACTIVE", "state": "running",
+                   "resource_locks": ["path:research/data"]}]
+        conflict = select_dispatch_batch([
+            {"task_id": "NEXT", "domain_id": "research", "status": "QUEUED",
+             "dispatch_ready": True, "resource_locks": ["path:research/data/raw"]},
+        ], active_tasks=active)
+        unknown = select_dispatch_batch([
+            {"task_id": "NEXT", "domain_id": "research", "status": "QUEUED",
+             "dispatch_ready": True, "resource_locks": ["path:research/report"]},
+        ], active_tasks=[{"task_id": "ACTIVE", "state": "running"}])
+
+        self.assertEqual(["NEXT"], conflict["blocked_task_ids"])
+        self.assertEqual("UNKNOWN", unknown["status"])
+        self.assertEqual("ACTIVE_RESOURCE_UNKNOWN", unknown["reason"])
+
     def test_auto_route_selects_the_smallest_capable_context_window(self):
         select_execution_route = getattr(personal_ai_os, "select_execution_route", None)
         self.assertTrue(callable(select_execution_route), "select_execution_route must be public")

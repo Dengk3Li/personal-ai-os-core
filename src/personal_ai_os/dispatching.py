@@ -1,9 +1,112 @@
 from __future__ import annotations
 
+import posixpath
 from typing import Any
 
 
 TIER_RANK = {"quick": 1, "standard": 2, "deep": 3}
+
+
+def _resource_locks(task: dict[str, Any]) -> list[str]:
+    values = task.get("resource_locks")
+    if not isinstance(values, list):
+        return []
+    normalized = set()
+    for value in values:
+        lock = str(value or "").strip()
+        if lock.startswith("path:"):
+            path = posixpath.normpath(lock[5:].replace("\\", "/"))
+            if path in {"", ".", ".."} or path.startswith("../"):
+                continue
+            lock = f"path:{path}"
+        if lock:
+            normalized.add(lock)
+    return sorted(normalized)
+
+
+def _resource_conflict(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if left.startswith("path:") and right.startswith("path:"):
+        first, second = left[5:].rstrip("/"), right[5:].rstrip("/")
+        return first.startswith(second + "/") or second.startswith(first + "/")
+    return False
+
+
+def select_dispatch_batch(
+    tasks: list[dict[str, Any]],
+    *,
+    active_tasks: list[dict[str, Any]] | None = None,
+    global_limit: int = 5,
+) -> dict[str, Any]:
+    """Reserve complete resource sets for a bounded concurrent dispatch batch.
+
+    Domains define ownership and review context, not a mutex. Each selected
+    task acquires its sorted resource set atomically, so it never waits while
+    holding only part of its required resources.
+    """
+
+    if (not isinstance(tasks, list) or isinstance(global_limit, bool)
+            or not isinstance(global_limit, int) or not 1 <= global_limit <= 32):
+        return {"status": "UNKNOWN", "reason": "DISPATCH_INPUT_INVALID",
+                "selected": [], "blocked_task_ids": []}
+    active = [task for task in (active_tasks or []) if isinstance(task, dict)]
+    occupied: list[str] = []
+    unknown = []
+    for task in active:
+        locks = _resource_locks(task)
+        if not locks:
+            unknown.append(str(task.get("task_id") or "UNKNOWN"))
+        occupied.extend(locks)
+    if unknown:
+        return {
+            "status": "UNKNOWN", "reason": "ACTIVE_RESOURCE_UNKNOWN",
+            "selected": [], "blocked_task_ids": [],
+            "unknown_active_task_ids": unknown,
+            "global_limit": global_limit,
+        }
+
+    slots = max(0, global_limit - len(active))
+    selected = []
+    blocked = []
+    unresolved = []
+    candidates = sorted(
+        tasks,
+        key=lambda task: (str(task.get("domain_id") or ""),
+                          str(task.get("task_id") or "")),
+    )
+    for task in candidates:
+        if len(selected) >= slots:
+            break
+        if task.get("status") != "QUEUED" or task.get("dispatch_ready") is not True:
+            continue
+        task_id = str(task.get("task_id") or "").strip()
+        if not task_id or not str(task.get("domain_id") or "").strip():
+            unresolved.append(task_id or "UNKNOWN")
+            continue
+        locks = _resource_locks(task)
+        if not locks:
+            unresolved.append(task_id)
+            continue
+        if any(_resource_conflict(lock, held) for lock in locks for held in occupied):
+            blocked.append(task_id)
+            continue
+        occupied.extend(locks)
+        selected.append({
+            "task_id": task_id,
+            "domain_id": str(task["domain_id"]),
+            "resource_locks": locks,
+            "acquisition": "ATOMIC_SORTED",
+        })
+    return {
+        "status": "READY" if selected else "STOP",
+        "reason": "DISPATCH_READY" if selected else "NO_TASK_SELECTED",
+        "selected": selected,
+        "blocked_task_ids": blocked,
+        "unresolved_task_ids": unresolved,
+        "global_limit": global_limit,
+        "available_slots": max(0, slots - len(selected)),
+    }
 
 
 def _route_meets(task: dict[str, Any], route: dict[str, Any]) -> bool:
